@@ -1,0 +1,15 @@
+# secrets
+.env
+.env.*
+!.env.example
+
+# claude code
+.claude/worktrees/
+.claude/settings.local.json
+
+# os/editor
+.DS_Store
+
+# raw (unsanitized) session exports and personal sanitize terms
+ai-sessions/_raw/
+.sanitize-terms
