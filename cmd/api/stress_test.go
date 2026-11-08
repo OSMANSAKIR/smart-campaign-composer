@@ -135,11 +135,13 @@ type harness struct {
 	client *http.Client
 }
 
-func newHarness(t *testing.T, providerURL string) *harness {
+func newHarness(t *testing.T, providerURL string) *harness { return newHarnessN(t, providerURL, 5000) }
+
+func newHarnessN(t *testing.T, providerURL string, users int) *harness {
 	t.Helper()
 	testPool := storetest.NewDB(t) // creates, migrates and drops the database
 	ctx := context.Background()
-	if _, err := seed.Run(ctx, testPool, seed.Generate(5000, 20261108, time.Now())); err != nil {
+	if _, err := seed.Run(ctx, testPool, seed.Generate(users, 20261108, time.Now())); err != nil {
 		t.Fatal(err)
 	}
 	// Same database, production pool size (store.Open uses 20; storetest's pool is smaller).
@@ -370,7 +372,29 @@ func TestStressAPI(t *testing.T) {
 			t.Skip()
 		}
 		h := newHarness(t, "http://127.0.0.1:1")
-		r := &report{Name: "S3 approve storm", Desc: "(a) 100 concurrent approves of the same campaign, each with its own Idempotency-Key, then a replay of the winning key; (b) 10 different all-user campaigns approved concurrently."}
+		r := &report{Name: "S3 approve storm", Desc: "(c) one all-user approve on its own (R-SND-1 target < 200 ms); (a) 100 concurrent approves of the same campaign, each with its own Idempotency-Key, then a replay of the winning key; (b) 10 different all-user campaigns approved concurrently."}
+
+		// (c) R-SND-1: one all-user approve on its own returns fast and leaves the work to the worker.
+		{
+			id, ver, s5, e5 := h.readyCampaign(everyoneBrief)
+			var lat []time.Duration
+			code, _, d, err := h.approve(id, ver, "single")
+			lat = append(lat, d)
+			var queued, total int
+			if qerr := h.pool.QueryRow(context.Background(), `SELECT count(*) FILTER (WHERE status = 'queued'), count(*) FROM messages WHERE campaign_id = $1`, id).Scan(&queued, &total); qerr != nil {
+				t.Fatal(qerr)
+			}
+			for i := range 4 { // more samples for a stable number; each on its own all-user campaign
+				id, ver, _, _ := h.readyCampaign(everyoneBrief)
+				_, _, d, _ := h.approve(id, ver, "single-"+strconv.Itoa(i))
+				lat = append(lat, d)
+			}
+			r.param("(c) one all-user approve on its own (5 campaigns)", fmt.Sprintf("%d messages (%d sms + %d email); latency %s", total, s5, e5, latencies(lat)))
+			r.check(err == nil && code == http.StatusAccepted && pct(lat, .5) < 200*time.Millisecond,
+				"R-SND-1: approve of a 5000-user campaign returns in < 200 ms (median of 5)", fmt.Sprintf("status %d, median %s", code, pct(lat, .5).Round(time.Millisecond)))
+			r.check(queued == total && total == s5+e5, "the approve only enqueues: every message is still `queued` when it returns (no worker runs here)",
+				fmt.Sprintf("%d of %d queued", queued, total))
+		}
 
 		// (a) one campaign, 100 racing approves
 		id, ver, wantSMS, wantEmail := h.readyCampaign(officialBrief)
