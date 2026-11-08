@@ -32,8 +32,19 @@ func providerStats(t testing.TB, baseURL string) map[string]mockprovider.Channel
 	return st.Channels
 }
 
+// The bound holds while the delay between a request's departure (WroteRequest) and the provider's arrival
+// stamp varies by less than the window guard (need.md N-ORC-012; 25 ms in production, sub-millisecond on a
+// Docker bridge). In these in-process tests that delay is goroutine scheduling, which under -race with every
+// package running in parallel once exceeded 25 ms (101 in make test). The tests use a 100 ms guard so the
+// assumption holds here, and a cold-connection dial longer than the guard, so a limiter that paced admissions
+// would still overshoot visibly.
+const (
+	testJitterGuard = 100 * time.Millisecond
+	testDialDelay   = 150 * time.Millisecond
+)
+
 // TestDispatcher_ColdConnections_ProviderNeverSeesMoreThanN_RSND2 reproduces the V-013 failure: every new
-// connection costs a 30 ms dial (Docker DNS plus connect on a cold pool), so a request admitted by the
+// connection costs a slow dial (Docker DNS plus connect on a cold pool; 30 ms in V-013), so a request admitted by the
 // limiter reaches the provider late and a later one overtakes it. A limiter that paces its own admissions
 // let the provider count 127-132 requests in one second at N=95..100; pacing from the departure time must
 // hold the line.
@@ -48,7 +59,7 @@ func TestDispatcher_ColdConnections_ProviderNeverSeesMoreThanN_RSND2(t *testing.
 	t.Cleanup(func() { prov.Close(); srv.Close() })
 	client := NewHTTPClient(srv.URL, 5*time.Second, WithDialContext(func(ctx context.Context, network, addr string) (net.Conn, error) {
 		select {
-		case <-time.After(30 * time.Millisecond): // models DNS + connect on a cold pool
+		case <-time.After(testDialDelay): // models DNS + connect on a cold pool
 		case <-ctx.Done():
 			return nil, ctx.Err()
 		}
@@ -57,7 +68,7 @@ func TestDispatcher_ColdConnections_ProviderNeverSeesMoreThanN_RSND2(t *testing.
 	t.Cleanup(client.Close)
 
 	d := fastDispatcher(pool, SMS, client)
-	d.RateLimit, d.MaxInFlight = n, 32
+	d.RateLimit, d.MaxInFlight, d.WindowGuard = n, 32, testJitterGuard
 	startDispatcher(t, d)
 	eventually(t, 60*time.Second, "every message terminal", func() bool { return nonTerminal(statusCounts(t, pool, camp, SMS)) == 0 })
 

@@ -48,6 +48,7 @@ func TestTakeover_ProviderNeverSeesMoreThanN_RSND2(t *testing.T) {
 				d := fastDispatcher(pool, SMS, client)
 				d.WorkerID, d.RateLimit, d.Metrics, d.MaxInFlight = id, n, metrics.New(), 32
 				d.TakeoverWait = 0 // the default quiet time is the thing under test
+				d.WindowGuard = testJitterGuard
 				return d
 			}
 			a, b := mk("a"), mk("b")

@@ -141,3 +141,10 @@ Append-only (union-merged). Format: KICKOFF.md §13.
 - **How it was caught:** test — S3(b): ten all-user approves took > 60 s each and rolled back (0 messages); `pg_stat_activity` showed ten CPU-bound inserts; plain-SQL repro on a scratch database: 0.34 s alone, 14–55 s each when ten run together, 3.5 s for all ten in sequence.
 - **Fix:** transaction-scoped advisory lock before the enqueue (need.md N-ORC-013). S3 re-run: all 10 succeed, slowest 7.1 s.
 - **Lesson / guard added:** stress the write path with concurrent *different* inputs, not only the same one.
+
+### V-021 · In-process rate-bound tests assumed scheduler jitter below the production network guard
+- **When / agent:** 2026-11-09 · builder-delivery fix round (tests); caught by the orchestrator's `make test`
+- **AI proposed:** takeover and cold-connection tests asserting provider max ≤ 100 with the production 25 ms window guard, where the "network" is goroutine scheduling between the client's `WroteRequest` and the in-process provider's arrival stamp.
+- **How it was caught:** test — containerized `make test` (race detector, all packages in parallel): takeover/graceful stop saw 101; host runs and three `-count=3` runs saw 100.
+- **Fix:** these tests use a 100 ms guard (the bound's stated assumption holds in the test environment) and a 150 ms cold dial, longer than the guard, so a limiter that paced admissions would still overshoot. Production keeps 25 ms (need.md N-ORC-012).
+- **Lesson / guard added:** a test of a bound that rests on an assumption must make the assumption true in its own environment, and say so.
