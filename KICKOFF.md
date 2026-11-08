@@ -9,14 +9,13 @@
 
 ```bash
 cd ~/projeler/smart-campaign-composer
-claude -n 01-orchestrator --model opus --effort ultracode --permission-mode plan \
+claude -n 01-orchestrator --model opus --permission-mode plan \
   "Read KICKOFF.md and need.md completely, then produce the Phase 0 plan described in §15."
 ```
 
-- **`--effort ultracode`** sets effort to `xhigh` **and** turns on automatic workflow orchestration (§12.0). If you want `max` instead, launch with `--effort max` and then type `/effort ultracode`; this works on v2.1.284+ and keeps the level. Under ultracode, every workflow agent inherits that cost, so `xhigh` is the recommended level (need.md N-PLAN-013).
+- **No ultracode.** The owner is on Claude Pro, where workflows are off and usage limits are tight (need.md N-ORC-001, N-PLAN-013). Builders and verifiers run as **Agent-tool subagents** launched by the orchestrator (§12.0).
 - Accept the workspace-trust prompt and the project plugins / MCP servers (context7, playwright) when asked.
-- On a Pro plan, workflows are off by default; turn on "Dynamic workflows" in `/config` first. On Max they are on.
-- Watch running workflows with `/workflows`. For routine steps (merges, small doc edits), `/effort ultracode off` saves usage.
+- Commit after every completed step, so a usage-limit stop never loses work.
 
 ---
 
@@ -805,63 +804,53 @@ The owner explicitly asked for this: **every Insider requirement gets its own fu
 
 ## 12. Agent orchestration (how the agents are connected)
 
-### 12.0 Execution mode: ultracode (the owner's choice)
+### 12.0 Execution mode: Agent-tool subagents (the owner's choice)
 
-The owner runs the orchestrator with **ultracode**. With it on, Claude plans a **dynamic workflow** for each substantive task: a JavaScript script that the runtime executes, fanning out subagents. The default execution is therefore:
+The owner is on **Claude Pro**: workflows (ultracode) are off and usage limits are tight (need.md N-ORC-001, accepted). The orchestrator therefore launches builders and verifiers with the **Agent tool**:
 
-- **Builders are workflow agents launched by the orchestrator**, not manually opened sessions.
+- **Builders are background subagents launched by the orchestrator**, each with `isolation: "worktree"` (its own git worktree and branch) and an explicit `model`. Their prompt is the task file `docs/tasks/<area>.md`.
   - The §12.1 table still defines what each role owns and may touch.
-  - The manual sessions in §12.3 are the **fallback**. Use them if workflows misbehave, merges get messy, or usage limits call for tighter control.
-- **Invoke the bundled `/workflow-authoring` skill before writing any workflow script.** Never guess the script API: `agent()`, `pipeline()`, `parallel()`, `phase()`, per-agent model, output `schema`, isolated copies.
-- **Verified facts** (code.claude.com/docs/en/workflows, 2026-11-08):
-  - Runs execute in the background and accept **no mid-run user input**.
-  - At most 16 concurrent agents.
-  - Agent prompt cache lasts 5 minutes.
-  - Runs are resumable within the same session.
-  - The run's script and results are saved under the session's directory in `~/.claude/projects/`.
-  - `Date.now()` and `Math.random()` throw inside scripts.
-- **One workflow per stage.** Runs cannot ask questions, so the owner signs off between stages:
+  - The manual sessions in §12.3 are the **fallback**, for when a builder needs direct owner steering.
+- **Stages.** Subagents accept no mid-run user input, so the owner signs off between stages:
 
-| Workflow | Purpose | Shape |
+| Stage | Purpose | Shape |
 |---|---|---|
-| W0 plan (optional, plan mode) | Draft the Phase 0 plan from 2–3 independent angles, then reconcile | ≤ 4 read-only agents |
-| W1 build-slices | Build the llm, delivery and web areas in parallel from `docs/tasks/*.md` | One builder agent per area in an **isolated copy (worktree)**, each followed by a verifier agent that runs the area's check tests and reports pass/fail with output |
-| W2 integrate | End-to-end flow, compose up, e2e happy path. Fix loop until `make test` is green or two rounds make no progress | sequential + fix loop |
-| W3 verify | Stress S1–S7 with invariants, red-team, reliability review, spec audit. Findings are **adversarially cross-checked** before being reported | fan-out + cross-check |
-| W4 fix | One agent per confirmed finding (isolated copies), then re-verify | pipeline |
+| W1 build-slices | Build the llm, delivery and web areas in parallel from `docs/tasks/*.md` | One background builder per area (worktree), then one verifier per area that runs the area's check tests and reports pass/fail with output |
+| W2 integrate | End-to-end flow, compose up, e2e happy path. Fix loop until `make test` is green or two rounds make no progress | orchestrator in the main session, plus fix subagents when needed |
+| W3 verify | Stress S1–S7 with invariants, red-team, reliability review, spec audit. Findings are cross-checked by a second agent before being reported | fan-out + cross-check |
+| W4 fix | One subagent per confirmed finding (worktree), then re-verify | sequential |
 | W5 release | Docs, traceability, sanitization checks | small |
 
-- **Agents return structured output, not prose.** Every build or verify agent returns a JSON `schema` result:
+- **Agents return structured output, not prose.** Every build or verify agent ends with a JSON result:
   ```
   {area, requirement_ids_done[], tests: [{cmd, exit_code, summary}], files_changed[],
    need_entries[], validation_log_entries[], open_issues[]}
   ```
-  The **orchestrator** writes `need_entries` into need.md (using the §4.2 format and agent codes) and `validation_log_entries` into the validation log. Workflow agents never edit those two files directly, so concurrent edits never conflict.
-- **Merging.** For each isolated copy, the orchestrator reviews the diff, runs `make test` and merges, as in §12.2(2). If the runtime handles isolated copies differently than expected, log it in need.md and adapt.
-- **Model routing per agent.** Otherwise every agent runs on the session model (Opus). Name the model in the script for each stage:
+  The **orchestrator** writes `need_entries` into need.md (using the §4.2 format and agent codes) and `validation_log_entries` into the validation log. Subagents never edit those two files directly, so concurrent edits never conflict.
+- **Merging.** For each worktree branch, the orchestrator reviews the diff, runs `make test` and merges, as in §12.2(2).
+- **Model routing per agent** (set with the Agent tool's `model` parameter):
 
   | Stage | Model |
   |---|---|
   | `llm` builder and all verifiers | opus |
-  | delivery builder, web builder, fix loops | sonnet |
+  | delivery builder, web builder, fix agents | sonnet |
   | listing, searching and summarizing steps | haiku |
 
-- **Size.** Stay within the `medium` guideline (< 10 agents per workflow) unless the owner approves more. W3 may justify more.
-- **Save every workflow that ran** into `.claude/workflows/` (`/workflows` → select → `s`), with names like `scc-w1-build-slices`. They are committed, so reviewers can read exactly how the agents were connected.
+- **Size.** At most 3 builders plus their verifiers at a time.
+- **Record every launch.** The orchestrator logs each Agent launch (stage, agent, model, isolation, prompt file, result summary) in `ai-sessions/README.md`, so reviewers can see exactly how the agents were connected. Subagent transcripts are collected by `scripts/harvest-sessions.sh` (§13).
 - **Permissions.** Agents use the project allow/deny rules in `.claude/settings.json`. Hard stops are enforced by deny rules: push, `reset --hard`, `CONFIRM_SPEND=yes`, `.env`. If an agent needs a command that is not allowed, it fails fast and reports it. Do not widen the rules without logging it.
-- **Usage.** Ultracode multiplies tokens, and the owner is on a subscription.
-  - Watch the token counts in `/workflows`.
-  - Use `/effort ultracode off` for routine steps: merging, small edits, doc tweaks.
-  - Prefer smaller models for mechanical stages.
+- **Usage.** Pro limits are tight.
+  - Commit after every completed step so a limit stop never loses work.
+  - Prefer smaller models for mechanical stages; drop verifier effort before dropping verifiers.
 
 ### 12.1 Roles
 
 | Agent | Kind | Model / effort | Owns (may write) |
 |---|---|---|---|
-| **orchestrator** (`01-orchestrator`) | Main session, main checkout | Opus 5.5 · ultracode (xhigh) | `docs/contracts/`, `internal/{config,store,catalog,campaign,api,metrics,seed}`, `cmd/api`, compose, Dockerfiles, Makefile, root docs, `.claude/`, `need.md` digest, merges |
-| **builder-llm** (`02-builder-llm`) | Session in worktree `llm` | Opus 5.5 · high | `internal/llm/**`, `internal/segment/**`, `internal/content/**`, `docs/eval/**` |
-| **builder-delivery** (`03-builder-delivery`) | Session in worktree `delivery` | Sonnet 5.5 · high | `internal/delivery/**`, `cmd/worker/**`, `cmd/mockprovider/**`, `docs/stress/**` |
-| **builder-web** (`04-builder-web`) | Session in worktree `web` | Sonnet 5.5 · high | `web/**` |
+| **orchestrator** (`01-orchestrator`) | Main session, main checkout | Opus 5.5 · default effort | `docs/contracts/`, `internal/{config,store,catalog,campaign,api,metrics,seed}`, `cmd/api`, compose, Dockerfiles, Makefile, root docs, `.claude/`, `need.md` digest, merges |
+| **builder-llm** (`02-builder-llm`) | Subagent in worktree `llm` | Opus 5.5 | `internal/llm/**`, `internal/segment/**`, `internal/content/**`, `docs/eval/**` |
+| **builder-delivery** (`03-builder-delivery`) | Subagent in worktree `delivery` | Sonnet 5.5 | `internal/delivery/**`, `cmd/worker/**`, `cmd/mockprovider/**`, `docs/stress/**` |
+| **builder-web** (`04-builder-web`) | Subagent in worktree `web` | Sonnet 5.5 | `web/**` |
 | `spec-auditor` | Subagent, read-only + test commands | Opus · high | nothing (returns a report) |
 | `llm-red-team` | Subagent, `isolation: worktree` | Opus · high | red-team testdata and tests under `internal/{llm,segment,content}/**/testdata/redteam` |
 | `reliability-reviewer` | Subagent, read-only + test commands | Opus · high | nothing (returns a report) |
@@ -869,16 +858,16 @@ The owner runs the orchestrator with **ultracode**. With it on, Claude plans a *
 
 The plugin and built-in reviewers are: pr-review-toolkit's `silent-failure-hunter`, `pr-test-analyzer` and `type-design-analyzer`, plus `/code-review`, `/security-review` and `/simplify`.
 
-**Builders as workflow agents (default) or as sessions (fallback):**
+**Builders as subagents (default) or as sessions (fallback):**
 
-| | Workflow agents (default) | Manual sessions (fallback, §12.3) |
+| | Agent-tool subagents (default) | Manual sessions (fallback, §12.3) |
 |---|---|---|
 | Context | Fresh context per task | Full context per builder |
 | Parallelism | Parallel, with no terminal juggling | Parallel, one terminal each |
 | Steering | Through the orchestrator, between stages | The owner steers each builder directly |
 | Transcripts | **Not** in the parent's `/export`; §13 harvests them from the session directory | One `/export` per builder |
 
-The builder rows in the table above describe the **roles**. Under ultracode, each one runs as a workflow agent.
+The builder rows in the table above describe the **roles**. By default, each one runs as an Agent-tool subagent in its own worktree.
 
 **Why verifiers are subagents:** a clean context with no authorship bias. A reviewer that did not write the code finds more problems.
 
@@ -897,7 +886,7 @@ The builder rows in the table above describe the **roles**. Under ultracode, eac
 6. **Verifier subagents.** The orchestrator invokes them at checkpoints and saves their reports under `docs/review/<date>-<agent>.md`. Each finding becomes a fix task for the owning builder.
 7. **Optional, Phase 2 only: agent teams.** Run with `CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1`: 3 reviewers in parallel that challenge each other's findings. Do this only if usage limits allow, and **never for building** (no resume, high token use).
 
-### 12.3 Fallback: manual builder sessions (used only if workflows are not suitable)
+### 12.3 Fallback: manual builder sessions (used only if subagents are not suitable)
 
 ```bash
 cd ~/projeler/smart-campaign-composer   # Phase 0 must be committed first (worktree.baseRef = head)
@@ -976,15 +965,15 @@ Use `NN-role-topic`, and start or rename sessions accordingly:
 3. gitleaks scans the output.
 4. A human skims it.
 
-**Subagent and workflow transcripts.** Under ultracode, most of the work happens in workflow agents, and their reasoning is **not** in the main `/export`. The harvest script `scripts/harvest-sessions.sh` collects, for every session of this project:
+**Subagent transcripts.** Most of the building happens in subagents, and their reasoning is **not** in the main `/export`. The harvest script `scripts/harvest-sessions.sh` collects, for every session of this project:
 
 - the full session `.jsonl`, which is also the only complete record if a session was compacted;
 - `subagents/*.jsonl`;
-- the workflow run scripts and results.
+- worktree sessions, if the §12.3 fallback was used.
 
 All of these live under `~/.claude/projects/<encoded-project-path>/<session-id>/`. Worktree sessions have their own encoded path, so glob for `*smart-campaign-composer*`.
 
-The harvest script copies everything to `_raw/`. Then `scripts/transcript2md.py` converts it to readable Markdown, dropping images and base64. Finally, sanitize the output and put it in `ai-sessions/sessions/` and `ai-sessions/workflows/`. The saved workflow scripts in `.claude/workflows/` are the readable summary of "how the agents were connected".
+The harvest script copies everything to `_raw/`. Then `scripts/transcript2md.py` converts it to readable Markdown, dropping images and base64. Finally, sanitize the output and put it in `ai-sessions/sessions/` and `ai-sessions/subagents/`. The launch log in `ai-sessions/README.md` is the readable summary of "how the agents were connected".
 
 ### Files to maintain
 
@@ -1081,7 +1070,7 @@ The harvest script copies everything to `_raw/`. Then `scripts/transcript2md.py`
    - the web scaffold (Vite + Vue 3 + TS strict + Vitest);
    - Dockerfiles, `docker-compose.yml` (plus a test profile), and a Makefile with all §11 targets (stubs print "not implemented yet" and exit 0, except `test`).
 5. **`.claude/agents/`:** `spec-auditor.md`, `llm-red-team.md`, `reliability-reviewer.md`. Each has a precise description of when to use it, minimal tools, model, effort and an output format.
-6. **`docs/tasks/`:** `llm.md`, `delivery.md`, `web.md`, following §12.2(3). Write each one so it works as the prompt of a W1 workflow agent **and** as the prompt of a fallback manual session.
+6. **`docs/tasks/`:** `llm.md`, `delivery.md`, `web.md`, following §12.2(3). Write each one so it works as the prompt of a W1 subagent **and** as the prompt of a fallback manual session.
 7. **`ai-sessions/`:** `README.md` (skeleton + tooling section), `validation-log.md` (header), `usage/`. **Scripts:** `scripts/harvest-sessions.sh`, `scripts/transcript2md.py`, `scripts/sanitize-sessions.sh`, `scripts/fresh-clone-check.sh`. **Makefile guard:** `smoke-live` and `eval PROVIDER=anthropic` refuse to run without `CONFIRM_SPEND=yes`.
 8. **Verify:** `docker compose up -d` → all services healthy, the seed is present, and `curl /healthz` works on each; `make test` is green. Quote the outputs.
 9. **Commit:** `chore: phase 0 contracts and skeleton [R-DEL-2][R-DEL-3]`. Update the need.md digest. Then write the owner a 5-line summary in Turkish and propose **W1** (§12.0) for approval: phases, agents per phase, the model per agent, and a rough token estimate. Keep the §12.3 commands as the fallback.
