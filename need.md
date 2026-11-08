@@ -25,16 +25,17 @@ The next agent that owns the area implements the answer and updates the status.
 
 ## Digest (maintained by the orchestrator only)
 
-_Last updated: 2026-11-08 by the orchestrator (W1 done: web, delivery, llm merged and integrated)._
+_Last updated: 2026-11-09 by the orchestrator (owner answers for N-ORC-012, N-DEL-007, N-LLM-003, N-DEL-009, N-PLAN-009 recorded)._
 
 **Needs the owner soon (high impact):**
 
-- 🟡 N-ORC-012: rate bound — departure-time limiter (~97.6/s, network ≤ 25 ms assumption) or strict response-time limiter (~84/s)?
+- ❓ N-PLAN-009: repo visibility and reviewer access — the owner will say when, before the push.
 
-- ❓ N-LLM-003: run one claudecode probe so the reconstructed fixture is replaced by a real capture.
-- ❓ N-DEL-007: should a refused provider connection pause the channel instead of using up retry attempts?
+**Owner changes in progress:**
 
-- ❓ N-PLAN-009: repo visibility and reviewer access, before the first push (commit identity is settled).
+- 🔁 N-DEL-007: a refused connection does not count as an attempt and pauses the channel.
+- 🔁 N-LLM-003: real claudecode probe as the fixture; claudecode eval report in docs/eval.
+- 🔁 N-DEL-009: final idempotent replay for delivered-but-failed messages (if time allows).
 
 **Review when convenient (medium):** N-ORC-003 (wire schema typing), N-ORC-004 (contradictions), N-ORC-005 (long names), N-PLAN-001, 002, 004, 005, 010, 011, 014.
 
@@ -42,6 +43,7 @@ _Last updated: 2026-11-08 by the orchestrator (W1 done: web, delivery, llm merge
 
 **Answered:**
 
+- ✅ N-ORC-012: departure-time limiter (A) accepted; assumption and switch to B documented in DECISIONS.md.
 - ✅ N-ORC-001: Agent-tool subagents instead of workflows (Pro plan).
 - ✅ N-ORC-011: CP1 verifiers per area (red-team on llm, reliability on delivery), spec-auditor at CP3; limit recovery via SendMessage or a fresh builder from the branch log.
 - ✅ N-ORC-008: refusal fallback beta off until smoke-live verifies it.
@@ -219,8 +221,8 @@ _Last updated: 2026-11-08 by the orchestrator (W1 done: web, delivery, llm merge
 - **Decision taken:** Nothing is pushed until you decide; pushing is a hard stop. The planning default is A, with a noreply commit email set in this repo's local git config.
 - **Cost to change later:** low before the first push; rewriting history afterwards is high.
 - **Question for owner:** A, B or C? Should we use the noreply email for commits in this repo?
-- **Owner response:** Commit identity ACCEPTED (chat, 2026-11-08 03:00): this repo's local `user.email` is the owner's GitHub noreply address (set before the first commit). Repo visibility: the owner decides before the first push.
-- **Status:** QUESTION (visibility only)
+- **Owner response:** Wait (2026-11-09): the owner says when, before the push.
+- **Status:** QUESTION
 
 ### 🟡 N-PLAN-010 · Postgres as both the datastore and the queue · impact: medium
 - **Date / agent / session:** 2026-11-08 02:00 · planning · 00-planning
@@ -526,7 +528,7 @@ _Last updated: 2026-11-08 by the orchestrator (W1 done: web, delivery, llm merge
 - **Owner response:** — (resolved by the orchestrator)
 - **Status:** RESOLVED
 
-### ❓ N-DEL-007 · Long provider outages exhaust the retry budget · impact: medium
+### 🔁 N-DEL-007 · Long provider outages exhaust the retry budget · impact: medium
 - **Date / agent / session:** 2026-11-08 · delivery · builder-delivery (W1 subagent)
 - **Requirement(s):** R-SND-4, R-RES-3
 - **Context:** Connection errors are "ambiguous" tries that count toward max 5 (KICKOFF §7.3). S7's 10 s outage caused 0 unexpected failures, but an outage of ~30 s or more ends messages as `failed`.
@@ -534,8 +536,8 @@ _Last updated: 2026-11-08 by the orchestrator (W1 done: web, delivery, llm merge
 - **Decision taken:** A for now (it is the locked table). The orchestrator leans to B because it is safe: a refused TCP connection proves nothing reached the provider.
 - **Cost to change later:** B ~1 h plus tests.
 - **Question for owner:** Should a refused connection stop counting as an attempt and pause the channel instead?
-- **Owner response:**
-- **Status:** QUESTION
+- **Owner response:** CHANGE → B (2026-11-09): a refused connection does not count as an attempt and pauses the channel; with a test.
+- **Status:** CHANGE REQUESTED
 
 ### 🟡 N-LLM-001 · Worst case when the audience is unknown, and which fallback counts · impact: low
 - **Date / agent / session:** 2026-11-08 11:00 · llm · builder-llm (W1 subagent)
@@ -559,7 +561,7 @@ _Last updated: 2026-11-08 by the orchestrator (W1 done: web, delivery, llm merge
 - **Owner response:**
 - **Status:** OPEN
 
-### ❓ N-LLM-003 · claudecode fixture reconstructed, not freshly probed · impact: medium
+### 🔁 N-LLM-003 · claudecode fixture reconstructed, not freshly probed · impact: medium
 - **Date / agent / session:** 2026-11-08 11:40 · llm · builder-llm (W1 subagent)
 - **Requirement(s):** R-AI-1, R-DEL-6
 - **Context:** KICKOFF §6.9 asks for a sanitized probe fixture; a subagent running `claude -p` would spend the owner's subscription unattended.
@@ -567,8 +569,8 @@ _Last updated: 2026-11-08 by the orchestrator (W1 done: web, delivery, llm merge
 - **Decision taken:** B; the parser ignores unknown line types and a real capture just replaces the file.
 - **Cost to change later:** ~10 min.
 - **Question for owner:** Will you run one claudecode probe so the fixture can be replaced by a real capture?
-- **Owner response:**
-- **Status:** QUESTION
+- **Owner response:** CHANGE (2026-11-09): the orchestrator may run the claudecode probe and `make eval PROVIDER=claudecode` (subscription, not the paid API). Make the real capture the fixture; put the eval report in docs/eval.
+- **Status:** CHANGE REQUESTED
 
 ### 🟡 N-LLM-004 · Repairs only for requested channels; body limit on raw text; allowed control characters · impact: low
 - **Date / agent / session:** 2026-11-08 11:10 · llm · builder-llm (W1 subagent)
@@ -592,7 +594,7 @@ _Last updated: 2026-11-08 by the orchestrator (W1 done: web, delivery, llm merge
 - **Owner response:**
 - **Status:** OPEN
 
-### 🟡 N-ORC-012 · How the per-channel rate bound is guaranteed · impact: high
+### ✅ N-ORC-012 · How the per-channel rate bound is guaranteed · impact: high
 - **Date / agent / session:** 2026-11-08 · orchestrator · 01-orchestrator (after CP1 reliability review)
 - **Requirement(s):** R-SND-2 (I3)
 - **Context:** The reviewer showed the limiter pacing slot reservations; DNS/dial/timer delays and replica takeover let the provider see up to 141 requests in 1 s. A count margin is not a bound.
@@ -600,8 +602,8 @@ _Last updated: 2026-11-08 by the orchestrator (W1 done: web, delivery, llm merge
 - **Decision taken:** A, plus: per-lock-term context so queued sends are released when the lock is lost; claim/reclaim on the lock connection; wait W + lock-loss detection bound (~4 s) after acquiring the lock before sending; disable net/http's hidden replay of POSTs (`GetBody = nil`); provider stamps arrivals before decode and never encodes stats under its mutex. Margin back to 0 after the fix. B stays a one-line switch if the owner prefers a proof without a network assumption. **Implemented (merge a21d3ab) and measured on compose at 100/s, margin 0:** all 5000 users, 7542 messages with default faults, provider max 100 requests in any 1 s window per channel, 0 provider-limiter rejections, 0 duplicate deliveries, approve 0.16 s, completed in 72 s.
 - **Cost to change later:** A→B: one call-site change.
 - **Question for owner:** A (≈97.6/s, bounded under a stated sub-25 ms network assumption) or B (≈84/s, no assumption)?
-- **Owner response:**
-- **Status:** OPEN
+- **Owner response:** ACCEPT A (2026-11-09). Explain the assumption and the one-line switch to B in DECISIONS.md.
+- **Status:** ACCEPTED
 
 ### 🟡 N-DEL-008 · Quiet time after winning the channel lock · impact: medium
 - **Date / agent / session:** 2026-11-08 · delivery · builder-delivery fix round (subagent)
@@ -614,7 +616,7 @@ _Last updated: 2026-11-08 by the orchestrator (W1 done: web, delivery, llm merge
 - **Owner response:**
 - **Status:** OPEN
 
-### 🟡 N-DEL-009 · Stress invariant I5 tolerates "delivered but failed" after unanswered tries · impact: medium
+### 🔁 N-DEL-009 · Stress invariant I5 tolerates "delivered but failed" after unanswered tries · impact: medium
 - **Date / agent / session:** 2026-11-08 · delivery · builder-delivery fix round (subagent)
 - **Requirement(s):** R-SND-3 (I5)
 - **Context:** Under chaos faults a provider can record a message whose every answer was lost (hang after record, then retries exhausted), so DB says `failed` while the provider counted it. S2 hit this in 2 of 7 runs.
@@ -622,5 +624,5 @@ _Last updated: 2026-11-08 by the orchestrator (W1 done: web, delivery, llm merge
 - **Decision taken:** A for now (the stress report prints when the allowance is used). B is the real fix; scheduled after CP2 if time allows.
 - **Cost to change later:** B ~1–2 h (migration + dispatcher + test).
 - **Question for owner:** —
-- **Owner response:**
-- **Status:** OPEN
+- **Owner response:** CHANGE → B if time allows (2026-11-09).
+- **Status:** CHANGE REQUESTED
