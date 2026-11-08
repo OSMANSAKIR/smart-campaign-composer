@@ -1,0 +1,13 @@
+# gitleaks configuration: the default rules plus one narrow allowlist.
+# `s.MaxRequestsInAny1sWindow` (a field of the mock provider's /stats struct, read in delivery tests) matches the
+# vault-service-token pattern ("s." + 24+ word characters). Only that exact identifier is allowed, and only for
+# that rule, so a real Vault token anywhere else still fails the scan.
+
+[extend]
+useDefault = true
+
+[[allowlists]]
+description = "mockprovider stats field name, not a Vault token"
+targetRules = ["vault-service-token"]
+regexTarget = "match"
+regexes = ['''^s\.MaxRequestsInAny1sWindow\W?$''']

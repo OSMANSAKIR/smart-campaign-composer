@@ -9,11 +9,11 @@ cd "$root"
 fail=0
 
 echo "== gitleaks: git history"
-gitleaks git --redact --no-banner . || fail=1
+gitleaks git --config .gitleaks.toml --redact --no-banner . || fail=1
 
 echo "== gitleaks: committed ai-sessions files"
 while IFS= read -r f; do
-  gitleaks dir --redact --no-banner --log-level error "$f" || { echo "secret in $f"; fail=1; }
+  gitleaks dir --config .gitleaks.toml --redact --no-banner --log-level error "$f" || { echo "secret in $f"; fail=1; }
 done < <(git ls-files ai-sessions)
 
 echo "== .env must not be tracked"
