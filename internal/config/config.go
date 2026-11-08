@@ -92,7 +92,7 @@ func load(lookup func(string) (string, bool)) (Config, error) {
 		SeedRandom: uint64(p.int("SEED_RANDOM", 20261108)),
 
 		RateLimitPerChannel:   p.int("RATE_LIMIT_PER_CHANNEL", 100),
-		RateLimitSafetyMargin: p.int("RATE_LIMIT_SAFETY_MARGIN", 5), // 95/s: real networks jitter more than the 25 ms window guard absorbs (need.md N-DEL-001)
+		RateLimitSafetyMargin: p.int("RATE_LIMIT_SAFETY_MARGIN", 0), // the limiter paces departures, not reservations (need.md N-ORC-012)
 		MaxInFlightPerChannel: p.int("MAX_IN_FLIGHT_PER_CHANNEL", 32),
 		LeaseDuration:         p.dur("LEASE_DURATION", 30*time.Second),
 		ProviderTimeout:       p.dur("PROVIDER_TIMEOUT", 5*time.Second),
