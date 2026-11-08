@@ -23,7 +23,8 @@ func Validate(r Rule) (ValidRule, []Issue, []Issue) {
 	if len(v.errs) > 0 {
 		return ValidRule{}, v.errs, v.warns
 	}
-	return ValidRule{rule: r, conds: v.conds, ok: true}, nil, v.warns
+	// Deep copy (RT-3): the caller keeps its Rule and may mutate it; the ValidRule must stay what was validated.
+	return ValidRule{rule: cloneRule(r), conds: v.conds, ok: true}, nil, v.warns
 }
 
 // ValidateProposal validates the rule plus the proposal's own fields (channels, language, note lists).

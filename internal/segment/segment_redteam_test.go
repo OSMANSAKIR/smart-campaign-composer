@@ -310,7 +310,7 @@ func TestRedTeam_ValidRuleDetachedFromInput_RAUD1(t *testing.T) {
 		t.Fatalf("compiled output followed the mutation: %q %v", sql, args)
 	}
 	if got := vr.Rule().Groups[0].Conditions[0]; got.Field != "city" {
-		t.Skipf("FINDING RT-3: ValidRule.Rule() reflects a post-Validate mutation of the input (%s %s) while Compile does not; Validate should deep-copy the rule", got.Field, got.Value)
+		t.Fatalf("RT-3: ValidRule.Rule() reflects a post-Validate mutation of the input (%s %s) while Compile does not", got.Field, got.Value)
 	}
 }
 

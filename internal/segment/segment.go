@@ -58,9 +58,13 @@ type ValidRule struct {
 }
 
 // Rule returns a copy of the validated rule for storage and display.
-func (v ValidRule) Rule() Rule {
-	out := Rule{Groups: make([]Group, len(v.rule.Groups))}
-	for i, g := range v.rule.Groups {
+func (v ValidRule) Rule() Rule { return cloneRule(v.rule) }
+
+// cloneRule deep-copies r (groups, conditions, raw values). Groups is never nil, so a copy marshals as
+// {"groups":[]} rather than {"groups":null}.
+func cloneRule(r Rule) Rule {
+	out := Rule{Groups: make([]Group, len(r.Groups))}
+	for i, g := range r.Groups {
 		cs := make([]Condition, len(g.Conditions))
 		for j, c := range g.Conditions {
 			cs[j] = Condition{Field: c.Field, Op: c.Op, Value: append(json.RawMessage(nil), c.Value...)}
