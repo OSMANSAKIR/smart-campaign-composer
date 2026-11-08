@@ -35,9 +35,11 @@ func run() int {
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
 
-	srv := &http.Server{Addr: cfg.MockProviderAddr, Handler: mockprovider.New(cfg.Provider, metrics.New()).Handler(), ReadHeaderTimeout: 10 * time.Second}
+	provider := mockprovider.New(cfg.Provider, metrics.New())
+	srv := &http.Server{Addr: cfg.MockProviderAddr, Handler: provider.Handler(), ReadHeaderTimeout: 10 * time.Second}
 	go func() {
 		<-ctx.Done()
+		provider.Close() // release hung requests, or Shutdown would wait for them
 		shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
 		_ = srv.Shutdown(shutdownCtx)
