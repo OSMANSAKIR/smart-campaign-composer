@@ -5,7 +5,6 @@ package segment
 // injection values must be inert: never in the SQL text, row counts unchanged.
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -264,42 +263,22 @@ func TestRedTeam_StrictDecodeIssuesUnbounded_RAI1(t *testing.T) {
 	}
 }
 
-// RT-2 (FINDING): PUT /api/campaigns/{id}/segment decodes the rule with plain encoding/json into
-// segment.Rule (internal/api/campaigns.go putSegment), not with ParseRule. Unknown keys are dropped and keys
-// match case-insensitively, so a misspelled "groups" silently becomes a rule with zero groups, which
-// validates (only a targets_everyone warning) and selects every consented user.
+// RT-2 (fixed): PUT /api/campaigns/{id}/segment now decodes the rule with ParseRule (internal/api putSegment),
+// so these bodies are rejected with paths instead of silently becoming a rule that targets everyone. The HTTP
+// side is covered by TestErrorModel_ROBS1 in internal/api.
 func TestRedTeam_ManualEditMustBeStrict_RAUD1(t *testing.T) {
 	bodies := map[string]string{
 		"misspelled groups": `{"group":[{"conditions":[{"field":"city","op":"eq","value":"Ankara"}]}]}`,
 		"extra key":         `{"groups":[{"conditions":[{"field":"city","op":"eq","value":"Ankara","sms_consent":false}]}]}`,
 		"case-folded key":   `{"GROUPS":[{"Conditions":[{"Field":"city","OP":"eq","Value":"Ankara"}]}]}`,
 	}
-	widened := []string{}
 	for name, body := range bodies {
 		if _, issues := ParseRule([]byte(body)); len(issues) == 0 {
 			t.Fatalf("%s: ParseRule must reject it", name)
 		}
-		var r Rule // what the API handler does today
-		dec := json.NewDecoder(bytes.NewReader([]byte(body)))
-		if err := dec.Decode(&r); err != nil {
-			continue
-		}
-		if _, errs, warns := Validate(r); len(errs) == 0 {
-			if slices.Contains(codes(warns), "targets_everyone") {
-				widened = append(widened, name+" → targets everyone")
-			} else {
-				widened = append(widened, name+" → accepted")
-			}
-		}
-	}
-	slices.Sort(widened)
-	if len(widened) > 0 {
-		t.Skipf("FINDING RT-2: non-strict manual-edit decode accepts what ParseRule rejects: %v", widened)
 	}
 }
 
-// Validate keeps the caller's Rule by reference: mutating the input after Validate changes what Rule()
-// returns (and what storeSegment persists) while Compile still uses the validated values.
 func TestRedTeam_ValidRuleDetachedFromInput_RAUD1(t *testing.T) {
 	r := rule(one(c("city", "eq", `"Ankara"`)))
 	vr := mustValid(t, r)
