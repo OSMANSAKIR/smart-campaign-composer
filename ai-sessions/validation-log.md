@@ -85,3 +85,10 @@ Append-only (union-merged). Format: KICKOFF.md §13.
 - **How it was caught:** tool — the permission check denied the command.
 - **Fix:** Recipes read the key from the owner's shell, never load `.env`; only `make eval PROVIDER=mock` was run. The refusal itself is covered by the llm builder's test run without the flag.
 - **Lesson / guard added:** CLAUDE.md rule 4 covers verification runs too: agents never invoke owner-only targets, even to watch them refuse.
+
+### V-013 · The limiter paced reservations, not departures (provider saw 101–141/s)
+- **When / agent:** 2026-11-08 · builder-delivery (N-DEL-001), orchestrator (stopgap), found by reliability-reviewer (CP1)
+- **AI proposed:** (1) builder: a 25 ms window guard "keeps the provider at ≤ 100"; (2) orchestrator: `RATE_LIMIT_SAFETY_MARGIN=5` presented as protection after a live 101; (3) builder: S2 "I3 passes with two replicas and a kill".
+- **How it was caught:** live compose run (provider max 101 on sms), then the reviewer's in-process repros: 30 ms dial per new connection → 132 at N=100 and 127 at N=95; replica takeover → 129 (graceful) and 141 (lock session killed). S2 had passed only because 429 pauses held throughput at ~41/s.
+- **Fix:** delivery fix round (two-phase limiter committing the departure time from `httptrace.WroteRequest`, per-term context and takeover wait, no hidden transport retries) — see need.md N-DEL-001 and N-ORC-012.
+- **Lesson / guard added:** A rate bound needs an argument, not a margin; tests must reproduce cold connections and lock handover at full rate (`TestDispatcher_ColdConnections_ProviderNeverSeesMoreThanN_RSND2`, `TestTakeover_ProviderNeverSeesMoreThanN_RSND2`).

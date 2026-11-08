@@ -29,6 +29,8 @@ _Last updated: 2026-11-08 by the orchestrator (W1 done: web, delivery, llm merge
 
 **Needs the owner soon (high impact):**
 
+- 🟡 N-ORC-012: rate bound — departure-time limiter (~97.6/s, network ≤ 25 ms assumption) or strict response-time limiter (~84/s)?
+
 - ❓ N-LLM-003: run one claudecode probe so the reconstructed fixture is replaced by a real capture.
 - ❓ N-DEL-007: should a refused provider connection pause the channel instead of using up retry attempts?
 
@@ -587,5 +589,16 @@ _Last updated: 2026-11-08 by the orchestrator (W1 done: web, delivery, llm merge
 - **Decision taken:** B; a paid generation is not thrown away over an accounting row.
 - **Cost to change later:** ~5 min.
 - **Question for owner:** OK?
+- **Owner response:**
+- **Status:** OPEN
+
+### 🟡 N-ORC-012 · How the per-channel rate bound is guaranteed · impact: high
+- **Date / agent / session:** 2026-11-08 · orchestrator · 01-orchestrator (after CP1 reliability review)
+- **Requirement(s):** R-SND-2 (I3)
+- **Context:** The reviewer showed the limiter pacing slot reservations; DNS/dial/timer delays and replica takeover let the provider see up to 141 requests in 1 s. A count margin is not a bound.
+- **Options:** A) Two-phase limiter: slot s may start only W = 1 s + 25 ms after the recorded *departure* (`httptrace.WroteRequest`) of slot s−N; holds if one-way network + provider decode ≤ 25 ms (sub-ms on a Docker bridge); ~97.6/s. B) Strict: commit at response receipt; holds with no network assumption; ~84/s at default latency, ~61/s at S2 latency. C) Keep the margin.
+- **Decision taken:** A, plus: per-lock-term context so queued sends are released when the lock is lost; claim/reclaim on the lock connection; wait W + lock-loss detection bound (~4 s) after acquiring the lock before sending; disable net/http's hidden replay of POSTs (`GetBody = nil`); provider stamps arrivals before decode and never encodes stats under its mutex. Margin back to 0 after the fix. B stays a one-line switch if the owner prefers a proof without a network assumption.
+- **Cost to change later:** A→B: one call-site change.
+- **Question for owner:** A (≈97.6/s, bounded under a stated sub-25 ms network assumption) or B (≈84/s, no assumption)?
 - **Owner response:**
 - **Status:** OPEN
