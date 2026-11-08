@@ -68,7 +68,7 @@ func TestRedTeam_HostileNamesRender_RCNT3(t *testing.T) {
 		{"template name", "{{city}}", "{{city}}"},
 		{"script name", "<script>alert(1)</script>", "Değerli müşterimiz"}, // 25 runes → fallback
 		{"short script name", "<script>", "<script>"},
-		{"rtl override (kept by contract)", "‮ilA", "‮ilA"},
+		{"rtl override (kept by contract)", "\u202eilA", "\u202eilA"},
 		{"40-rune name", "Hüseyin Muhammed Abdurrahman Abdülkerim", "Değerli müşterimiz"},
 		{"20-rune name", name20, name20},
 		{"21 runes with a control char", "Abdurrahman\u0007 Kerimcan", name20},
@@ -131,7 +131,7 @@ func TestRedTeam_TemplateVariables_RCNT3(t *testing.T) {
 		{"PII email variable", "Adresiniz {{ email }}", []string{"unknown_variable"}},
 		{"last name", "Sayın {{last_name}}", []string{"unknown_variable"}},
 		{"case variant", "Merhaba {{First_Name}}", []string{"unknown_variable"}},
-		{"zero-width inside name", "Merhaba {{first​_name}}", []string{"unknown_variable"}},
+		{"zero-width inside name", "Merhaba {{first\u200b_name}}", []string{"unknown_variable"}},
 		{"template-engine syntax", "{{ .Phone }} {{range .}}", []string{"unknown_variable", "malformed_variable"}},
 		{"single braces", "Merhaba {first_name}", []string{"malformed_variable"}},
 		{"unclosed", "Merhaba {{first_name}", []string{"malformed_variable"}},
@@ -152,7 +152,7 @@ func TestRedTeam_TemplateVariables_RCNT3(t *testing.T) {
 }
 
 func TestRedTeam_SubjectSingleLine_RCNT2(t *testing.T) {
-	for _, s := range []string{"a\nb", "a\rb", "a\u0085b", "a b", "a b"} {
+	for _, s := range []string{"a\nb", "a\rb", "a\u0085b", "a\u2028b", "a\u2029b"} {
 		r := Validate(Content{SMSText: "a", EmailSubject: s, EmailBody: "b"}, Constraints{Locale: "tr"})
 		if !slices.Contains(errCodes(r, PathSubject), "multiline_subject") {
 			t.Fatalf("%q: %v", s, r.Errors)
@@ -167,8 +167,8 @@ func TestRedTeam_SubjectStaysSingleLineAfterPersonalization_RCNT2(t *testing.T) 
 	if !r.ValidFor["email"] {
 		t.Fatal(r.Errors)
 	}
-	got := Render("{{first_name}}, fırsat", "tr", Vars{"first_name": "Ali Bcc"})
-	if strings.ContainsAny(got, "  \u0085") {
+	got := Render("{{first_name}}, fırsat", "tr", Vars{"first_name": "Ali\u2028Bcc"})
+	if strings.ContainsAny(got, "\u2028\u2029\u0085") {
 		t.Skipf("FINDING RT-4: rendered subject %q contains a line separator the validator forbids in the template", got)
 	}
 }

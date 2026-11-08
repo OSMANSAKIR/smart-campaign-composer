@@ -122,7 +122,7 @@ func TestRedTeam_BriefBoundaries_RAI1(t *testing.T) {
 		"4000 runes":      {strings.Repeat("ğ", 4000), true},
 		"4001 runes":      {strings.Repeat("ğ", 4001), false},
 		"invalid UTF-8":   {"İstanbul \xff\xfe", false},
-		"only whitespace": {" \t\n ", false},
+		"only whitespace": {" \t\n\u00a0", false},
 		"english":         {"Email gold members in Ankara a free-shipping offer.", true},
 	} {
 		t.Run(name, func(t *testing.T) {
