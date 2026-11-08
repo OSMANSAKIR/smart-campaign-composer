@@ -67,7 +67,7 @@ eval: ## LLM eval; PROVIDER=mock|claudecode|anthropic (anthropic also needs CONF
 	EVAL_PROVIDER=$(PROVIDER) CONFIRM_SPEND=$(CONFIRM_SPEND) TEST_DATABASE_URL=$(HOST_TEST_DB) \
 	  go test -count=1 -v -run TestEvalReport ./internal/llm/eval/
 
-smoke-live: ## One real Claude API call per task (owner only; needs CONFIRM_SPEND=yes and a key in .env)
+smoke-live: ## One real Claude API call per task (needs CONFIRM_SPEND=yes and ANTHROPIC_API_KEY in your shell)
 	@if [ "$(CONFIRM_SPEND)" != "yes" ]; then \
 	  echo "smoke-live: calls the paid Claude API. Owner only: make smoke-live CONFIRM_SPEND=yes"; exit 2; fi
 	@# Reads ANTHROPIC_API_KEY from the owner's shell (e.g. `set -a; . ./.env; set +a` first); the test refuses
