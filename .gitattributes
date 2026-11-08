@@ -1,0 +1,6 @@
+# Parallel worktrees only append to these files; union merge avoids conflicts (KICKOFF §4.3).
+need.md merge=union
+ai-sessions/validation-log.md merge=union
+
+* text=auto eol=lf
+*.png binary

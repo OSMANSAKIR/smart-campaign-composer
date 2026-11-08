@@ -13,3 +13,13 @@
 # raw (unsanitized) session exports and personal sanitize terms
 ai-sessions/_raw/
 .sanitize-terms
+
+# build outputs
+/bin/
+/out/
+web/dist/
+web/node_modules/
+web/test-results/
+web/playwright-report/
+*.test
+coverage.out
