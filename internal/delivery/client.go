@@ -87,6 +87,12 @@ func (c *HTTPClient) Send(ctx context.Context, r SendRequest) (SendResult, error
 	if err != nil {
 		return SendResult{}, err
 	}
+	// net/http silently replays a request on a fresh connection when a reused keep-alive connection dies
+	// before the answer, if it can rewind the body (GetBody) and the request carries an Idempotency-Key.
+	// That replay would leave the process without passing the limiter and without a delivery_attempts row.
+	// Without GetBody the transport returns the error instead and the retry policy decides. ContentLength
+	// stays set, so the body is still sent with a length and not chunked.
+	req.GetBody = nil
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Idempotency-Key", r.IdempotencyKey)
 
