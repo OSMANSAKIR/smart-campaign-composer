@@ -113,3 +113,17 @@ Append-only (union-merged). Format: KICKOFF.md §13.
 - **How it was caught:** test — `make test` (containerized) measured 6.3 s; host runs passed.
 - **Fix:** keep the 5 s lower bound (the safety property); upper bound 8 s only guards gross slowness (8e0f514).
 - **Lesson / guard added:** always re-run `make test` at merge; host-green is not enough.
+
+### V-017 · Approve depended on a secure-context-only browser API
+- **When / agent:** 2026-11-09 · builder-web; caught by the orchestrator's Playwright e2e
+- **AI proposed:** `crypto.randomUUID()` for the approve `Idempotency-Key`. It exists only on https and localhost, so the UI opened at `http://<host>:8080` from another machine threw "randomUUID is not a function" and never sent the approve. Vitest (Node) and manual checks on localhost could not see it.
+- **How it was caught:** test — `make e2e` reaches the app as `http://api:8080`; the approve step showed "Unexpected error".
+- **Fix:** fall back to `getRandomValues` (works in every context) with a v4 layout; unit test for both paths (d5ea048).
+- **Lesson / guard added:** e2e runs against a non-localhost origin on purpose; browser APIs gated on secure contexts need a fallback.
+
+### V-018 · Wrong requirement ID in a commit subject
+- **When / agent:** 2026-11-09 · orchestrator
+- **AI proposed:** commit bb39056 (empty content editor showed a permanent "Checking…") tagged `[R-FLOW-4]` (queue to provider); the change belongs to `R-FLOW-3` (preview, edit, approve).
+- **How it was caught:** review — re-reading the KICKOFF §2 table while tagging the next commit.
+- **Fix:** recorded here instead of rewriting history; the traceability matrix uses the test names, not commit subjects.
+- **Lesson / guard added:** check the ID table before tagging, not from memory.
