@@ -1,0 +1,13 @@
+# Never send secrets or local state into the build context.
+.env
+.env.*
+!.env.example
+.git
+.claude/worktrees
+ai-sessions
+web/node_modules
+web/dist
+web/test-results
+web/playwright-report
+bin
+out

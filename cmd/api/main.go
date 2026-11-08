@@ -35,7 +35,9 @@ import (
 // version is set at build time with -ldflags "-X main.version=…".
 var version = "dev"
 
-func main() {
+func main() { os.Exit(run()) }
+
+func run() int {
 	cmd := "serve"
 	if len(os.Args) > 1 {
 		cmd = os.Args[1]
@@ -47,16 +49,16 @@ func main() {
 		dir := arg(2, "docs/contracts")
 		if err := catalog.WriteWireSchemas(dir); err != nil {
 			fmt.Fprintln(os.Stderr, err)
-			os.Exit(1)
+			return 1
 		}
 		fmt.Println("wrote wire schemas to", dir)
-		return
+		return 0
 	}
 
 	cfg, err := config.Load()
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "config:", err)
-		os.Exit(2)
+		return 2
 	}
 	log := logging.New("api", cfg.LogLevel)
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
@@ -78,8 +80,9 @@ func main() {
 	}
 	if err != nil {
 		log.Error("exit", "cmd", cmd, "err", err)
-		os.Exit(1)
+		return 1
 	}
+	return 0
 }
 
 func arg(i int, def string) string {

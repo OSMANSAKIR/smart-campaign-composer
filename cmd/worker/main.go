@@ -30,14 +30,16 @@ import (
 
 const heartbeatEvery = 2 * time.Second
 
-func main() {
+func main() { os.Exit(run()) }
+
+func run() int {
 	if len(os.Args) > 2 && os.Args[1] == "healthcheck" {
 		healthcheck.Run(os.Args[2])
 	}
 	cfg, err := config.Load()
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "config:", err)
-		os.Exit(2)
+		return 2
 	}
 	log := logging.New("worker", cfg.LogLevel)
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
@@ -83,7 +85,7 @@ func main() {
 	p, err := store.OpenWithRetry(ctx, cfg.DatabaseURL)
 	if err != nil {
 		log.Error("database", "err", err)
-		os.Exit(1)
+		return 1
 	}
 	defer p.Close()
 	pool.Store(p)
@@ -125,4 +127,5 @@ func main() {
 	shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 	_ = srv.Shutdown(shutdownCtx)
+	return 0
 }

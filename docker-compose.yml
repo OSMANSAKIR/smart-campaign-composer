@@ -1,0 +1,118 @@
+# `docker compose up` builds and starts everything, including migrations, seed data and the mock provider
+# (R-DEL-2). Without a .env file the app runs in mock-LLM mode (need.md N-PLAN-004).
+# Agents use `make up`, which forces LLM_PROVIDER=mock so no money is ever spent (need.md N-PLAN-014).
+name: scc
+
+x-app-env: &app-env
+  DATABASE_URL: postgres://scc:scc@postgres:5432/scc?sslmode=disable
+  PROVIDER_URL: http://mockprovider:8090
+  LLM_PROVIDER: ${LLM_PROVIDER:-auto}
+
+x-api-build: &api-build
+  context: .
+  target: api
+
+x-pg-env: &pg-env
+  POSTGRES_USER: scc
+  POSTGRES_PASSWORD: scc
+  POSTGRES_DB: scc
+
+x-pg-health: &pg-health
+  test: ["CMD-SHELL", "pg_isready -U scc -d scc"]
+  interval: 2s
+  timeout: 3s
+  retries: 30
+
+services:
+  postgres:
+    image: postgres:17-alpine
+    environment: *pg-env
+    ports: ["${POSTGRES_PORT:-55432}:5432"]
+    volumes: [pgdata:/var/lib/postgresql/data]
+    healthcheck: *pg-health
+
+  # One-shot: apply migrations, then insert the deterministic seed (both idempotent).
+  migrate:
+    image: scc-api:dev
+    build: *api-build
+    command: ["setup"]
+    env_file: [{ path: .env, required: false }]
+    environment: *app-env
+    depends_on:
+      postgres: { condition: service_healthy }
+    restart: "no"
+
+  api:
+    image: scc-api:dev
+    build: *api-build
+    command: ["serve"]
+    env_file: [{ path: .env, required: false }]
+    environment: *app-env
+    ports: ["${API_PORT:-8080}:8080"]
+    depends_on:
+      migrate: { condition: service_completed_successfully }
+      mockprovider: { condition: service_started }
+    healthcheck:
+      test: ["CMD", "/app/api", "healthcheck", "http://localhost:8080/readyz"]
+      interval: 5s
+      timeout: 4s
+      retries: 12
+
+  # Scales out: `docker compose up --scale worker=2` (the second replica is a hot standby per channel).
+  worker:
+    image: scc-worker:dev
+    build: { context: ., target: worker }
+    env_file: [{ path: .env, required: false }]
+    environment: *app-env
+    ports: ["${WORKER_PORTS:-9091-9092}:9091"]
+    depends_on:
+      migrate: { condition: service_completed_successfully }
+    stop_grace_period: 15s
+    healthcheck:
+      test: ["CMD", "/app/worker", "healthcheck", "http://localhost:9091/readyz"]
+      interval: 5s
+      timeout: 4s
+      retries: 12
+
+  mockprovider:
+    image: scc-mockprovider:dev
+    build: { context: ., target: mockprovider }
+    env_file: [{ path: .env, required: false }]
+    ports: ["${PROVIDER_PORT:-8090}:8090"]
+    healthcheck:
+      test: ["CMD", "/app/mockprovider", "healthcheck", "http://localhost:8090/healthz"]
+      interval: 5s
+      timeout: 4s
+      retries: 12
+
+  # ---------- `make test` (profile test, separate project scc-test, no internet) ----------
+  postgres-test:
+    profiles: [test]
+    image: postgres:17-alpine
+    environment: *pg-env
+    tmpfs: [/var/lib/postgresql/data]
+    networks: [testnet]
+    healthcheck: *pg-health
+
+  gotest:
+    profiles: [test]
+    build: { context: ., target: gotest }
+    environment:
+      TEST_DATABASE_URL: postgres://scc:scc@postgres-test:5432/postgres?sslmode=disable
+      LLM_PROVIDER: mock
+      ANTHROPIC_API_KEY: ""
+    networks: [testnet]
+    depends_on:
+      postgres-test: { condition: service_healthy }
+
+  webtest:
+    profiles: [test]
+    build: { context: ., target: webtest }
+    network_mode: none
+
+networks:
+  testnet:
+    internal: true # tests must pass without internet (R-AI-2)
+
+volumes:
+  pgdata:

@@ -20,14 +20,16 @@ import (
 	"smartcampaign/internal/mockprovider"
 )
 
-func main() {
+func main() { os.Exit(run()) }
+
+func run() int {
 	if len(os.Args) > 2 && os.Args[1] == "healthcheck" {
 		healthcheck.Run(os.Args[2])
 	}
 	cfg, err := config.Load()
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "config:", err)
-		os.Exit(2)
+		return 2
 	}
 	log := logging.New("mockprovider", cfg.LogLevel)
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
@@ -43,6 +45,7 @@ func main() {
 	log.Info("listening", "addr", cfg.MockProviderAddr, "faults", cfg.Provider)
 	if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 		log.Error("exit", "err", err)
-		os.Exit(1)
+		return 1
 	}
+	return 0
 }

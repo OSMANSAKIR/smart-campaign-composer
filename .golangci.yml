@@ -1,0 +1,19 @@
+version: "2"
+linters:
+  default: standard
+  enable:
+    - errorlint
+    - gocritic
+    - misspell
+    - bodyclose
+  settings:
+    errcheck:
+      # Close errors on read paths and writes to an HTTP response are not actionable.
+      exclude-functions:
+        - fmt.Fprintln
+        - (io.Closer).Close
+        - (*github.com/jackc/pgx/v5.Conn).Close
+        - (github.com/jackc/pgx/v5.BatchResults).Close
+formatters:
+  enable:
+    - gofmt

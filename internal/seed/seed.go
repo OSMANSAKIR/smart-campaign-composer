@@ -136,7 +136,7 @@ func edgeUsers(now time.Time) []User {
 	users := []User{
 		base("template-name", "{{city}}"),
 		base("script-name", "<script>"),
-		base("rtl-name", "‮ilA"),
+		base("rtl-name", "\u202eilA"),
 		base("long-name", "Hüseyin Muhammed Abdurrahman Abdülkerim"),
 		base("name-20-runes", "Abdurrahman Kerimcan"),
 		base("empty-name", ""),
