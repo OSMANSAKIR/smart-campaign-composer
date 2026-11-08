@@ -1,19 +1,18 @@
-// Package segment holds the segment DSL types, the validator, the SQL compiler, the server-side rendering
-// and the audience count (docs/contracts/segment-dsl.md). Owned by the llm builder.
+// Package segment holds the segment DSL types, the strict parser, the validator, the SQL compiler, the
+// server-side rendering and the audience count (docs/contracts/segment-dsl.md). Owned by the llm builder.
 //
-// Phase 0 skeleton: types and signatures are the contract; bodies return ErrNotImplemented.
+// Pipeline: Parse (strict decode) → Validate (catalog + limits; the only constructor of ValidRule) →
+// Compile (whitelisted SQL, values only as $n) → Count. Nothing the model writes reaches SQL as text.
 package segment
 
 import (
 	"context"
 	"encoding/json"
-	"errors"
 
 	"github.com/jackc/pgx/v5"
-)
 
-// ErrNotImplemented marks skeleton functions.
-var ErrNotImplemented = errors.New("segment: not implemented")
+	"smartcampaign/internal/catalog"
+)
 
 // Condition is one {field, op, value} triple as proposed by the model or a user. Value stays raw until the
 // validator interprets it for the field's type.
@@ -53,12 +52,40 @@ type Issue struct {
 // ValidRule can only be constructed by Validate. Compile accepts nothing else, so unvalidated model output
 // can never reach SQL (KICKOFF §6.3). The zero value is invalid and must be rejected by Compile.
 type ValidRule struct {
-	rule Rule
-	ok   bool
+	rule  Rule
+	conds [][]cond // typed, validated values; Compile and Render read only these
+	ok    bool
 }
 
 // Rule returns a copy of the validated rule for storage and display.
-func (v ValidRule) Rule() Rule { return v.rule }
+func (v ValidRule) Rule() Rule {
+	out := Rule{Groups: make([]Group, len(v.rule.Groups))}
+	for i, g := range v.rule.Groups {
+		cs := make([]Condition, len(g.Conditions))
+		for j, c := range g.Conditions {
+			cs[j] = Condition{Field: c.Field, Op: c.Op, Value: append(json.RawMessage(nil), c.Value...)}
+		}
+		out.Groups[i] = Group{Conditions: cs}
+	}
+	return out
+}
+
+// Valid reports whether v was produced by a successful Validate.
+func (v ValidRule) Valid() bool { return v.ok }
+
+// cond is a validated condition with its value decoded for the field's type.
+type cond struct {
+	field catalog.Field
+	op    catalog.Op
+	num   float64  // number compare
+	lo    float64  // number between
+	hi    float64  // number between
+	str   string   // enum eq/neq
+	strs  []string // enum in/not_in
+	days  int      // date relative
+	date  string   // date absolute, YYYY-MM-DD
+	key   string   // canonical form for duplicate detection
+}
 
 // Audience is the dry-run count result.
 type Audience struct {
@@ -68,34 +95,10 @@ type Audience struct {
 	Both           int `json:"both"`
 }
 
-// Querier is satisfied by *pgxpool.Pool and pgx.Tx.
+// Querier is satisfied by *pgxpool.Pool and pgx.Tx. Begin is needed so Count can scope
+// `SET LOCAL statement_timeout` to its own transaction (or savepoint, inside a caller's transaction).
 type Querier interface {
 	QueryRow(ctx context.Context, sql string, args ...any) pgx.Row
-}
-
-// Parse strictly decodes a proposal: unknown fields and trailing data are errors.
-func Parse(raw []byte) (Proposal, []Issue) {
-	return Proposal{}, []Issue{{Path: "", Code: "not_implemented", Message: ErrNotImplemented.Error()}}
-}
-
-// Validate checks a rule against the catalog and limits. Warnings never block; errors do.
-func Validate(r Rule) (ValidRule, []Issue, []Issue) {
-	return ValidRule{}, []Issue{{Path: "segment", Code: "not_implemented", Message: ErrNotImplemented.Error()}}, nil
-}
-
-// Compile turns a validated rule into a WHERE fragment over `users u` with $1.. placeholders starting at
-// firstParam, plus the matching arguments. Values are always parameters.
-func Compile(v ValidRule, firstParam int) (where string, args []any, err error) {
-	if !v.ok {
-		return "", nil, errors.New("segment: Compile called with an unvalidated rule")
-	}
-	return "", nil, ErrNotImplemented
-}
-
-// Render returns the human-readable rendering per group for the given locale (tr|en).
-func Render(v ValidRule, locale string) []string { return nil }
-
-// Count runs the dry-run count with a statement timeout.
-func Count(ctx context.Context, q Querier, v ValidRule) (Audience, error) {
-	return Audience{}, ErrNotImplemented
+	Query(ctx context.Context, sql string, args ...any) (pgx.Rows, error)
+	Begin(ctx context.Context) (pgx.Tx, error)
 }

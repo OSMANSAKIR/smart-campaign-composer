@@ -2,7 +2,8 @@
 // claudecode) and the Service that owns prompts, validation, the repair loop and llm_calls accounting, so
 // every adapter goes through the same checks (KICKOFF §6). Owned by the llm builder.
 //
-// Phase 0 skeleton: types and signatures are the contract; Service methods return ErrNotImplemented.
+// "The model proposes, the backend disposes": nothing a provider returns is trusted until it has passed
+// strict decoding and the deterministic validators in internal/segment and internal/content.
 package llm
 
 import (
@@ -15,7 +16,7 @@ import (
 	"smartcampaign/internal/segment"
 )
 
-// ErrNotImplemented marks skeleton functions.
+// ErrNotImplemented marks unfinished code paths.
 var ErrNotImplemented = errors.New("llm: not implemented")
 
 // Purpose is recorded in llm_calls.purpose.
@@ -51,6 +52,7 @@ type Message struct {
 // Request is everything an adapter needs for one call.
 type Request struct {
 	Purpose   Purpose
+	Task      Purpose // segment or content, also for repair calls (adapters pick per-task settings)
 	System    []SystemBlock
 	Messages  []Message
 	Schema    map[string]any // wire schema from internal/catalog
@@ -74,6 +76,8 @@ type Response struct {
 	Usage           Usage
 	Model           string
 	Latency         time.Duration
+	// CostUSD, when > 0, is the provider-reported cost (claudecode); otherwise the price table is used.
+	CostUSD float64
 }
 
 // Delta is a streamed fragment of the model's JSON text. Adapters normalize text_delta (anthropic) and
@@ -113,33 +117,42 @@ type SegmentResult struct {
 	Meta     Meta
 }
 
-// ContentInput is what the content prompt needs. The model never sees user rows, only aggregates.
+// ContentInput is what the content prompt needs. The model never sees user rows or values, only
+// aggregates: WorstCase values are used for validation, and only their lengths go into the prompt.
 type ContentInput struct {
 	CampaignID     string
 	Brief          string
 	Language       string
 	SegmentSummary []string // server rendering of the validated rule
 	Audience       segment.Audience
-	Channels       []string
+	Channels       []string // channels the copy must be valid for; empty = sms and email
 	WorstCase      content.Vars
+	// WorstCaseByChannel, when set, overrides WorstCase per channel (content.WorstCaseVars).
+	WorstCaseByChannel map[string]content.Vars
 }
 
 // ContentResult is validated content plus its report.
 type ContentResult struct {
 	Content content.Content
 	Report  content.Report
+	Notes   string
 	Meta    Meta
 }
 
 // Error is returned for terminal LLM failures; Code matches the API error codes
-// (llm_refused, llm_invalid_output, llm_failed).
+// (llm_refused, llm_invalid_output, llm_failed, validation_failed for a bad brief).
 type Error struct {
 	Code    string
 	Message string
 	Details []segment.Issue
+	Meta    Meta  // accounting of the attempts made before the failure
+	Err     error // underlying transport error, e.g. context.Canceled
 }
 
 func (e *Error) Error() string { return e.Code + ": " + e.Message }
+
+// Unwrap exposes the transport error so callers can detect a client disconnect (context.Canceled).
+func (e *Error) Unwrap() error { return e.Err }
 
 // Recorder persists one row per call into llm_calls.
 type Recorder interface {
@@ -165,27 +178,4 @@ type Call struct {
 type RepairNotice struct {
 	Attempt int
 	Errors  json.RawMessage
-}
-
-// Service runs the two LLM tasks end to end.
-type Service struct {
-	provider Provider
-	recorder Recorder
-}
-
-// NewService wires a provider and a recorder.
-func NewService(p Provider, r Recorder) *Service { return &Service{provider: p, recorder: r} }
-
-// Provider exposes the configured adapter (for /api/system/status).
-func (s *Service) Provider() Provider { return s.provider }
-
-// ProposeSegment turns a brief into a validated segment (non-streamed).
-func (s *Service) ProposeSegment(ctx context.Context, campaignID, brief string) (SegmentResult, error) {
-	return SegmentResult{}, ErrNotImplemented
-}
-
-// ProposeContent streams content generation; onDelta receives JSON fragments, onRepair is called before
-// each repair attempt.
-func (s *Service) ProposeContent(ctx context.Context, in ContentInput, onDelta func(Delta), onRepair func(RepairNotice)) (ContentResult, error) {
-	return ContentResult{}, ErrNotImplemented
 }

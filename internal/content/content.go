@@ -1,11 +1,8 @@
 // Package content holds the message templates' rules: character counting, personalization variables,
-// rendering and validation (KICKOFF §6.5). Owned by the llm builder.
-//
-// Phase 0: Count and Render are implemented (delivery and web depend on them); Validate is a stub.
+// rendering, validation and the email HTML rendering (KICKOFF §6.5). Owned by the llm builder.
 package content
 
 import (
-	"errors"
 	"regexp"
 	"slices"
 	"strings"
@@ -14,9 +11,6 @@ import (
 
 	"smartcampaign/internal/catalog"
 )
-
-// ErrNotImplemented marks skeleton functions.
-var ErrNotImplemented = errors.New("content: not implemented")
 
 // Content is one version of the campaign copy.
 type Content struct {
@@ -149,12 +143,10 @@ type Issue struct {
 
 // Constraints are the inputs Validate needs beyond the text.
 type Constraints struct {
-	Locale    string
-	WorstCase Vars // longest consented value per variable for the audience
-}
-
-// Validate checks content against the channel rules. Skeleton: always invalid.
-func Validate(c Content, cons Constraints) Report {
-	return Report{ValidFor: map[string]bool{"sms": false, "email": false},
-		Errors: []Issue{{Path: "", Code: "not_implemented", Message: ErrNotImplemented.Error()}}}
+	Locale string // tr|en: selects the fallback values (need.md N-ORC-005)
+	// WorstCase holds the longest rendered value per variable for the audience (see WorstCaseVars).
+	WorstCase Vars
+	// WorstCaseByChannel overrides WorstCase per channel ("sms", "email"), because the worst case is taken
+	// over the users consented to that channel.
+	WorstCaseByChannel map[string]Vars
 }
