@@ -17,3 +17,5 @@ Owned by the web builder. Root rules in `../CLAUDE.md` apply.
 - Approve stays disabled until the server's validation report says the content is valid for the chosen
   channels. Show every error state in human words (LLM failure, 422, refusal, network).
 - Accessibility: every input has a label; everything works with the keyboard.
+- TypeScript is pinned to `~6.0.3` on purpose: `vue-tsc` uses the JavaScript compiler API, and TypeScript 7
+  is the native port. Do not bump it without checking `vue-tsc` support.
