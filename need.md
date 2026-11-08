@@ -410,3 +410,47 @@ _Last updated: 2026-11-08 10:10 by the orchestrator (W1 launched: llm, delivery,
 - **Question for owner:** —
 - **Owner response:** ACCEPT (chat, 2026-11-08 10:09)
 - **Status:** ACCEPTED
+
+### 🟡 N-WEB-001 · Catalog response shape is not in the contract · impact: low
+- **Date / agent / session:** 2026-11-08 10:20 · web · builder-web (W1 subagent)
+- **Requirement(s):** R-FLOW-1
+- **Context:** `GET /api/catalog` is listed in api.md without a shape. P0 UI does not need it (audience uses server rendering; limits come from the validation report).
+- **Options:** A) Opaque object, unused. B) Define the shape so P1 manual rule editing can use it.
+- **Decision taken:** A for now. Orchestrator note: the shape is `catalog.Doc()` in `internal/catalog`; it will be written into api.md before P1 rule editing starts.
+- **Cost to change later:** ~1 h (typed catalog + rule form).
+- **Question for owner:** —
+- **Owner response:**
+- **Status:** OPEN
+
+### ✅ N-WEB-002 · Does saving content move the campaign to content_ready? · impact: low
+- **Date / agent / session:** 2026-11-08 10:20 · web · builder-web (W1 subagent)
+- **Requirement(s):** R-FLOW-3
+- **Context:** api.md did not say whether `PUT …/content` sets `content_ready`.
+- **Options:** A) Re-fetch the campaign after save/generate and gate on its status. B) Assume.
+- **Decision taken:** A. Orchestrator confirms: every saved version (PUT or generate `result`) sets `content_ready` (`campaign.saveVersion`); approve re-validates anyway.
+- **Cost to change later:** ~5 min.
+- **Question for owner:** —
+- **Owner response:** — (resolved by the orchestrator against the implementation)
+- **Status:** RESOLVED
+
+### 🟡 N-WEB-003 · Proxy for mock-provider fault controls (P1) · impact: low
+- **Date / agent / session:** 2026-11-08 10:20 · web · builder-web (W1 subagent)
+- **Requirement(s):** R-OBS-1 (P1 UI)
+- **Context:** The P1 fault-control panel needs an API proxy to the provider's `/admin/config`.
+- **Options:** A) `GET/PUT /api/system/provider-config` forwarding to the mock provider. B) Skip the panel.
+- **Decision taken:** Not built; deferred to after P0 integration (CP2). Orchestrator leans to A, since it makes the S-scenarios demoable from the UI.
+- **Cost to change later:** ~1.5 h UI + ~30 min API.
+- **Question for owner:** —
+- **Owner response:**
+- **Status:** OPEN
+
+### 🟡 N-WEB-004 · Dashboard first paint from GET progress, then SSE · impact: low
+- **Date / agent / session:** 2026-11-08 10:20 · web · builder-web (W1 subagent)
+- **Requirement(s):** R-FLOW-5
+- **Context:** `GET /api/campaigns/{id}` carries a `progress` snapshot once approved; the SSE stream also starts with a full snapshot.
+- **Options:** A) SSE only. B) Show GET progress first, every SSE snapshot replaces it.
+- **Decision taken:** B.
+- **Cost to change later:** —
+- **Question for owner:** —
+- **Owner response:**
+- **Status:** OPEN
