@@ -126,6 +126,7 @@ make smoke-live CONFIRM_SPEND=yes
 |---|---|---|
 | `make test` | `go vet`, `go test -race` for every package, Vitest — in containers, on a network **without internet**, no key | Docker |
 | `make e2e` | Playwright: official brief → audience → streamed content → invalid edit blocked → edit saved → approve → dashboard finishes → reload | Docker |
+| `make fresh-clone-check` | The reviewer's path: clean clone, no `.env`, `docker compose up`, seed, restart, `down -v`, key-only `.env`, `make test` | Docker |
 | `make stress` | Delivery scenarios with real worker processes → [`docs/stress/REPORT.md`](docs/stress/REPORT.md); API scenarios → [`docs/stress/REPORT-api.md`](docs/stress/REPORT-api.md) | Docker (Postgres from `make up`), Go |
 | `make eval PROVIDER=mock\|claudecode` | 17-brief eval set → `docs/eval/REPORT-*.md` | Go; `claudecode` needs the Claude Code CLI |
 | `make lint` | golangci-lint + vue-tsc | Go, Node |
@@ -139,13 +140,14 @@ What the evidence says today (details in the reports):
 - **Rate limit (R-SND-2):** live compose run at 100/s, all 5000 users, 7542 messages: the provider measured
   at most **100** requests in any 1 s window per channel, 0 rejections by its own limiter, **0 duplicate
   deliveries**, approve in 0.16 s, done in 72 s.
-- **Delivery stress (S1 baseline, S2 chaos with a worker killed mid-run, S7 provider and database outages):**
+- **Delivery stress (S1 baseline, S2 chaos at 25 000 users / 49 463 messages with a worker killed mid-run, S7
+  provider and database outages):**
   every invariant passes — no duplicates, no delivery without consent, ≤ 100 per window, every message terminal.
-- **API stress:** S3 — 100 racing approves of one campaign: exactly one wins, the rest get 409; ten all-user
-  campaigns approved at once all succeed (75 420 messages, slowest 6.9 s). S5 — 400 concurrent segment previews
-  and content validations: no errors, p95 under 0.36 s with the 20-connection pool saturated. S6 — 50 live
-  dashboards with 230 reconnects during a chaotic delivery: every one ends on the exact final counts, and no
-  count ever goes backwards.
+- **API stress:** S3(c) — one 5000-user approve returns in a median 128 ms. S3 — 100 racing approves of one campaign: exactly one wins, the rest get 409; ten all-user
+  campaigns approved at once all succeed (75 420 messages, slowest 1.3 s in the committed run). S5 — 400 concurrent segment previews
+  and content validations: no errors, p95 0.14 s with the 20-connection pool saturated. S6 — 50 live
+  dashboards with 240 reconnects during a chaotic delivery: every one ends on the exact final counts, and no
+  count ever goes backwards. S5b — previews at 100 000 users: p95 40 ms. S8 — the mock provider answers 500 rps.
 - **Real model (claudecode, Sonnet 5.5):** 17-brief eval — 16/16 segments valid on the first try, 14/14 exact
   audiences (user-id sets), 16/16 contents valid; [`docs/eval/`](docs/eval/).
 - **Red-team:** 45 hostile briefs and model answers through the mock adapter run in `make test`; no path from
