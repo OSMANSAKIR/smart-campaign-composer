@@ -26,7 +26,7 @@ func TestParse_ProbeFixture_RAI1(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer f.Close()
+	defer func() { _ = f.Close() }()
 	var deltas []string
 	resp, err := Parse(f, func(d llm.Delta) { deltas = append(deltas, d.JSONFragment) })
 	if err != nil {
