@@ -584,6 +584,60 @@ func TestStressAPI(t *testing.T) {
 		reportsMu.Unlock()
 	})
 
+	t.Run("S5b_100k_counts", func(t *testing.T) {
+		if !wanted("S5b") {
+			t.Skip()
+		}
+		const users = 100000
+		start := time.Now()
+		h := newHarnessN(t, "http://127.0.0.1:1", users)
+		seedTime := time.Since(start)
+		r := &report{Name: "S5b segment counts at 100k users", Desc: "R-RES-2: the seed scaled to 100 000 users (`SEED_USERS=100000`); every golden rule of the counting tests is counted through `PUT …/segment` (validate, compile, count with the statement timeout), 5 times each."}
+		rules := map[string]string{
+			"official brief":               `{"groups":[{"conditions":[{"field":"city","op":"eq","value":"İstanbul"}]},{"conditions":[{"field":"last_cart_add_at","op":"within_last_days","value":30}]},{"conditions":[{"field":"cart_abandoned","op":"is_true","value":null}]}]}`,
+			"age band or premium tier":     `{"groups":[{"conditions":[{"field":"age","op":"between","value":[25,34]},{"field":"loyalty_tier","op":"in","value":["gold","platinum"]}]}]}`,
+			"lapsed incl. never":           `{"groups":[{"conditions":[{"field":"last_purchase_at","op":"not_within_last_days","value":90}]}]}`,
+			"big spenders in three cities": `{"groups":[{"conditions":[{"field":"total_spent","op":"gte","value":5000}]},{"conditions":[{"field":"city","op":"in","value":["Ankara","İzmir","Bursa"]}]}]}`,
+			"everyone":                     `{"groups":[]}`,
+		}
+		var c campaignDoc
+		h.mustJSON(http.MethodPost, "/api/campaigns", map[string]string{"brief": "100k"}, http.StatusCreated, &c)
+		var all []time.Duration
+		names := make([]string, 0, len(rules))
+		for n := range rules {
+			names = append(names, n)
+		}
+		slices.Sort(names)
+		for _, name := range names {
+			var lat []time.Duration
+			for range 5 {
+				code, b, d, err := h.do(http.MethodPut, "/api/campaigns/"+c.ID+"/segment", map[string]any{"rule": json.RawMessage(rules[name])}, nil)
+				if err != nil || code != http.StatusOK {
+					t.Fatalf("%s: %d %v %s", name, code, err, b)
+				}
+				lat = append(lat, d)
+			}
+			all = append(all, lat...)
+			r.param("count: "+name, latencies(lat))
+		}
+		var n int
+		if err := h.pool.QueryRow(context.Background(), `SELECT count(*) FROM users`).Scan(&n); err != nil {
+			t.Fatal(err)
+		}
+		var everyone struct {
+			Campaign campaignDoc `json:"campaign"`
+		}
+		h.mustJSON(http.MethodPut, "/api/campaigns/"+c.ID+"/segment", map[string]any{"rule": json.RawMessage(rules["everyone"])}, http.StatusOK, &everyone)
+		r.param("users in the database / matched by the everyone rule (consent applies to reachable)", fmt.Sprintf("%d / sms %d, email %d",
+			n, everyone.Campaign.Segment.Audience.SMS, everyone.Campaign.Segment.Audience.Email))
+		r.check(n >= users, "the database really holds the 100 000 users", fmt.Sprint(n))
+		r.param("seeding 100 000 users", seedTime.Round(time.Second).String())
+		r.check(pct(all, .95) < 300*time.Millisecond, "R-RES-2: segment preview (incl. count) p95 < 300 ms at 100 000 users", "p95 "+pct(all, .95).Round(time.Millisecond).String())
+		reportsMu.Lock()
+		reports = append(reports, r)
+		reportsMu.Unlock()
+	})
+
 	t.Run("S6_dashboard_fanout", func(t *testing.T) {
 		if !wanted("S6") {
 			t.Skip()
