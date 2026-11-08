@@ -109,14 +109,6 @@ func errorf(code, message string, details ...Issue) *Error {
 	return &Error{Code: code, Message: message, Details: details}
 }
 
-func contentIssues(in []content.Issue) []Issue {
-	out := make([]Issue, 0, len(in))
-	for _, i := range in {
-		out = append(out, Issue{Path: i.Path, Code: i.Code, Message: i.Message})
-	}
-	return out
-}
-
 func mustJSON(v any) []byte {
 	b, err := json.Marshal(v)
 	if err != nil {

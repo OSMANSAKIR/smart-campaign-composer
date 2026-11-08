@@ -62,12 +62,16 @@ eval: ## LLM eval; PROVIDER=mock|claudecode|anthropic (anthropic also needs CONF
 	@if [ -z "$(PROVIDER)" ]; then echo "eval: set PROVIDER=mock|claudecode|anthropic (there is no auto here)"; exit 2; fi
 	@if [ "$(PROVIDER)" = "anthropic" ] && [ "$(CONFIRM_SPEND)" != "yes" ]; then \
 	  echo "eval: PROVIDER=anthropic calls the paid Claude API. Owner only: make eval PROVIDER=anthropic CONFIRM_SPEND=yes"; exit 2; fi
-	@echo "eval: not implemented yet (P1, llm builder)"
+	@# The anthropic path reads ANTHROPIC_API_KEY from the owner's shell environment; make never loads .env.
+	EVAL_PROVIDER=$(PROVIDER) CONFIRM_SPEND=$(CONFIRM_SPEND) TEST_DATABASE_URL=$(HOST_TEST_DB) \
+	  go test -count=1 -v -run TestEvalReport ./internal/llm/eval/
 
 smoke-live: ## One real Claude API call per task (owner only; needs CONFIRM_SPEND=yes and a key in .env)
 	@if [ "$(CONFIRM_SPEND)" != "yes" ]; then \
 	  echo "smoke-live: calls the paid Claude API. Owner only: make smoke-live CONFIRM_SPEND=yes"; exit 2; fi
-	@echo "smoke-live: not implemented yet (llm builder)"
+	@# Reads ANTHROPIC_API_KEY from the owner's shell (e.g. `set -a; . ./.env; set +a` first); the test refuses
+	@# without the flag and skips cleanly without a key.
+	CONFIRM_SPEND=$(CONFIRM_SPEND) go test -tags smokelive -count=1 -v -run TestSmokeLive ./internal/llm/anthropic/
 
 sanitize-check: ## gitleaks over git history and ai-sessions/, plus the owner-term grep
 	scripts/sanitize-check.sh

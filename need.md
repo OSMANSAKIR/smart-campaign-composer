@@ -25,10 +25,11 @@ The next agent that owns the area implements the answer and updates the status.
 
 ## Digest (maintained by the orchestrator only)
 
-_Last updated: 2026-11-08 11:00 by the orchestrator (W1: web and delivery merged; llm running)._
+_Last updated: 2026-11-08 by the orchestrator (W1 done: web, delivery, llm merged and integrated)._
 
 **Needs the owner soon (high impact):**
 
+- ❓ N-LLM-003: run one claudecode probe so the reconstructed fixture is replaced by a real capture.
 - ❓ N-DEL-007: should a refused provider connection pause the channel instead of using up retry attempts?
 
 - ❓ N-PLAN-009: repo visibility and reviewer access, before the first push (commit identity is settled).
@@ -533,3 +534,58 @@ _Last updated: 2026-11-08 11:00 by the orchestrator (W1: web and delivery merged
 - **Question for owner:** Should a refused connection stop counting as an attempt and pause the channel instead?
 - **Owner response:**
 - **Status:** QUESTION
+
+### 🟡 N-LLM-001 · Worst case when the audience is unknown, and which fallback counts · impact: low
+- **Date / agent / session:** 2026-11-08 11:00 · llm · builder-llm (W1 subagent)
+- **Requirement(s):** R-CNT-1, R-CNT-3
+- **Context:** `content.Validate` can run without audience data, and send-time rendering may pick the campaign or the recipient locale for the fallback.
+- **Options:** A) Optimistic: the locale fallback only. B) Conservative: a missing variable counts as the 20-rune cap; when a fallback applies, `WorstCaseVars` uses the longest fallback of any locale.
+- **Decision taken:** B, safest for the hard 160 limit whichever locale delivery picks.
+- **Cost to change later:** ~15 min.
+- **Question for owner:** OK to stay conservative?
+- **Owner response:**
+- **Status:** OPEN
+
+### 🟡 N-LLM-002 · max_tokens stop retries the same turn with a doubled limit · impact: low
+- **Date / agent / session:** 2026-11-08 11:00 · llm · builder-llm (W1 subagent)
+- **Requirement(s):** R-AI-1
+- **Context:** KICKOFF §6.3: max_tokens = invalid plus one repair with a larger limit.
+- **Options:** A) Echo the truncated output and ask for a fix. B) Re-send the same conversation with max_tokens doubled (cap 32768); counts toward the 2-repair budget, recorded as purpose `repair`.
+- **Decision taken:** B; truncated JSON is useless context and B keeps the limit of 3 calls.
+- **Cost to change later:** ~10 min.
+- **Question for owner:** OK?
+- **Owner response:**
+- **Status:** OPEN
+
+### ❓ N-LLM-003 · claudecode fixture reconstructed, not freshly probed · impact: medium
+- **Date / agent / session:** 2026-11-08 11:40 · llm · builder-llm (W1 subagent)
+- **Requirement(s):** R-AI-1, R-DEL-6
+- **Context:** KICKOFF §6.9 asks for a sanitized probe fixture; a subagent running `claude -p` would spend the owner's subscription unattended.
+- **Options:** A) Probe from the subagent. B) Reconstruct from the §6.9 notes, mark it as reconstructed (first line of the file), owner captures a real one with `make dev-sub`.
+- **Decision taken:** B; the parser ignores unknown line types and a real capture just replaces the file.
+- **Cost to change later:** ~10 min.
+- **Question for owner:** Will you run one claudecode probe so the fixture can be replaced by a real capture?
+- **Owner response:**
+- **Status:** QUESTION
+
+### 🟡 N-LLM-004 · Repairs only for requested channels; body limit on raw text; allowed control characters · impact: low
+- **Date / agent / session:** 2026-11-08 11:10 · llm · builder-llm (W1 subagent)
+- **Requirement(s):** R-CNT-1, R-CNT-2
+- **Context:** KICKOFF §6.5 leaves open which content errors trigger a repair, how the body is measured, which control characters are allowed.
+- **Options:** A) Every error triggers a repair. B) Only errors on fields of requested channels trigger a repair (`valid_for` still reports both); body 1..5000 on raw runes; `\n` allowed in SMS, `\n`/`\t` in the body, none in the subject.
+- **Decision taken:** B; an email-only campaign should not burn repairs on SMS copy, and the contract shape stays exact.
+- **Cost to change later:** ~20 min.
+- **Question for owner:** OK?
+- **Owner response:**
+- **Status:** OPEN
+
+### 🟡 N-LLM-005 · A failed llm_calls insert does not fail the generation · impact: low
+- **Date / agent / session:** 2026-11-08 11:10 · llm · builder-llm (W1 subagent)
+- **Requirement(s):** R-AI-1, R-OBS-2
+- **Context:** One row per call is required; the database can fail independently of the model call.
+- **Options:** A) Fail the request. B) Log an error with campaign_id and purpose and continue; the insert uses `context.WithoutCancel` with a 5 s timeout so client disconnects are still recorded.
+- **Decision taken:** B; a paid generation is not thrown away over an accounting row.
+- **Cost to change later:** ~5 min.
+- **Question for owner:** OK?
+- **Owner response:**
+- **Status:** OPEN

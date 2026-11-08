@@ -64,3 +64,24 @@ Append-only (union-merged). Format: KICKOFF.md §13.
 - **How it was caught:** test — `TestDispatcher_RendersPerRecipient_RCNT3`.
 - **Fix:** Shorter hostile value; the fallback path is tested separately.
 - **Lesson / guard added:** Test fixtures for rendering are checked against N-ORC-005 first.
+
+### V-010 · Builder-reported mistakes in the llm area (summary)
+- **When / agent:** 2026-11-08 10:25–12:00 · builder-llm (W1 subagent)
+- **AI proposed:** (1) `SET LOCAL statement_timeout` inside a savepoint that was released, leaking the timeout into the caller's transaction; (2) a comment claiming `option.WithAPIKey` ignores ambient credentials, while the Go SDK also applies `ANTHROPIC_BASE_URL`, profiles and `ANTHROPIC_CUSTOM_HEADERS`; (3) following the claude-api skill default (refusal fallbacks on) against the owner's N-ORC-008; (4) `golangci-lint … | tail && git commit`, where the pipe hid a lint failure; (5) a literal U+202E written into a fuzz seed.
+- **How it was caught:** review (1, 3), tool — reading SDK v1.84.0 `client.go` (2), reading output after the commit (4), tool — staticcheck ST1018 (5).
+- **Fix:** read helper always rolls back (9842f6d); `option.WithoutEnvironmentDefaults()` + explicit client (32de36f); no beta header unless `ANTHROPIC_REFUSAL_FALLBACK=default` (32de36f); follow-up commit a323018; escaped (b8372af).
+- **Lesson / guard added:** `TestReadWithTimeout_StopsSlowQueryAndDoesNotLeak_RAUD1`; `TestAnthropic_RequestShape_RAI1` sets ambient env and asserts nothing leaks and no beta header; never chain a piped check into a commit.
+
+### V-011 · Approve SQL reused placeholder $3
+- **When / agent:** 2026-11-08 · orchestrator
+- **AI proposed:** `segment.Compile(*v, 3)` for the approve INSERT whose own parameters were already `$1..$3`, so the compiled rule's first value collided with `content_version`.
+- **How it was caught:** test — the approve integration tests (42P08 "inconsistent types deduced for parameter $3") once the real validators were merged; they had been skipped before.
+- **Fix:** `Compile(*v, 4)` with a comment naming `$1..$3` (d219306).
+- **Lesson / guard added:** Tests that skip on missing dependencies hide bugs; integration ran them at merge. Keep skip guards temporary and remove them at merge.
+
+### V-012 · Orchestrator tried to run the owner-only smoke-live target
+- **When / agent:** 2026-11-08 · orchestrator
+- **AI proposed:** Verifying the new `make smoke-live` guard by running it, and loading `.env` inside the Makefile recipe.
+- **How it was caught:** tool — the permission check denied the command.
+- **Fix:** Recipes read the key from the owner's shell, never load `.env`; only `make eval PROVIDER=mock` was run. The refusal itself is covered by the llm builder's test run without the flag.
+- **Lesson / guard added:** CLAUDE.md rule 4 covers verification runs too: agents never invoke owner-only targets, even to watch them refuse.

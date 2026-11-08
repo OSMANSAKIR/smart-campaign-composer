@@ -119,7 +119,7 @@ func TestRenderMessage_RCNT3(t *testing.T) {
 		{"email html is escaped, paragraphs and breaks", Email, Recipient{Email: "a@b.co", FirstName: "<i>Z</i>", City: "X", Locale: "tr"},
 			Rendered{To: "a@b.co", Subject: "<i>Z</i> için fırsat",
 				Text: "Selam <i>Z</i>,\r\n\r\nİlk satır\nikinci satır\n\n\n\nSon & <b>paragraf</b>",
-				HTML: "<!doctype html><html><body><p>Selam &lt;i&gt;Z&lt;/i&gt;,</p><p>İlk satır<br>ikinci satır</p><p>Son &amp; &lt;b&gt;paragraf&lt;/b&gt;</p></body></html>"}, false},
+				HTML: "<!doctype html><html><body><p>Selam &lt;i&gt;Z&lt;/i&gt;,</p>\n<p>İlk satır<br>\nikinci satır</p>\n<p>Son &amp; &lt;b&gt;paragraf&lt;/b&gt;</p></body></html>"}, false},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {

@@ -1,10 +1,6 @@
 package delivery
 
 import (
-	"html"
-	"regexp"
-	"strings"
-
 	"smartcampaign/internal/catalog"
 	"smartcampaign/internal/content"
 )
@@ -48,28 +44,8 @@ func RenderMessage(ch Channel, t Template, r Recipient) (out Rendered, tooLong b
 			To:      r.Email,
 			Subject: content.Render(t.EmailSubject, r.Locale, r.vars()),
 			Text:    text,
-			HTML:    emailHTML(text),
+			// Same escaping and paragraph rules that the validator assumed (need.md N-DEL-005).
+			HTML: "<!doctype html><html><body>" + content.RenderEmailHTML(t.EmailBody, r.Locale, r.vars()) + "</body></html>",
 		}, false
 	}
-}
-
-var paragraphBreak = regexp.MustCompile(`\n{2,}`)
-
-// emailHTML turns the rendered plain-text body into HTML: escape first, then paragraphs and line breaks, so
-// nothing a user's name or the model wrote can inject markup. A private helper until the content package
-// ships RenderEmailHTML (see open_issues).
-func emailHTML(text string) string {
-	text = strings.ReplaceAll(strings.ReplaceAll(text, "\r\n", "\n"), "\r", "\n")
-	var b strings.Builder
-	b.WriteString("<!doctype html><html><body>")
-	for _, p := range paragraphBreak.Split(strings.TrimSpace(text), -1) {
-		if p = strings.TrimSpace(p); p == "" {
-			continue
-		}
-		b.WriteString("<p>")
-		b.WriteString(strings.ReplaceAll(html.EscapeString(p), "\n", "<br>"))
-		b.WriteString("</p>")
-	}
-	b.WriteString("</body></html>")
-	return b.String()
 }
