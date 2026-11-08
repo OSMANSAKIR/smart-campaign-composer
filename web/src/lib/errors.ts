@@ -21,6 +21,8 @@ export class ApiError extends Error {
 }
 
 export interface UserMessage {
+  // The API error code (or `network`), for callers that offer a code-specific action.
+  code: string
   title: string
   message: string
   // One human-readable line per detail from a 422.
@@ -34,7 +36,7 @@ function detailLine(d: ErrorDetail): string {
   return `${where}${d.message ?? d.code}`
 }
 
-const MAP: Record<string, (e: ApiError) => Omit<UserMessage, 'details'>> = {
+const MAP: Record<string, (e: ApiError) => Omit<UserMessage, 'details' | 'code'>> = {
   bad_request: () => ({
     title: 'The request was not valid',
     message: 'Something in the request was missing or malformed. Check the fields and try again.',
@@ -126,8 +128,9 @@ export function describeError(err: unknown): UserMessage {
   if (err instanceof ApiError) {
     const build = MAP[err.code]
     const details = err.details.map(detailLine)
-    if (build) return { ...build(err), details }
+    if (build) return { ...build(err), code: err.code, details }
     return {
+      code: err.code,
       title: `Request failed (${err.status})`,
       message: err.message || 'The server rejected the request.',
       details,
@@ -135,9 +138,10 @@ export function describeError(err: unknown): UserMessage {
     }
   }
   if (err instanceof Error && err.name === 'AbortError') {
-    return { title: 'Cancelled', message: 'The request was cancelled.', details: [], retryable: true }
+    return { code: 'aborted', title: 'Cancelled', message: 'The request was cancelled.', details: [], retryable: true }
   }
   return {
+    code: 'unexpected',
     title: 'Unexpected error',
     message: err instanceof Error ? err.message : String(err),
     details: [],

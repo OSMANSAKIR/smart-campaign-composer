@@ -90,7 +90,7 @@ describe('api client', () => {
   })
 
   it('sends base_version with a content save and builds list queries', async () => {
-    const f = vi.fn().mockResolvedValue(new Response('{}', { status: 200 }))
+    const f = vi.fn().mockImplementation(() => Promise.resolve(new Response('{}', { status: 200 })))
     vi.stubGlobal('fetch', f)
     await api.saveContent('c1', { sms_text: 'a', email_subject: 'b', email_body: 'c' }, 0)
     expect(JSON.parse((f.mock.calls[0] as [string, RequestInit])[1].body as string)).toMatchObject({ base_version: 0 })

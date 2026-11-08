@@ -1,39 +1,58 @@
 <script setup lang="ts">
-// Phase 0 placeholder: proves the SPA is served and can reach the API. The web builder replaces it.
-import { onMounted, ref } from 'vue'
+import { computed, onMounted, ref } from 'vue'
+import { api } from './lib/api'
+import { links, navNonce, useRoute } from './lib/router'
+import CampaignListView from './views/CampaignListView.vue'
+import ComposerView from './views/ComposerView.vue'
+import DashboardView from './views/DashboardView.vue'
+import SystemView from './views/SystemView.vue'
 
-interface SystemStatus {
-  llm: { provider: string; model: string; mock: boolean }
-  db: { status: string }
-  worker: { status: string }
-  provider: { status: string }
-}
+const route = useRoute()
+const mock = ref(false)
 
-const status = ref<SystemStatus | null>(null)
-const error = ref<string | null>(null)
-
+// The mock-LLM banner is visible on every screen (N-PLAN-004); a failed status call just hides it.
 onMounted(async () => {
   try {
-    const res = await fetch('/api/system/status')
-    if (!res.ok) throw new Error(`HTTP ${res.status}`)
-    status.value = (await res.json()) as SystemStatus
-  } catch (e) {
-    error.value = e instanceof Error ? e.message : String(e)
+    mock.value = (await api.systemStatus()).llm.mock
+  } catch {
+    mock.value = false
   }
 })
+
+const current = computed(() => route.value.name)
+function navCurrent(name: string): 'page' | undefined {
+  return current.value === name ? 'page' : undefined
+}
+const viewKey = computed(() => `${navNonce.value}`)
 </script>
 
 <template>
-  <main>
-    <h1>Smart Campaign Composer</h1>
-    <p v-if="status?.llm.mock" role="status">Mock LLM — set ANTHROPIC_API_KEY for real generation</p>
-    <p v-if="error" role="alert">Could not load system status: {{ error }}</p>
-    <dl v-else-if="status">
-      <dt>LLM</dt><dd>{{ status.llm.provider }} · {{ status.llm.model }}</dd>
-      <dt>Database</dt><dd>{{ status.db.status }}</dd>
-      <dt>Worker</dt><dd>{{ status.worker.status }}</dd>
-      <dt>Provider</dt><dd>{{ status.provider.status }}</dd>
-    </dl>
-    <p v-else>Loading…</p>
+  <a class="sr-only" href="#main" @click.prevent="($refs.main as HTMLElement | undefined)?.focus()">Skip to content</a>
+  <header class="topbar">
+    <div class="shell">
+      <a class="brand" :href="links.list()">Smart Campaign Composer</a>
+      <nav aria-label="Main">
+        <a :href="links.list()" :aria-current="navCurrent('list')">Campaigns</a>
+        <a :href="links.new()" :aria-current="navCurrent('new')">New campaign</a>
+        <a :href="links.system()" :aria-current="navCurrent('system')">System</a>
+      </nav>
+    </div>
+  </header>
+  <div v-if="mock" class="banner" role="status">
+    <div class="shell">Mock LLM — set ANTHROPIC_API_KEY for real generation</div>
+  </div>
+
+  <main id="main" ref="main" tabindex="-1" style="outline: none">
+    <CampaignListView v-if="route.name === 'list'" :key="viewKey" />
+    <ComposerView v-else-if="route.name === 'new'" :key="viewKey" :campaign-id="null" />
+    <ComposerView v-else-if="route.name === 'composer'" :key="viewKey" :campaign-id="route.id" />
+    <DashboardView v-else-if="route.name === 'live'" :key="viewKey" :campaign-id="route.id" />
+    <SystemView v-else-if="route.name === 'system'" :key="viewKey" />
+    <div v-else class="shell">
+      <div class="empty">
+        <p>That page does not exist.</p>
+        <a class="btn primary" :href="links.list()">Go to campaigns</a>
+      </div>
+    </div>
   </main>
 </template>
