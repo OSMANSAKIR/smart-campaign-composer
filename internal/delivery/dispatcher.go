@@ -356,7 +356,17 @@ func (d *Dispatcher) active(ctx context.Context, lock *pgx.Conn) error {
 		if n == 0 {
 			break
 		}
-		cctx, cancel := context.WithTimeout(ctx, lockOpTimeout)
+		if ctx.Err() != nil || lost != nil { // shutting down or lock gone: do not start a claim
+			for range n {
+				<-sem
+			}
+			break
+		}
+		// The claim runs on a context that ignores SIGTERM: cancelling a statement the server may already
+		// have committed would leave its rows in `sending` until the lease expires. Once claimed, they are
+		// handed back by handle (the term context is cancelled, so they are released unsent). The timeout is
+		// the same lockOpTimeout the loss bound is derived from.
+		cctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), lockOpTimeout)
 		rows, err := d.queue.ClaimOn(cctx, lock, n)
 		cancel()
 		for range n - len(rows) {
