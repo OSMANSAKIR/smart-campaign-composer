@@ -44,9 +44,12 @@ func Render(tmpl, locale string, vars Vars) string {
 }
 
 // Value returns the cleaned value of one variable, or the locale fallback when it is empty or longer than
-// catalog.MaxVariableRunes after cleaning.
+// catalog.MaxVariableRunes after cleaning. Cleaning strips what must not travel through a recipient-chosen
+// value into a message (RT-4, RT-9): control characters (Cc), the line and paragraph separators U+2028/2029
+// (the validator forbids them in a subject template, so a name must not reintroduce them) and the bidi
+// controls U+202A–U+202E and U+2066–U+2069 (a name like "<RLO>ilA" would reorder the text around it).
 func Value(name, locale string, vars Vars) string {
-	v := strings.TrimSpace(stripControl(vars[name]))
+	v := strings.TrimSpace(stripUnsafe(vars[name]))
 	if v == "" || utf8.RuneCountInString(v) > catalog.MaxVariableRunes {
 		fb, ok := Fallbacks[locale]
 		if !ok {
@@ -57,9 +60,10 @@ func Value(name, locale string, vars Vars) string {
 	return v
 }
 
-func stripControl(s string) string {
+func stripUnsafe(s string) string {
 	return strings.Map(func(r rune) rune {
-		if unicode.IsControl(r) {
+		if unicode.IsControl(r) || r == '\u2028' || r == '\u2029' ||
+			(r >= '\u202a' && r <= '\u202e') || (r >= '\u2066' && r <= '\u2069') {
 			return -1
 		}
 		return r
