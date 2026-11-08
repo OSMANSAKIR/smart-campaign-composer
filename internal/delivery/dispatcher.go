@@ -58,12 +58,13 @@ type Dispatcher struct {
 	StandbyPoll    time.Duration  // how often a standby retries the advisory lock; default 1 s
 	Rand           func() float64 // jitter source; default math/rand/v2
 
-	once   sync.Once
-	queue  *Queue
-	tmpl   sync.Map // "campaign/version" -> Template (immutable once approved)
-	holds  atomic.Bool
-	paused atomic.Int64 // unix nanos until which the channel is paused (0 = not paused)
-	loop   atomic.Int64 // unix nanos of the last pass through the main loop (readiness)
+	once       sync.Once
+	queue      *Queue
+	tmpl       sync.Map // "campaign/version" -> Template (immutable once approved)
+	holds      atomic.Bool
+	paused     atomic.Int64 // unix nanos until which the channel is paused (0 = not paused)
+	pauseStart atomic.Int64 // unix nanos at which the latest pause began
+	loop       atomic.Int64 // unix nanos of the last pass through the main loop (readiness)
 }
 
 func (d *Dispatcher) setup() {
@@ -406,17 +407,18 @@ func (d *Dispatcher) handle(runCtx, bg context.Context, c Claimed) {
 		return
 	}
 
+	sentAt := d.Clock.Now()
 	res, sendErr := d.Client.Send(bg, SendRequest{
 		Channel: d.Channel, IdempotencyKey: c.ID, To: msg.To, Text: msg.Text, Subject: msg.Subject, HTML: msg.HTML,
 		CampaignID: c.CampaignID, UserID: c.UserID, MessageID: c.ID,
 	})
 	d.Metrics.SendLatency.WithLabelValues(ch).Observe(res.Latency.Seconds())
 	d.Metrics.ProviderReplies.WithLabelValues(ch, ResponseCode(res.Status, sendErr)).Inc()
-	d.afterSend(bg, log, c, res, sendErr)
+	d.afterSend(bg, log, c, res, sendErr, sentAt)
 }
 
 // afterSend applies the retry policy (KICKOFF §7.3) to a provider answer.
-func (d *Dispatcher) afterSend(ctx context.Context, log *slog.Logger, c Claimed, res SendResult, sendErr error) {
+func (d *Dispatcher) afterSend(ctx context.Context, log *slog.Logger, c Claimed, res SendResult, sendErr error, sentAt time.Time) {
 	ch := string(d.Channel)
 	dec := d.Policy.Classify(res.Status, res.Header, sendErr)
 	var status *int
@@ -437,14 +439,14 @@ func (d *Dispatcher) afterSend(ctx context.Context, log *slog.Logger, c Claimed,
 	case ClassConfig:
 		// Credentials/permissions problem: nothing will work until a human fixes it, so stop hammering the
 		// provider. The message stays queued and does not use up an attempt.
-		d.pause(d.ConfigPause)
+		d.pause(d.ConfigPause, d.Clock.Now())
 		log.Error("provider rejected our credentials; channel paused", "http_status", res.Status, "pause", d.ConfigPause)
 		out.Status, out.AttemptDelta, out.Delay = StatusRetry, -1, d.ConfigPause
 		d.finish(ctx, log, c, out, StatusRetry)
 
 	case ClassThrottled:
 		throttles := c.Throttled + 1
-		d.pause(dec.RetryAfter)
+		d.pause(dec.RetryAfter, sentAt)
 		out.ThrottleDelta, out.AttemptDelta = 1, -1 // a throttled try never counts as an attempt
 		if d.Policy.Exhausted(dec, c.Attempts, throttles) {
 			out.Status, out.LastError = StatusFailed, "too_many_throttles"
@@ -468,9 +470,17 @@ func (d *Dispatcher) afterSend(ctx context.Context, log *slog.Logger, c Claimed,
 	}
 }
 
-// pause stops claiming and sending on the channel for dur (never shortening an existing pause).
-func (d *Dispatcher) pause(dur time.Duration) {
-	until := d.Clock.Now().Add(dur).UnixNano()
+// pause stops claiming and sending on the channel for dur, never shortening an existing pause. sentAt is
+// when the request that caused it went out: with ~30 requests in flight, one overload event produces a burst
+// of 429s, and answers to requests sent before the current pause began belong to that same event, so they
+// must not each restart the clock (which would turn a 1 s Retry-After into a pause of many seconds).
+func (d *Dispatcher) pause(dur time.Duration, sentAt time.Time) {
+	now := d.Clock.Now()
+	if start := d.pauseStart.Load(); start != 0 && sentAt.UnixNano() < start {
+		return
+	}
+	d.pauseStart.Store(now.UnixNano())
+	until := now.Add(dur).UnixNano()
 	for {
 		cur := d.paused.Load()
 		if cur >= until || d.paused.CompareAndSwap(cur, until) {
