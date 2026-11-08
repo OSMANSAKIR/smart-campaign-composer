@@ -437,7 +437,7 @@ _Last updated: 2026-11-09 by the orchestrator (N-DEL-007, N-LLM-003, N-DEL-009 i
 - **Owner response:** — (resolved by the orchestrator against the implementation)
 - **Status:** RESOLVED
 
-### 🟡 N-WEB-003 · Proxy for mock-provider fault controls (P1) · impact: low
+### ✅ N-WEB-003 · Proxy for mock-provider fault controls (P1) · impact: low
 - **Date / agent / session:** 2026-11-08 10:20 · web · builder-web (W1 subagent)
 - **Requirement(s):** R-OBS-1 (P1 UI)
 - **Context:** The P1 fault-control panel needs an API proxy to the provider's `/admin/config`.
@@ -446,7 +446,8 @@ _Last updated: 2026-11-09 by the orchestrator (N-DEL-007, N-LLM-003, N-DEL-009 i
 - **Cost to change later:** ~1.5 h UI + ~30 min API.
 - **Question for owner:** —
 - **Owner response:**
-- **Status:** OPEN
+- **Implemented (2026-11-09):** option A as `GET/PUT /api/system/provider-config` (commit "mock-provider fault controls"); System page panel with Calm / Default / Chaos presets. Test: `TestProviderConfig_ProxyReadsAndUpdates_RRES3`.
+- **Status:** RESOLVED
 
 ### 🟡 N-WEB-004 · Dashboard first paint from GET progress, then SSE · impact: low
 - **Date / agent / session:** 2026-11-08 10:20 · web · builder-web (W1 subagent)

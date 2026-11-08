@@ -190,13 +190,30 @@ matter most:
 
 ## Not done / next steps
 
-- Mock-provider fault controls in the UI (P1; today: `POST :8090/admin/config`) and a "retry failed
-  messages" button (P2).
-- One real Claude API run (`make smoke-live`, one eval with `PROVIDER=anthropic`) — the owner's, with a key.
-- The CI workflow (`.github/workflows/ci.yml`: `make test`, `make lint`, `make e2e`) has not run on GitHub yet.
+Owner actions:
+
+- One real Claude API run (`make smoke-live`, one eval with `PROVIDER=anthropic`) with a key.
+- Push to GitHub; the CI workflow (`.github/workflows/ci.yml`: `make test`, `make lint`, `make e2e`) has not run
+  there yet. The `00-planning` session export.
+
+Known gaps (P2, from the CP3 spec audit in [`docs/review/traceability.md`](docs/review/traceability.md)):
+
+- A "retry failed messages" button.
+- Tests that would make existing evidence stronger: API `/readyz` returning 503 with the database down (proven
+  for the worker in S7 only); a `/metrics` scrape asserting the API's `llm_*` series; one test from
+  `GenerateSegment` to the stored audience compared with hand-written SQL (the parts are tested separately);
+  the red-team NUL-brief case still reports through `t.Skipf` instead of failing.
+- Stress checks: retry spacing from `delivery_attempts` timestamps ("no hot loop" is asserted by attempt
+  counts only); worker-metric comparison in S2/S7 (a killed worker loses its counters, so I5 compares DB and
+  provider there); a tighter goroutine bound in S6 (+10 allowed).
+- The real-model eval has three adversarial briefs; more would make S4 stronger.
+- `TestErrorModel_ROBS1` is named after R-OBS-1 but tests the error model.
+- Dashboard updates by polling (500 ms per running campaign); LISTEN/NOTIFY would scale to many campaigns.
 
 ## Time spent
 
-Built between 2026-11-08 02:40 and the 2026-11-10 10:00 freeze (Europe/Istanbul): planning with the owner,
-one build day (Phase 0 backbone, three parallel builders, integration), then verification (reviews, red-team,
-stress, e2e, live measurements). Agent usage per day is in `ai-sessions/usage/`.
+Europe/Istanbul time. Planning with the owner: 2026-11-08 00:00–02:40 (~2.7 h). Build and verification: first
+commit 02:59, CP3 audit fixes finished 2026-11-09 ~03:00 — about 24 h of wall-clock time, including pauses at
+the subscription's usage limits. Agent usage (API-equivalent, ccusage): about $73 over 8–9 November, almost all
+cache reads (`ai-sessions/usage/`). The claudecode eval run cost about $0.35 API-equivalent; no paid API calls
+were made during development.
