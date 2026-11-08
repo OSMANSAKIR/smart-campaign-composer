@@ -9,7 +9,7 @@ package main
 //	STRESS=1 go test -tags stress -run TestStress -timeout 60m ./cmd/worker/
 //
 // Environment: TEST_DATABASE_URL (as for all integration tests), STRESS_REPORT (output path),
-// STRESS_S1_USERS (default 5000), STRESS_S2_USERS (default 2000), STRESS_S7_USERS (default 1500),
+// STRESS_S1_USERS (default 5000), STRESS_S2_USERS (default 25000, ~50k messages as in KICKOFF §10.1), STRESS_S7_USERS (default 1500),
 // STRESS_ONLY (comma-separated subset, e.g. "S1,S7").
 
 import (
@@ -591,7 +591,7 @@ func TestStress(t *testing.T) {
 		if !wanted("S2") {
 			t.Skip()
 		}
-		n := envInt("STRESS_S2_USERS", 2000)
+		n := envInt("STRESS_S2_USERS", 25000)
 		e := newEnv(t, config.ProviderFaults{Seed: 22, LatencyMinMS: 20, LatencyMaxMS: 800, ErrorRate: 0.10, Rate429: 0.05, RetryAfterS: 1,
 			HangRate: 0.02, SpikeRate: 0.01, SpikeMS: 2000, RateLimit: 100})
 		s := e.seed(n)
