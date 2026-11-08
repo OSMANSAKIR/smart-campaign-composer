@@ -116,8 +116,15 @@ export const api = {
   systemStatus: (signal?: AbortSignal) => request<SystemStatus>('GET', '/api/system/status', { signal }),
 }
 
-export function newIdempotencyKey(): string {
-  return globalThis.crypto.randomUUID()
+// crypto.randomUUID exists only in secure contexts (https, localhost); over plain http on another host
+// (http://api:8080 in the e2e container, a LAN address) approve would throw. getRandomValues works everywhere.
+export function newIdempotencyKey(c: Pick<Crypto, 'getRandomValues'> & Partial<Pick<Crypto, 'randomUUID'>> = globalThis.crypto): string {
+  if (typeof c.randomUUID === 'function') return c.randomUUID()
+  const b = c.getRandomValues(new Uint8Array(16))
+  b[6] = (b[6]! & 0x0f) | 0x40 // version 4
+  b[8] = (b[8]! & 0x3f) | 0x80 // RFC 4122 variant
+  const h = Array.from(b, (x) => x.toString(16).padStart(2, '0')).join('')
+  return `${h.slice(0, 8)}-${h.slice(8, 12)}-${h.slice(12, 16)}-${h.slice(16, 20)}-${h.slice(20)}`
 }
 
 export function eventsUrl(campaignId: string): string {
