@@ -52,8 +52,8 @@ dev-sub: ## Compose dependencies + API on the host with the claudecode adapter (
 	DATABASE_URL=postgres://scc:scc@localhost:55432/scc?sslmode=disable PROVIDER_URL=http://localhost:8090 \
 	  LLM_PROVIDER=claudecode ANTHROPIC_API_KEY= go run ./cmd/api serve
 
-stress: ## Stress scenarios S1–S7 -> docs/stress/REPORT.md (mock LLM)
-	@echo "stress: not implemented yet (P1, delivery builder)"
+stress: ## Stress scenarios (S1, S2, S7 so far) against Postgres on 55432 -> docs/stress/REPORT.md
+	TEST_DATABASE_URL=$(HOST_TEST_DB) LLM_PROVIDER=mock ANTHROPIC_API_KEY= STRESS=1 go test -tags stress -run TestStress -timeout 60m -v ./cmd/worker/
 
 e2e: ## Playwright end-to-end against the compose stack (mock LLM)
 	@echo "e2e: not implemented yet (P1, web builder)"

@@ -25,9 +25,11 @@ The next agent that owns the area implements the answer and updates the status.
 
 ## Digest (maintained by the orchestrator only)
 
-_Last updated: 2026-11-08 10:10 by the orchestrator (W1 launched: llm, delivery, web builders)._
+_Last updated: 2026-11-08 11:00 by the orchestrator (W1: web and delivery merged; llm running)._
 
 **Needs the owner soon (high impact):**
+
+- ❓ N-DEL-007: should a refused provider connection pause the channel instead of using up retry attempts?
 
 - ❓ N-PLAN-009: repo visibility and reviewer access, before the first push (commit identity is settled).
 
@@ -454,3 +456,80 @@ _Last updated: 2026-11-08 10:10 by the orchestrator (W1 launched: llm, delivery,
 - **Question for owner:** —
 - **Owner response:**
 - **Status:** OPEN
+
+### 🟡 N-DEL-001 · 25 ms guard on the limiter window · impact: medium
+- **Date / agent / session:** 2026-11-08 · delivery · builder-delivery (W1 subagent)
+- **Requirement(s):** R-SND-2
+- **Context:** The limiter frees the next send exactly 1 s after the send N places back, but the provider measures arrivals; jitter makes about half of such pairs arrive < 1 s apart, so the provider would count 101.
+- **Options:** A) window = 1 s + guard (default 25 ms ≈ 97.6/s). B) Only `RATE_LIMIT_SAFETY_MARGIN` (costs 1/s per unit). C) No guard.
+- **Decision taken:** A, env `RATE_LIMIT_WINDOW_GUARD_MS` (read in `cmd/worker`; orchestrator added it to `.env.example`). S1: provider-measured max = 100 in any 1 s window, 0 provider-limiter rejections.
+- **Cost to change later:** low (one env var).
+- **Question for owner:** OK to trade ~2.4 % throughput for never exceeding 100/s at the provider?
+- **Owner response:**
+- **Status:** OPEN
+
+### 🟡 N-DEL-002 · A burst of in-flight 429s is one overload event · impact: medium
+- **Date / agent / session:** 2026-11-08 · delivery · builder-delivery (W1 subagent)
+- **Requirement(s):** R-SND-4
+- **Context:** With ~30 requests in flight, one overload returns many 429s; restarting the Retry-After pause for each (literal reading of KICKOFF §7.3) kept a channel paused for many seconds (S2 fell to ~17 msg/s).
+- **Options:** A) Every 429 restarts the pause. B) 429s for requests sent before the current pause began do not extend it.
+- **Decision taken:** B. The pause is never shortened; throttles still do not count as attempts; cap of 20 throttles per message unchanged. Test `TestThrottle_BurstOfInFlight429sIsOneEvent_RSND4`.
+- **Cost to change later:** ~15 min.
+- **Question for owner:** Accept B as the reading of "pause the whole channel until Retry-After"?
+- **Owner response:**
+- **Status:** OPEN
+
+### 🟡 N-DEL-003 · What `messages.attempts` counts · impact: low
+- **Date / agent / session:** 2026-11-08 · delivery · builder-delivery (W1 subagent)
+- **Requirement(s):** R-SND-3, R-SND-4
+- **Context:** KICKOFF §7.3: throttles and config errors do not count toward max attempts, but the claim increments `attempts`.
+- **Options:** A) Claim increments; throttled/config/shutdown releases decrement. B) Separate counter.
+- **Decision taken:** A. Throttle-cap failures end with `attempts` 0 and `last_error=too_many_throttles`; a lease expiring after 5 attempts → `failed`, `lease_expired` (no poison loop); late results from a stale lease holder are dropped by the guard `status='sending' AND attempts=<claimed>`.
+- **Cost to change later:** low.
+- **Question for owner:** —
+- **Owner response:**
+- **Status:** OPEN
+
+### ✅ N-DEL-004 · Wiring outside delivery paths · impact: medium
+- **Date / agent / session:** 2026-11-08 · delivery · builder-delivery (W1 subagent)
+- **Requirement(s):** R-DEL-2, R-SND-2, R-OBS-3
+- **Context:** `make stress` was a stub; worker settings were missing from `.env.example`.
+- **Options:** —
+- **Decision taken:** Orchestrator wired `make stress` (`go test -tags stress -run TestStress ./cmd/worker/` against Postgres on 55432, mock LLM forced) and `RATE_LIMIT_WINDOW_GUARD_MS` in `.env.example`. Compose already passes the worker env through `.env`; defaults live in code. `make test` passes with `cmd/worker`'s `go build` test (Go toolchain is in the test image).
+- **Cost to change later:** —
+- **Question for owner:** —
+- **Owner response:** — (resolved by the orchestrator)
+- **Status:** RESOLVED
+
+### 🟡 N-DEL-005 · Private email HTML helper until `content.RenderEmailHTML` lands · impact: low
+- **Date / agent / session:** 2026-11-08 · delivery · builder-delivery (W1 subagent)
+- **Requirement(s):** R-CNT-3
+- **Context:** The llm builder owns `content.RenderEmailHTML`; it did not exist yet.
+- **Options:** A) Private helper in `delivery/render.go` (render, then escape, paragraphs, `<br>`). B) Wait.
+- **Decision taken:** A. Orchestrator swaps it for `content.RenderEmailHTML` when the llm branch is merged; `TestRenderMessage_RCNT3` pins the output.
+- **Cost to change later:** one function.
+- **Question for owner:** —
+- **Owner response:**
+- **Status:** OPEN
+
+### ✅ N-DEL-006 · Heartbeat rows are deleted on clean shutdown · impact: low
+- **Date / agent / session:** 2026-11-08 · delivery · builder-delivery (W1 subagent)
+- **Requirement(s):** R-OBS-3
+- **Context:** No ghost workers in the status panel.
+- **Options:** A) Delete on SIGTERM. B) Keep stale rows.
+- **Decision taken:** A. `GET /api/system/status` already reports `down` with no rows and `stale` with old ones.
+- **Cost to change later:** —
+- **Question for owner:** —
+- **Owner response:** — (resolved by the orchestrator)
+- **Status:** RESOLVED
+
+### ❓ N-DEL-007 · Long provider outages exhaust the retry budget · impact: medium
+- **Date / agent / session:** 2026-11-08 · delivery · builder-delivery (W1 subagent)
+- **Requirement(s):** R-SND-4, R-RES-3
+- **Context:** Connection errors are "ambiguous" tries that count toward max 5 (KICKOFF §7.3). S7's 10 s outage caused 0 unexpected failures, but an outage of ~30 s or more ends messages as `failed`.
+- **Options:** A) Keep the §7.3 table. B) A refused connection (nothing was sent) does not count and pauses the channel like 401/403, so queued messages survive any outage. C) Longer backoff.
+- **Decision taken:** A for now (it is the locked table). The orchestrator leans to B because it is safe: a refused TCP connection proves nothing reached the provider.
+- **Cost to change later:** B ~1 h plus tests.
+- **Question for owner:** Should a refused connection stop counting as an attempt and pause the channel instead?
+- **Owner response:**
+- **Status:** QUESTION

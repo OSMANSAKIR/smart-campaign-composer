@@ -29,3 +29,38 @@ Append-only (union-merged). Format: KICKOFF.md §13.
 - **How it was caught:** tool — golangci-lint (staticcheck ST1018, gocritic exitAfterDefer).
 - **Fix:** Escaped the character (`‮`); mains now use `os.Exit(run())` (commit 34f13e3).
 - **Lesson / guard added:** `make lint` is part of every builder's done checklist.
+
+### V-005 · Claim query sorted every due row
+- **When / agent:** 2026-11-08 ~10:40 · builder-delivery (W1 subagent)
+- **AI proposed:** `ORDER BY next_attempt_at, created_at` in the SKIP LOCKED claim; all rows of one approval share `next_attempt_at`, so Postgres sorted every due row (47.6k rows read, ~10 ms per claim).
+- **How it was caught:** tool — `EXPLAIN ANALYZE` and a latency probe on 100k messages.
+- **Fix:** `ORDER BY next_attempt_at` only, served by the partial index; ~0.5 ms per claim (commit 7844c69).
+- **Lesson / guard added:** EXPLAIN every hot-path query at stress volume before calling it done.
+
+### V-006 · Skipped-consent rows kept their in-flight slot
+- **When / agent:** 2026-11-08 · builder-delivery (W1 subagent)
+- **AI proposed:** A dispatcher draft in which a claimed row skipped for missing consent never released its semaphore slot, so repeated revocations would starve the channel.
+- **How it was caught:** review — the builder's self-review before the first run.
+- **Fix:** Release the slot for skipped rows (in c15dfa9).
+- **Lesson / guard added:** `TestClaim_ConsentRevoked_Skipped_RAUD2`.
+
+### V-007 · retries_total counted the final exhausted attempt
+- **When / agent:** 2026-11-08 · builder-delivery (W1 subagent)
+- **AI proposed:** Incrementing the retry counter even when the message was failed instead of rescheduled (15 instead of 12).
+- **How it was caught:** test — `TestExhaustedAttempts_Failed_RSND4`.
+- **Fix:** Increment only when a retry is actually scheduled.
+- **Lesson / guard added:** Metric values are asserted in tests, not only their presence.
+
+### V-008 · A build binary committed with `git add -A`, then branch history rewritten
+- **When / agent:** 2026-11-08 · builder-delivery (W1 subagent); found in its report by the orchestrator
+- **AI proposed:** `go build ./cmd/mockprovider` at the repo root left a 14 MB binary that `git add -A` committed. The builder then rewrote its unpushed branch with `git filter-branch` and deleted the backup ref without asking.
+- **How it was caught:** review — the builder's `git diff --stat` before reporting; the orchestrator re-checked the merged objects (largest object 29 KB) and the paths (only delivery-owned).
+- **Fix:** Root binaries are gitignored (`/api`, `/worker`, `/mockprovider`). The branch was merged as reported (72b9797).
+- **Lesson / guard added:** History rewrites belong with the hard stops; future builder prompts say "never rewrite history (filter-branch, rebase, amend of pushed work); remove a bad file with a new commit instead" and "stage paths explicitly, never `git add -A`".
+
+### V-009 · Test expected escaping of a name the renderer replaces
+- **When / agent:** 2026-11-08 · builder-delivery (W1 subagent)
+- **AI proposed:** A hostile-name test using a 25-rune value, which exceeds the 20-rune limit and renders as the fallback, so the escaping assertion could never hold.
+- **How it was caught:** test — `TestDispatcher_RendersPerRecipient_RCNT3`.
+- **Fix:** Shorter hostile value; the fallback path is tested separately.
+- **Lesson / guard added:** Test fixtures for rendering are checked against N-ORC-005 first.

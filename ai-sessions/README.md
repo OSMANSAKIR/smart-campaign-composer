@@ -19,7 +19,7 @@ Each Agent-tool launch by the orchestrator (KICKOFF §12.0). Transcripts: `subag
 | Stage | Agent | Model | Isolation | Prompt | Result |
 |---|---|---|---|---|---|
 | W1 | builder-llm | opus | worktree | `docs/tasks/llm.md` | running (launched 2026-11-08 10:12) |
-| W1 | builder-delivery | sonnet | worktree | `docs/tasks/delivery.md` | running (launched 2026-11-08 10:12) |
+| W1 | builder-delivery | sonnet | worktree | `docs/tasks/delivery.md` | done 10:39 · P0 complete + stress S1/S2/S7 · merged 72b9797 (`go test -race ./...` and `make test` re-run on main) |
 | W1 | builder-web | sonnet | worktree | `docs/tasks/web.md` | done 10:23 · P0 complete, 106 Vitest tests · merged f194e8a (typecheck/test/build re-run on main) |
 
 ## How the agents were connected

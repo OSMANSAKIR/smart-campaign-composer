@@ -27,3 +27,7 @@ coverage.out
 # python
 __pycache__/
 *.pyc
+# binaries from `go build ./cmd/...` at the repo root
+/api
+/worker
+/mockprovider
