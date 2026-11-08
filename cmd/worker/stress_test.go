@@ -779,8 +779,9 @@ const reportFooter = `## How to read the numbers
   provider that answers 5% of requests with 429 holds each channel well below 100/s (S2 shows the measured rate).
   Little's law also sets the in-flight bound: 100 sends/s at a 400 ms mean latency needs about 40 concurrent
   requests, so S2 raises MAX_IN_FLIGHT_PER_CHANNEL from the default 32 to 64.
-- **Provider outage.** Connection errors count as ambiguous tries (max 5, full-jitter backoff up to 8 s between the
-  fifth and the fourth). A 10 s outage fits inside that budget; a much longer one would end messages as failed.
+- **Provider outage.** When no connection to the provider can be made (refused, DNS, dial timeout), nothing was sent:
+  the try is not counted and the channel pauses 2 s, so an outage of any length leaves messages queued (need.md
+  N-DEL-007). A connection that drops after it was made is an ambiguous try and counts (max 5).
 - **Crash recovery.** S2 kills a worker with SIGKILL while it holds leases; the survivor reclaims them after
   LEASE_DURATION and the provider's Idempotency-Key store absorbs the re-sends (see "replayed keys"). A replica that
   wins the channel lock sends nothing for about 4 s (W + the lock-loss detection bound), which is also why a
@@ -820,7 +821,8 @@ If the owner wants a bound with no network assumption, the limiter can commit at
 
 ## Not covered here
 
-S3 (approve storm), S4 (LLM adversarial), S5 (API load) and S6 (SSE fan-out) need the API and are run by the orchestrator;
+S3 (approve storm), S5 (API load) and S6 (SSE fan-out) need the API: they are in [REPORT-api.md](REPORT-api.md)
+(` + "`cmd/api/stress_test.go`" + `). S4 (LLM adversarial) is the red-team suite in ` + "`make test`" + ` plus the eval reports in docs/eval/;
 S7 here replaces a Postgres container restart by refusing connections to the test database, because a worktree
 builder must not touch the compose stack. The same invariant checks (I1-I7) apply to those runs.
 `

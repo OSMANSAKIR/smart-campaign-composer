@@ -19,6 +19,12 @@ import (
 // MaxIdempotencyKeyLen bounds the Idempotency-Key header (docs/contracts/api.md §6).
 const MaxIdempotencyKeyLen = 200
 
+// enqueueLockID serializes the bulk INSERT … SELECT of concurrent approves (transaction-scoped advisory lock).
+// Measured on the compose Postgres (stress S3, need.md N-ORC-013): ten all-user approves enqueueing in
+// parallel took 14–55 s each under buffer and spinlock contention, while one at a time all ten finished in
+// 3.5 s. Approves of different campaigns therefore queue for a fraction of a second instead of all stalling.
+const enqueueLockID = 7_261_108_002
+
 // Approve freezes the latest content version and enqueues one message per consented recipient and selected
 // channel, all in one transaction (R-FLOW-3, R-SND-1, R-SND-3, R-AUD-2). A repeated key replays the stored
 // response; concurrent approves cannot both win because the campaign row is locked and the transition is
@@ -105,6 +111,9 @@ func (s *Service) Approve(ctx context.Context, id, key string, channels []string
 		}
 		if strings.TrimSpace(where) == "" {
 			where = "TRUE"
+		}
+		if _, err := tx.Exec(ctx, `SELECT pg_advisory_xact_lock($1)`, enqueueLockID); err != nil {
+			return err
 		}
 		out.Enqueued = map[string]int{"sms": 0, "email": 0}
 		for _, ch := range chans {

@@ -20,13 +20,16 @@ var migrationFS embed.FS
 // migrationLockID is the advisory lock key that serializes concurrent `migrate` runs.
 const migrationLockID = 7_261_108_001
 
+// MaxConns is the pool size of the API and the worker (S5 in docs/stress/REPORT-api.md measures it under load).
+const MaxConns = 20
+
 // Open creates a pool and pings the database once.
 func Open(ctx context.Context, url string) (*pgxpool.Pool, error) {
 	cfg, err := pgxpool.ParseConfig(url)
 	if err != nil {
 		return nil, fmt.Errorf("parse DATABASE_URL: %w", err)
 	}
-	cfg.MaxConns = 20
+	cfg.MaxConns = MaxConns
 	pool, err := pgxpool.NewWithConfig(ctx, cfg)
 	if err != nil {
 		return nil, err

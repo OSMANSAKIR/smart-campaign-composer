@@ -36,7 +36,7 @@ _Last updated: 2026-11-09 by the orchestrator (owner answers for N-ORC-012, N-DE
 - 🔁 N-LLM-003: real claudecode probe as the fixture; claudecode eval report in docs/eval.
 - 🔁 N-DEL-009: final idempotent replay for delivered-but-failed messages (if time allows).
 
-**Review when convenient (medium):** N-ORC-003 (wire schema typing), N-ORC-004 (contradictions), N-ORC-005 (long names), N-PLAN-001, 002, 004, 005, 010, 011, 014.
+**Review when convenient (medium):** N-ORC-013 (approves enqueue one at a time), N-ORC-003 (wire schema typing), N-ORC-004 (contradictions), N-ORC-005 (long names), N-PLAN-001, 002, 004, 005, 010, 011, 014.
 
 **Review when convenient (low):** N-ORC-002, 006, 007, 009, 010, N-PLAN-008, 012.
 
@@ -627,3 +627,14 @@ _Last updated: 2026-11-09 by the orchestrator (owner answers for N-ORC-012, N-DE
 - **Question for owner:** —
 - **Owner response:** CHANGE → B if time allows (2026-11-09).
 - **Status:** CHANGE REQUESTED
+
+### 🟡 N-ORC-013 · Concurrent approves enqueue one at a time · impact: medium
+- **Date / agent / session:** 2026-11-09 · orchestrator · 01-orchestrator (stress S3)
+- **Requirement(s):** R-SND-1, R-FLOW-3
+- **Context:** Stress S3 approved 10 all-user campaigns at once. Each bulk `INSERT … SELECT` (~3.8k rows) took 14–55 s in parallel on the compose Postgres (CPU-bound; BufferContent, LockManager, extend and spinlock waits), reproduced in plain SQL without the app and without the users foreign key. All ten hit the 60 s request timeout and rolled back: nothing was enqueued. One at a time, all ten took 3.5 s.
+- **Options:** A) Transaction-scoped advisory lock right before the enqueue INSERTs, so approves of different campaigns enqueue sequentially. B) Batch the INSERT in chunks. C) Leave it (rare in a single-marketer demo).
+- **Decision taken:** A. Same transaction, same guarantees; approve of the same campaign still fails fast with `NOWAIT`. Measured after the fix: all 10 succeed, 75 420 messages, slowest approve 7.1 s; a single approve is unchanged.
+- **Cost to change later:** one statement in `internal/campaign/approve.go`.
+- **Question for owner:** —
+- **Owner response:**
+- **Status:** OPEN

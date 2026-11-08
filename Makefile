@@ -52,8 +52,9 @@ dev-sub: ## Compose dependencies + API on the host with the claudecode adapter (
 	DATABASE_URL=postgres://scc:scc@localhost:55432/scc?sslmode=disable PROVIDER_URL=http://localhost:8090 \
 	  LLM_PROVIDER=claudecode ANTHROPIC_API_KEY= go run ./cmd/api serve
 
-stress: ## Stress scenarios (S1, S2, S7 so far) against Postgres on 55432 -> docs/stress/REPORT.md
-	TEST_DATABASE_URL=$(HOST_TEST_DB) LLM_PROVIDER=mock ANTHROPIC_API_KEY= STRESS=1 go test -tags stress -run TestStress -timeout 60m -v ./cmd/worker/
+stress: ## Stress S1-S3, S5-S7 against Postgres on 55432 -> docs/stress/REPORT.md, REPORT-api.md (needs `make up`)
+	TEST_DATABASE_URL=$(HOST_TEST_DB) LLM_PROVIDER=mock ANTHROPIC_API_KEY= STRESS=1 go test -tags stress -count=1 -run TestStress -timeout 60m -v ./cmd/worker/
+	TEST_DATABASE_URL=$(HOST_TEST_DB) LLM_PROVIDER=mock ANTHROPIC_API_KEY= STRESS=1 go test -tags stress -count=1 -run TestStressAPI -timeout 30m -v ./cmd/api/
 
 e2e: up ## Playwright end-to-end against the compose stack (mock LLM); report in web/playwright-report
 	LLM_PROVIDER=mock $(COMPOSE) --profile e2e build e2e

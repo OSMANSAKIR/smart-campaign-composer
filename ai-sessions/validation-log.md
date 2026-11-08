@@ -127,3 +127,17 @@ Append-only (union-merged). Format: KICKOFF.md §13.
 - **How it was caught:** review — re-reading the KICKOFF §2 table while tagging the next commit.
 - **Fix:** recorded here instead of rewriting history; the traceability matrix uses the test names, not commit subjects.
 - **Lesson / guard added:** check the ID table before tagging, not from memory.
+
+### V-019 · Dashboard stream could send an older snapshot after a newer one
+- **When / agent:** 2026-11-09 · orchestrator (own code in `internal/api/campaigns.go`); caught by stress S6
+- **AI proposed:** subscribe to the hub first, then send a fresh snapshot, "so no change can fall in between". A hub poll that started before the fresh query could still arrive afterwards and be sent, so terminal counts went backwards on screen, against the contract.
+- **How it was caught:** test — S6 (50 subscribers, 240 reconnects) counted 6 regressions.
+- **Fix:** snapshots carry the database time of their query; the handler sends only strictly newer ones. S6 re-run: 0 regressions over 250 reconnects.
+- **Lesson / guard added:** "subscribe before read" closes the gap in one direction only; order by a source timestamp, not by arrival.
+
+### V-020 · Approve timed out for every campaign when ten were approved at once
+- **When / agent:** 2026-11-09 · orchestrator (own code in `internal/campaign/approve.go`); caught by stress S3
+- **AI proposed:** each approve enqueues its audience with one `INSERT … SELECT` in its own transaction, assumed to scale with concurrency.
+- **How it was caught:** test — S3(b): ten all-user approves took > 60 s each and rolled back (0 messages); `pg_stat_activity` showed ten CPU-bound inserts; plain-SQL repro on a scratch database: 0.34 s alone, 14–55 s each when ten run together, 3.5 s for all ten in sequence.
+- **Fix:** transaction-scoped advisory lock before the enqueue (need.md N-ORC-013). S3 re-run: all 10 succeed, slowest 7.1 s.
+- **Lesson / guard added:** stress the write path with concurrent *different* inputs, not only the same one.

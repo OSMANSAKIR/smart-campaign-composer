@@ -254,6 +254,10 @@ func (s *Server) events(w http.ResponseWriter, r *http.Request) {
 	}
 	sse := newSSE(w)
 	sse.send("snapshot", p)
+	// A hub poll that started before the query above can still land in sub afterwards; sending it would move
+	// the client's counts backwards (seen in stress S6). Snapshots carry the database time of their query, so
+	// only strictly newer ones go out. A skipped one is never the last: the hub polls again within 500 ms.
+	lastSent := p.UpdatedAt
 	if campaign.Terminal(p.Status) {
 		sse.send("done", map[string]string{"status": p.Status})
 		return
@@ -276,8 +280,9 @@ func (s *Server) events(w http.ResponseWriter, r *http.Request) {
 			for _, e := range u.Events {
 				sse.send("event", e)
 			}
-			if u.Snapshot != nil {
+			if u.Snapshot != nil && u.Snapshot.UpdatedAt.After(lastSent) {
 				sse.send("snapshot", u.Snapshot)
+				lastSent = u.Snapshot.UpdatedAt
 			}
 			if u.Done {
 				status := p.Status
