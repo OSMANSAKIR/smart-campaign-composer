@@ -444,25 +444,25 @@ func (d *Dispatcher) afterSend(ctx context.Context, log *slog.Logger, c Claimed,
 
 	case ClassThrottled:
 		throttles := c.Throttled + 1
-		d.Metrics.Retries.WithLabelValues(ch, string(ClassThrottled)).Inc()
 		d.pause(dec.RetryAfter)
-		out.ThrottleDelta = 1
+		out.ThrottleDelta, out.AttemptDelta = 1, -1 // a throttled try never counts as an attempt
 		if d.Policy.Exhausted(dec, c.Attempts, throttles) {
 			out.Status, out.LastError = StatusFailed, "too_many_throttles"
 			d.finish(ctx, log, c, out, StatusFailed)
 			return
 		}
-		out.Status, out.AttemptDelta, out.Delay = StatusRetry, -1, dec.RetryAfter
+		d.Metrics.Retries.WithLabelValues(ch, string(ClassThrottled)).Inc()
+		out.Status, out.Delay = StatusRetry, dec.RetryAfter
 		d.finish(ctx, log, c, out, StatusRetry)
 
 	default: // transient, ambiguous
-		d.Metrics.Retries.WithLabelValues(ch, string(dec.Class)).Inc()
 		if d.Policy.Exhausted(dec, c.Attempts, c.Throttled) {
 			out.Status = StatusFailed
 			out.LastError = fmt.Sprintf("%s (gave up after %d attempts)", out.LastError, c.Attempts)
 			d.finish(ctx, log, c, out, StatusFailed)
 			return
 		}
+		d.Metrics.Retries.WithLabelValues(ch, string(dec.Class)).Inc()
 		out.Status, out.Delay = StatusRetry, d.Policy.Backoff(c.Attempts, d.Rand)
 		d.finish(ctx, log, c, out, StatusRetry)
 	}
