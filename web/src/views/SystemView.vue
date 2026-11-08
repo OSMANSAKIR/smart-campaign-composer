@@ -85,7 +85,7 @@ const WORD: Record<string, string> = {
             <li v-for="d in status.worker.dispatchers" :key="d.worker_id + d.channel">
               <b>{{ d.channel.toUpperCase() }}</b>
               <span class="muted">
-                {{ d.holds_lock ? 'dispatching' : 'standby' }}, last seen {{ formatClock(d.last_seen) }}
+                {{ d.stale ? 'no heartbeat' : d.holds_lock ? 'dispatching' : 'standby' }}, last seen {{ formatClock(d.last_seen) }}
                 <template v-if="d.paused_until"> · paused by the provider</template>
               </span>
             </li>

@@ -126,7 +126,16 @@ type dispatcher struct {
 	HoldsLock   bool       `json:"holds_lock"`
 	PausedUntil *time.Time `json:"paused_until"`
 	LastSeen    time.Time  `json:"last_seen"`
+	Stale       bool       `json:"stale"`
 }
+
+// Heartbeat ages are computed by Postgres (one clock for writer and reader). A row older than
+// heartbeatFresh marks its dispatcher stale; one older than heartbeatForget belongs to a worker that is gone
+// (a crash skips the DELETE on shutdown) and is left out instead of being listed forever.
+const (
+	heartbeatFresh  = "10 seconds"
+	heartbeatForget = "5 minutes"
+)
 
 func (s *Server) systemStatus(w http.ResponseWriter, r *http.Request) {
 	ctx, cancel := context.WithTimeout(r.Context(), 2*time.Second)
@@ -142,19 +151,19 @@ func (s *Server) systemStatus(w http.ResponseWriter, r *http.Request) {
 	out["db"] = db
 
 	worker := map[string]any{"status": "down", "dispatchers": []dispatcher{}}
-	rows, err := s.d.Pool.Query(ctx, `SELECT worker_id, channel, holds_lock, paused_until, at FROM worker_heartbeats ORDER BY channel, at DESC`)
+	rows, err := s.d.Pool.Query(ctx, `
+		SELECT worker_id, channel, holds_lock, paused_until, at, at < now() - $1::interval
+		FROM worker_heartbeats WHERE at >= now() - $2::interval
+		ORDER BY channel, at DESC`, heartbeatFresh, heartbeatForget)
 	if err == nil {
 		var ds []dispatcher
 		freshLockHolders := map[string]bool{}
-		anyFresh := false
 		for rows.Next() {
 			var d dispatcher
-			if err := rows.Scan(&d.WorkerID, &d.Channel, &d.HoldsLock, &d.PausedUntil, &d.LastSeen); err != nil {
+			if err := rows.Scan(&d.WorkerID, &d.Channel, &d.HoldsLock, &d.PausedUntil, &d.LastSeen, &d.Stale); err != nil {
 				break
 			}
-			fresh := time.Since(d.LastSeen) < 10*time.Second
-			anyFresh = anyFresh || fresh
-			if fresh && d.HoldsLock {
+			if !d.Stale && d.HoldsLock {
 				freshLockHolders[d.Channel] = true
 			}
 			ds = append(ds, d)
@@ -163,7 +172,7 @@ func (s *Server) systemStatus(w http.ResponseWriter, r *http.Request) {
 		switch {
 		case len(freshLockHolders) == len(catalog.Channels):
 			worker["status"] = "ok"
-		case anyFresh || len(ds) > 0:
+		case len(ds) > 0:
 			worker["status"] = "stale"
 		}
 		if ds != nil {

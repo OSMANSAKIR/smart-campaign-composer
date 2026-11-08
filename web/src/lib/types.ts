@@ -193,6 +193,7 @@ export interface SystemStatus {
       holds_lock: boolean
       paused_until: string | null
       last_seen: string
+      stale?: boolean
     }[]
   }
   provider: { status: 'ok' | 'down'; url?: string }

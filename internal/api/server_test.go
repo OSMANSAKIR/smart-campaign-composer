@@ -149,3 +149,71 @@ func TestEvents_SnapshotThenDone_RFLOW5(t *testing.T) {
 		t.Fatalf("snapshot %s (%v)", frames[0], err)
 	}
 }
+
+// A crashed worker never deletes its heartbeat row: the status page must not list it forever, and a late
+// heartbeat must be flagged rather than shown as a live dispatcher.
+func TestSystemStatus_StaleAndDeadWorkers_ROBS3(t *testing.T) {
+	pool := storetest.NewDB(t)
+	srv := httptest.NewServer(New(Deps{
+		Pool: pool, Metrics: metrics.New(), LLM: llm.NewService(mock.NewDemo(), nil),
+		ProviderURL: "http://127.0.0.1:1", Version: "test",
+	}).Handler())
+	t.Cleanup(srv.Close)
+	ctx := context.Background()
+	insert := func(worker, ch string, lock bool, age string) {
+		t.Helper()
+		if _, err := pool.Exec(ctx, `INSERT INTO worker_heartbeats (worker_id, channel, holds_lock, at)
+			VALUES ($1, $2, $3, now() - $4::interval)`, worker, ch, lock, age); err != nil {
+			t.Fatal(err)
+		}
+	}
+	type status struct {
+		Worker struct {
+			Status      string `json:"status"`
+			Dispatchers []struct {
+				WorkerID string `json:"worker_id"`
+				Channel  string `json:"channel"`
+				Stale    bool   `json:"stale"`
+			} `json:"dispatchers"`
+		} `json:"worker"`
+	}
+	get := func() status {
+		t.Helper()
+		code, _, body := do(t, http.MethodGet, srv.URL+"/api/system/status", "", nil)
+		if code != http.StatusOK {
+			t.Fatalf("status %d", code)
+		}
+		var s status
+		if err := json.Unmarshal(body, &s); err != nil {
+			t.Fatal(err)
+		}
+		return s
+	}
+
+	insert("dead", "sms", false, "10 hours")
+	insert("dead", "email", true, "10 hours")
+	if s := get(); s.Worker.Status != "down" || len(s.Worker.Dispatchers) != 0 {
+		t.Fatalf("only long-dead rows: got %+v, want down with no dispatchers", s.Worker)
+	}
+
+	insert("live", "sms", true, "1 second")
+	insert("live", "email", true, "1 second")
+	insert("late", "sms", false, "1 minute")
+	s := get()
+	if s.Worker.Status != "ok" {
+		t.Errorf("both channels have a fresh lock holder: status %q, want ok", s.Worker.Status)
+	}
+	got := map[string]bool{}
+	for _, d := range s.Worker.Dispatchers {
+		got[d.WorkerID+"/"+d.Channel] = d.Stale
+	}
+	want := map[string]bool{"live/sms": false, "live/email": false, "late/sms": true}
+	if len(got) != len(want) {
+		t.Fatalf("dispatchers %v, want %v", got, want)
+	}
+	for k, stale := range want {
+		if g, ok := got[k]; !ok || g != stale {
+			t.Errorf("%s: stale=%v present=%v, want stale=%v", k, g, ok, stale)
+		}
+	}
+}

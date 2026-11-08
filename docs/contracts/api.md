@@ -189,10 +189,12 @@ Counts are monotonic in the sense that terminal counts never decrease. A `: ping
 { "api": { "status": "ok", "version": "dev" },
   "db": { "status": "ok", "latency_ms": 2 },
   "worker": { "status": "ok" | "stale" | "down",
-              "dispatchers": [ { "worker_id": "…", "channel": "sms", "holds_lock": true, "paused_until": null, "last_seen": "…" } ] },
+              "dispatchers": [ { "worker_id": "…", "channel": "sms", "holds_lock": true, "paused_until": null, "last_seen": "…", "stale": false } ] },
   "provider": { "status": "ok" | "down", "url": "http://mockprovider:8090" },
   "llm": { "provider": "mock", "model": "mock-demo-v1", "mock": true } }
 ```
 
 `worker.status`: `ok` when each channel has a lock holder seen in the last 10 s, `stale` when the last heartbeat
-is older, `down` when there is none.
+is older, `down` when there is none. A dispatcher row has `stale: true` when its heartbeat is older than 10 s;
+rows older than 5 minutes belong to a worker that is gone (a crash skips the delete on shutdown) and are omitted.
+Ages use the database clock.
