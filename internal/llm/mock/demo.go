@@ -103,6 +103,8 @@ var (
 	daysAltRE    = regexp.MustCompile(`(\d{1,4})\s*(?:gun|days?)\b`)
 	underAgeRE   = regexp.MustCompile(`(\d{2})\s*yas\s*(?:alti|altindaki)|under\s+(\d{2})|younger than\s+(\d{2})`)
 	overAgeRE    = regexp.MustCompile(`(\d{2})\s*yas\s*(?:ustu|uzeri|ustundeki)|over\s+(\d{2})|older than\s+(\d{2})`)
+	spentRE      = regexp.MustCompile(`spent (?:more than|over) (\d{1,8})|(\d{1,8})\s*(?:tl|try)\s*(?:uzeri|ustu)`)
+	purchasesRE  = regexp.MustCompile(`at least (\d{1,5}) purchases|en az (\d{1,5}) (?:alisveris|siparis)`)
 	ageRangeRE   = regexp.MustCompile(`(\d{2})\s*[-–]\s*(\d{2})\s*(?:yas|years?|age)`)
 	turkishChars = regexp.MustCompile(`[çğıöşüÇĞİÖŞÜ]`)
 	turkishWords = regexp.MustCompile(`\b(?:ve|icin|olan|gonder|kullanici|kullanicilara|musteri|son|indirim|herkese)\b`)
@@ -117,7 +119,7 @@ var categoryWords = map[string][]string{
 }
 
 var unsupportedWords = []string{"futbol", "football", "basketbol", "basketball", "hava durumu", "weather", "cinsiyet", "gender",
-	"kadin", "women", "erkek", " men ", "gelir", "income", "iphone", "android", "instagram", "seven", " love", "ilgi", "interest"}
+	"kadin", "women", "erkek", " men ", "gelir", "income", "iphone", "android", "instagram", "seven", " love", "ilgi", "interest", "rain", "yagmur"}
 
 // DemoSegment extracts an audience from a brief with keywords and the catalog. The official brief yields
 // the golden rule of segment-dsl.md §7.
@@ -170,6 +172,8 @@ func DemoSegment(brief string) segment.Proposal {
 	noPurchase := containsAny(f, "alisveris yapmayan", "alisveris yapmamis", "satin almayan", "almayan", "haven't bought", "have not bought",
 		"didn't buy", "did not buy", "no purchase", "not purchased", "without buying", "abandon", "terk")
 	switch {
+	case !cart && containsAny(f, "hic alisveris yapmamis", "hic alisveris yapmayan", "never purchased", "never bought", "never ordered"):
+		add("last_purchase_at", "is_null", nil)
 	case cart && noPurchase:
 		if days > 0 {
 			add("last_cart_add_at", "within_last_days", days)
@@ -183,10 +187,25 @@ func DemoSegment(brief string) segment.Proposal {
 	case noPurchase && days > 0:
 		add("last_purchase_at", "not_within_last_days", days)
 		p.Assumptions = append(p.Assumptions, say("Hiç alışveriş yapmamış kullanıcılar da dahil edildi.", "Users who never purchased are included."))
-	case containsAny(f, "alisveris yapan", "satin alan", "purchased", "bought", "customers who bought") && days > 0:
+	case containsAny(f, "alisveris yapan", "alisveris yapmis", "satin alan", "purchased", "bought", "customers who bought") && days > 0:
 		add("last_purchase_at", "within_last_days", days)
-	case containsAny(f, "giris yapmayan", "inactive", "pasif", "haven't logged", "not logged") && days > 0:
+	case containsAny(f, "giris yapmayan", "giris yapmamis", "inactive", "pasif", "haven't logged", "not logged") && days > 0:
 		add("last_login_at", "not_within_last_days", days)
+	case containsAny(f, "signed up", "sign up", "uye olan", "uye olmus", "kayit olan", "new members") && days > 0:
+		add("signup_at", "within_last_days", days)
+	}
+	if m := spentRE.FindStringSubmatch(f); m != nil {
+		if n := firstNumber(m); n > 0 && n <= 10000000 {
+			add("total_spent", "gt", n)
+		}
+	}
+	if m := purchasesRE.FindStringSubmatch(f); m != nil {
+		if n := firstNumber(m); n > 0 && n <= 100000 {
+			add("purchase_count", "gte", n)
+		}
+	}
+	if containsAny(f, "english", "ingilizce") {
+		add("locale", "eq", "en")
 	}
 
 	var tiers []string
