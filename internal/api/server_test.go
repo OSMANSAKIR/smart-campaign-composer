@@ -142,7 +142,7 @@ func TestEvents_SnapshotThenDone_RFLOW5(t *testing.T) {
 		Errors     map[string]int            `json:"errors"`
 	}
 	if err := json.Unmarshal([]byte(strings.TrimPrefix(frames[0], "event: snapshot\ndata: ")), &snap); err != nil ||
-		snap.CampaignID != id || len(snap.Channels) != 2 || len(snap.Errors) != 4 {
+		snap.CampaignID != id || len(snap.Channels) != 2 || len(snap.Errors) != 5 {
 		t.Fatalf("snapshot %s (%v)", frames[0], err)
 	}
 }

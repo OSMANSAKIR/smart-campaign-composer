@@ -173,9 +173,12 @@ Progress object:
     "sms":   { "total": 160, "queued": 40, "sending": 12, "sent": 100, "retry": 5, "failed": 1, "skipped_no_consent": 2,
                "throughput_per_s": 98.4, "paused_until": null },
     "email": { … } },
-  "errors": { "rate_limited": 3, "server_error": 7, "timeout": 1, "permanent": 1 },
+  "errors": { "rate_limited": 3, "server_error": 7, "timeout": 1, "permanent": 1, "auth_error": 0 },
   "eta_seconds": 12, "started_at": "…", "updated_at": "…" }
 ```
+
+`errors` counts failed attempts by class: 429 → `rate_limited`, 5xx → `server_error`, timeouts and connection
+errors → `timeout`, other 4xx → `permanent`, 401/403 (channel paused, retried) → `auth_error`.
 
 Every `snapshot` is complete, so a reconnecting client simply replaces its state (need.md N-ORC-006).
 Counts are monotonic in the sense that terminal counts never decrease. A `: ping` comment is sent every 15 s.

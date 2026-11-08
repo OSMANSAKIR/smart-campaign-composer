@@ -57,7 +57,7 @@ const throughputWindow = 5 * time.Second
 // errorBuckets maps delivery_attempts.error_class to the dashboard's error breakdown.
 var errorBuckets = map[string]string{
 	"throttled": "rate_limited", "transient": "server_error", "ambiguous": "timeout",
-	"permanent": "permanent", "config": "permanent",
+	"permanent": "permanent", "config": "auth_error", // 401/403 pause the channel and retry; not permanent
 }
 
 // Terminal reports whether a campaign status is final.
@@ -68,7 +68,7 @@ func Terminal(status string) bool {
 // Progress computes the snapshot with a few aggregate queries over the messages of one campaign.
 func (s *Service) Progress(ctx context.Context, id string) (Progress, error) {
 	p := Progress{CampaignID: id, Channels: map[string]*ChannelProgress{},
-		Errors: map[string]int{"rate_limited": 0, "server_error": 0, "timeout": 0, "permanent": 0}}
+		Errors: map[string]int{"rate_limited": 0, "server_error": 0, "timeout": 0, "permanent": 0, "auth_error": 0}}
 	for _, ch := range catalog.Channels {
 		p.Channels[ch] = &ChannelProgress{}
 	}
