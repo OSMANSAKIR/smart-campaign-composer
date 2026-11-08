@@ -18,6 +18,8 @@ func fastDispatcher(pool *pgxpool.Pool, ch Channel, client ProviderClient) *Disp
 		Policy: RetryPolicy{BaseBackoff: 5 * time.Millisecond, MaxBackoff: 40 * time.Millisecond, MaxAttempts: 5,
 			MaxThrottles: 20, DefaultRetryAfter: 50 * time.Millisecond, MaxRetryAfter: 100 * time.Millisecond},
 		RateLimit: 1000, // out of the way unless a test is about the limiter
+		// No quiet time after winning the lock: tests that are about takeover set TakeoverWait back to 0 (default).
+		TakeoverWait: -1,
 	}
 }
 

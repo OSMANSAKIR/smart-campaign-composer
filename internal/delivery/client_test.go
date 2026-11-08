@@ -3,9 +3,11 @@ package delivery
 import (
 	"context"
 	"encoding/json"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -47,6 +49,49 @@ func TestHTTPClient_SendsIdempotencyKeyAndPayload_RSND3(t *testing.T) {
 	}
 	if _, ok := gotBody["subject"]; ok {
 		t.Errorf("sms payload carries email fields: %v", gotBody)
+	}
+}
+
+// A reused keep-alive connection that dies after the request was read must surface as an error: net/http
+// would otherwise replay the POST on a new connection behind the limiter's back (N-ORC-012).
+func TestHTTPClient_NoHiddenTransportRetry_RSND2(t *testing.T) {
+	var mu sync.Mutex
+	seen := map[string]int{}
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		key := r.Header.Get("Idempotency-Key")
+		mu.Lock()
+		seen[key]++
+		first := seen[key] == 1
+		mu.Unlock()
+		if key == "msg-2" && first {
+			// Read the whole request, then drop the connection without answering.
+			_, _ = io.Copy(io.Discard, r.Body)
+			conn, _, err := w.(http.Hijacker).Hijack()
+			if err != nil {
+				t.Errorf("hijack: %v", err)
+				return
+			}
+			_ = conn.Close()
+			return
+		}
+		w.WriteHeader(200)
+		_, _ = w.Write([]byte(`{"provider_message_id":"pm"}`))
+	}))
+	defer srv.Close()
+	c := NewHTTPClient(srv.URL, 5*time.Second)
+	defer c.Close()
+
+	if _, err := c.Send(context.Background(), SendRequest{Channel: SMS, IdempotencyKey: "msg-1", To: "+905321234567", Text: "a"}); err != nil {
+		t.Fatalf("first send: %v", err) // opens the keep-alive connection the second one reuses
+	}
+	res, err := c.Send(context.Background(), SendRequest{Channel: SMS, IdempotencyKey: "msg-2", To: "+905321234567", Text: "b"})
+	if err == nil {
+		t.Fatalf("second send succeeded (%+v): the transport replayed it", res)
+	}
+	mu.Lock()
+	defer mu.Unlock()
+	if seen["msg-2"] != 1 {
+		t.Fatalf("server saw msg-2 %d times, want exactly 1", seen["msg-2"])
 	}
 }
 

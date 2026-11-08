@@ -14,6 +14,7 @@ import (
 	"math/rand/v2"
 	"net/http"
 	"regexp"
+	"sort"
 	"strconv"
 	"strings"
 	"sync"
@@ -85,16 +86,23 @@ type chanState struct {
 	delivered  []Delivery
 }
 
-// window is a sliding one-second log of event times. An event at t is inside the window ending at `now`
-// while t > now-1s, matching the half-open interval the client-side limiter guarantees.
+// window is a sliding one-second log of event times, kept sorted. An event at t is inside the window ending at
+// `now` while t > now-1s, matching the half-open interval the client-side limiter guarantees.
+//
+// Events carry the time the request arrived, which is stamped before the body is decoded and before the
+// server lock is taken, so goroutines can add them slightly out of order. add therefore inserts in order and
+// re-checks every window the new event falls into, and prune keeps one extra second so a late older event
+// still finds its neighbours.
 type window struct {
 	ts   []time.Time
 	head int
 	max  int
 }
 
-func (w *window) prune(now time.Time) {
-	cut := now.Add(-time.Second)
+const windowSlack = time.Second
+
+func (w *window) prune(newest time.Time) {
+	cut := newest.Add(-time.Second - windowSlack)
 	for w.head < len(w.ts) && !w.ts[w.head].After(cut) {
 		w.head++
 	}
@@ -104,14 +112,41 @@ func (w *window) prune(now time.Time) {
 	}
 }
 
-func (w *window) len() int { return len(w.ts) - w.head }
+// firstAfter returns the index of the first stored event later than t (len when none).
+func (w *window) firstAfter(t time.Time) int {
+	i := sort.Search(len(w.ts)-w.head, func(i int) bool { return w.ts[w.head+i].After(t) })
+	return w.head + i
+}
 
-// add records an event and returns the new running maximum.
-func (w *window) add(now time.Time) int {
-	w.prune(now)
-	w.ts = append(w.ts, now)
-	w.max = max(w.max, w.len())
+// countAt is the number of events in the window ending at t.
+func (w *window) countAt(t time.Time) int {
+	return w.firstAfter(t) - w.firstAfter(t.Add(-time.Second))
+}
+
+// add records an event and returns the running maximum over all windows ending at an event.
+func (w *window) add(t time.Time) int {
+	if n := len(w.ts); n > w.head {
+		w.prune(maxTime(t, w.ts[n-1]))
+	}
+	p := len(w.ts)
+	for p > w.head && w.ts[p-1].After(t) {
+		p--
+	}
+	w.ts = append(w.ts, time.Time{})
+	copy(w.ts[p+1:], w.ts[p:])
+	w.ts[p] = t
+	// The new event lies in the window ending at each later event within a second of it, and in its own.
+	for j := p; j < len(w.ts) && w.ts[j].Before(t.Add(time.Second)); j++ {
+		w.max = max(w.max, j+1-w.firstAfter(w.ts[j].Add(-time.Second)))
+	}
 	return w.max
+}
+
+func maxTime(a, b time.Time) time.Time {
+	if a.After(b) {
+		return a
+	}
+	return b
 }
 
 func newChanState() *chanState {
@@ -210,11 +245,15 @@ type outcome struct {
 
 func (s *Server) send(channel string) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
+		// The arrival time is taken first, before the body is decoded and before the server lock is waited
+		// for: the rate-limit measurement must see when the request came in, not when this goroutine got
+		// round to it (a stalled lock holder would otherwise bunch up requests that arrived evenly spread).
+		arrived := s.clk.Now()
 		key := r.Header.Get("Idempotency-Key")
 		var b sendBody
 		decodeErr := json.NewDecoder(http.MaxBytesReader(w, r.Body, 1<<20)).Decode(&b)
 
-		out := s.decide(channel, key, b, decodeErr)
+		out := s.decide(channel, key, b, decodeErr, arrived)
 		if out.hang {
 			select {
 			case <-r.Context().Done():
@@ -241,7 +280,7 @@ func (s *Server) send(channel string) http.HandlerFunc {
 	}
 }
 
-// decide runs the whole provider decision for one request under the lock: arrival accounting, own limiter,
+// decide runs the whole provider decision for one request under the lock; now is its arrival time: arrival accounting, own limiter,
 // fault roll, idempotency, validation and the delivery itself. The order matters:
 //
 //  1. arrival is counted before anything can reject it, so a non-compliant client shows up in
@@ -249,10 +288,9 @@ func (s *Server) send(channel string) http.HandlerFunc {
 //  2. the own limiter looks only at requests it admitted, so rejected arrivals do not lock a client out;
 //  3. faults precede the idempotency lookup, so even a replay can time out (a retry of a retry);
 //  4. half of all hangs happen after the delivery was recorded (provider-api.md §2).
-func (s *Server) decide(channel, key string, b sendBody, decodeErr error) outcome {
+func (s *Server) decide(channel, key string, b sendBody, decodeErr error, now time.Time) outcome {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	now := s.clk.Now()
 	st := s.ch[channel]
 	st.Requests++
 	st.MaxRequestsInAny1sWindow = st.arrivals.add(now)
@@ -263,8 +301,7 @@ func (s *Server) decide(channel, key string, b sendBody, decodeErr error) outcom
 	}
 
 	if limit := s.cfg.RateLimit; limit > 0 {
-		st.admitted.prune(now)
-		if st.admitted.len() >= limit {
+		if st.admitted.countAt(now) >= limit {
 			st.RejectedByLimiter++
 			o := reply(http.StatusTooManyRequests, errBody("rate_limited"))
 			o.retryAfter = s.cfg.RetryAfterS
@@ -374,8 +411,9 @@ func errBody(code string) map[string]any {
 }
 
 func (s *Server) getStats(w http.ResponseWriter, r *http.Request) {
+	// Copy under the lock, encode after releasing it: writing to a slow client while holding the lock would
+	// stall every send handler and bunch their arrivals up.
 	s.mu.Lock()
-	defer s.mu.Unlock()
 	total := ChannelStats{StatusCounts: map[string]int{}}
 	perChannel := map[string]ChannelStats{}
 	for _, name := range channels {
@@ -395,7 +433,9 @@ func (s *Server) getStats(w http.ResponseWriter, r *http.Request) {
 			total.StatusCounts[k] += v
 		}
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"since": s.since, "channels": perChannel, "total": total})
+	since := s.since
+	s.mu.Unlock()
+	writeJSON(w, http.StatusOK, map[string]any{"since": since, "channels": perChannel, "total": total})
 }
 
 func cloneCounts(m map[string]int) map[string]int {
@@ -412,8 +452,8 @@ func (s *Server) getDelivered(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusBadRequest, errBody("bad_request"))
 		return
 	}
+	// Copy under the lock, encode after releasing it (see getStats).
 	s.mu.Lock()
-	defer s.mu.Unlock()
 	items := []Delivery{}
 	for _, name := range channels {
 		if channel != "" && channel != name {
@@ -425,13 +465,15 @@ func (s *Server) getDelivered(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 	}
+	s.mu.Unlock()
 	writeJSON(w, http.StatusOK, map[string]any{"items": items})
 }
 
 func (s *Server) getConfig(w http.ResponseWriter, r *http.Request) {
 	s.mu.Lock()
-	defer s.mu.Unlock()
-	writeJSON(w, http.StatusOK, s.cfg)
+	cfg := s.cfg
+	s.mu.Unlock()
+	writeJSON(w, http.StatusOK, cfg)
 }
 
 func (s *Server) postConfig(w http.ResponseWriter, r *http.Request) {

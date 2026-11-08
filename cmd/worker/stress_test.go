@@ -441,15 +441,29 @@ func (e *env) checkInvariants(r *result, s seeded, completed bool, workers []*wo
 	add("I4", "every message reaches a terminal state within the time limit", completed && open == 0, "non-terminal messages at the end: %d", open)
 
 	mismatch := ""
+	unconfirmed := map[string]int{}
 	for _, ch := range []string{"sms", "email"} {
-		if stats[ch].Accepted != counts[ch]["sent"] {
-			mismatch += fmt.Sprintf("%s: provider accepted %d vs DB sent %d; ", ch, stats[ch].Accepted, counts[ch]["sent"])
+		// A message whose tries all ended without an answer (timeouts after the provider recorded the delivery)
+		// is `failed` in the DB although the provider has it: KICKOFF §7.3 cannot tell the difference. Those
+		// are the only way the provider may hold more than the DB says, so they bound the allowed gap.
+		var n int
+		if err := e.pool.QueryRow(ctx, `SELECT count(*) FROM messages m WHERE m.campaign_id = $1 AND m.channel = $2 AND m.status = 'failed'
+			AND EXISTS (SELECT 1 FROM delivery_attempts a WHERE a.message_id = m.id AND a.error_class = 'ambiguous')`, s.campaign, ch).Scan(&n); err != nil {
+			e.t.Fatal(err)
+		}
+		unconfirmed[ch] = n
+		if gap := stats[ch].Accepted - counts[ch]["sent"]; gap < 0 || gap > unconfirmed[ch] {
+			mismatch += fmt.Sprintf("%s: provider accepted %d vs DB sent %d (at most %d delivered-but-failed explained); ", ch, stats[ch].Accepted, counts[ch]["sent"], unconfirmed[ch])
 		}
 		if metricSent != nil && int(metricSent[ch]) != counts[ch]["sent"] {
 			mismatch += fmt.Sprintf("%s: metric sent %v vs DB %d; ", ch, metricSent[ch], counts[ch]["sent"])
 		}
 	}
 	detail := fmt.Sprintf("DB sent sms/email %d/%d = provider accepted %d/%d", counts["sms"]["sent"], counts["email"]["sent"], stats["sms"].Accepted, stats["email"].Accepted)
+	if gap := stats["sms"].Accepted - counts["sms"]["sent"] + stats["email"].Accepted - counts["email"]["sent"]; gap > 0 && mismatch == "" {
+		detail += fmt.Sprintf(" (%d delivered by the provider but ended failed after only unanswered tries, see note)", gap)
+		r.Notes = append(r.Notes, fmt.Sprintf("I5 explained gap: %d message(s) were recorded by the provider but ended `failed` because every try timed out or hung (KICKOFF §7.3 cannot tell an unanswered delivery from a lost request); the idempotent replays each rolled a fault again. Delivered-but-failed after retry exhaustion or lease expiry needs a schema change to fix (open issue).", gap))
+	}
 	if metricSent != nil {
 		detail += fmt.Sprintf(" = worker metric %d/%d", int(metricSent["sms"]), int(metricSent["email"]))
 	} else {
@@ -751,9 +765,15 @@ func writeReport() {
 
 const reportFooter = `## How to read the numbers
 
-- **Rate limit.** The worker's limiter allows 100 sends per sliding window of 1 s + 25 ms (the guard absorbs arrival
-  jitter between the worker and the provider). The provider counts arrivals itself; "max requests" is the largest
-  number of requests (retries included) that arrived inside any 1 s span, and it must stay at or below 100 (I3).
+- **Rate limit.** The worker's limiter allows 100 sends per sliding window of 1 s + 25 ms, measured from the time
+  each request was written to the connection (see "Rate bound" below). The provider counts arrivals itself, stamped
+  before it decodes the body or takes its lock; "max requests" is the largest number of requests (retries
+  included) that arrived inside any 1 s span, and it must stay at or below 100 (I3). These runs use
+  RATE_LIMIT_SAFETY_MARGIN=0: the bound comes from the mechanism, not from a smaller N.
+- **Throughput after the rate-bound fix.** S1 averages about 89 sends/s per channel (96/s with the old limiter): roughly
+  4 s of the run is the quiet time after the lock is won at start-up, and pacing from departures instead of
+  admissions gives up the slack the old limiter borrowed. Sustained 5 s peaks still reach 98-100/s; the 1 s
+  maximum seen by the provider (I3) is what is bounded.
 - **Throughput under faults.** A 429 pauses the whole channel for its Retry-After (KICKOFF §7.3). One overload event
   produces several 429s from requests that were in flight together, so they are counted as one event; even so, a
   provider that answers 5% of requests with 429 holds each channel well below 100/s (S2 shows the measured rate).
@@ -762,7 +782,41 @@ const reportFooter = `## How to read the numbers
 - **Provider outage.** Connection errors count as ambiguous tries (max 5, full-jitter backoff up to 8 s between the
   fifth and the fourth). A 10 s outage fits inside that budget; a much longer one would end messages as failed.
 - **Crash recovery.** S2 kills a worker with SIGKILL while it holds leases; the survivor reclaims them after
-  LEASE_DURATION and the provider's Idempotency-Key store absorbs the re-sends (see "replayed keys").
+  LEASE_DURATION and the provider's Idempotency-Key store absorbs the re-sends (see "replayed keys"). A replica that
+  wins the channel lock sends nothing for about 4 s (W + the lock-loss detection bound), which is also why a
+  freshly started worker begins sending a few seconds after it reports ready.
+
+## Rate bound (R-SND-2, N-ORC-012)
+
+**Claim.** The provider never receives more than N requests of one channel in any 1 s window (N = 100 here;
+RATE_LIMIT_SAFETY_MARGIN = 0).
+
+**Mechanism.** Every send, retries included, takes a ticket from the channel's limiter and reports back when its
+request has been written to the connection (` + "`httptrace.ClientTrace.WroteRequest`" + `; the current time if the request
+never left). Tickets are numbered in the order they are handed out. Slot s may start no earlier than
+W after the latest departure of any slot i <= s-N, with W = 1 s + RATE_LIMIT_WINDOW_GUARD_MS (25 ms).
+
+**Argument.** Take any N+1 requests, ordered by slot: s_0 < ... < s_N. Then s_0 <= s_N - N, so s_N started at
+least W after the departure of s_0, and it departed after it started. The two departures are at least
+1 s + guard apart. The provider sees arrival = departure + one-way network time + the time until it stamps the
+request. The stamp is taken before the body is decoded and before any lock is taken, so decode time is not part
+of it. Hence the arrivals are at least 1 s + guard - (jitter of that delay) apart, which is >= 1 s as long as the
+jitter stays within the guard (25 ms; sub-millisecond on loopback and a Docker bridge). A window of 1 s therefore
+never holds N+1 requests. Delays between "admitted" and "on the wire" (DNS, dial, scheduler) no longer matter,
+because the clock starts at the write, not at the admission.
+
+**What had to be closed for the argument to hold** (all covered by tests named in docs/tasks/delivery.md):
+a limiter that paced admissions instead of departures (provider saw 102-132 with a 30 ms dial per new connection);
+net/http replaying a POST on a fresh connection by itself (` + "`GetBody = nil`" + `); a second replica taking over the channel
+while the first still had sends queued or in flight (per-term context releases queued sends, claims run on the lock
+connection so a dead lock session cannot claim, and the new holder stays silent for W + the lock-loss detection
+bound, about 4 s); the provider's own measurement being disturbed by its stats endpoints (arrival stamped first, stats
+encoded outside the lock).
+
+**Assumptions that remain.** One-way delay jitter plus the provider's read-to-stamp time is <= the guard; a send that
+passed the limiter before a lock loss reaches the wire within the quiet time; monotonic clocks on the worker host.
+If the owner wants a bound with no network assumption, the limiter can commit at response receipt instead (about
+84/s at default latency): a one-line switch (N-ORC-012 option B).
 
 ## Not covered here
 
