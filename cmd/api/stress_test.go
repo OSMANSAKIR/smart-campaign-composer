@@ -638,6 +638,66 @@ func TestStressAPI(t *testing.T) {
 		reportsMu.Unlock()
 	})
 
+	t.Run("S8_provider_500rps", func(t *testing.T) {
+		if !wanted("S8") {
+			t.Skip()
+		}
+		// The shipped handler with its default latency (20–300 ms) and every fault and its own limiter off.
+		prov := mockprovider.New(config.ProviderFaults{LatencyMinMS: 20, LatencyMaxMS: 300, Seed: 8}, metrics.New())
+		psrv := httptest.NewServer(prov.Handler())
+		t.Cleanup(func() { prov.Close(); psrv.Close() })
+		r := &report{Name: "S8 provider throughput", Desc: "R-RES-3: an open-loop load of 500 requests per second for 10 s (one every 2 ms, alternating SMS and email, unique Idempotency-Keys) against the mock provider with its default latency and no faults."}
+		client := &http.Client{Transport: &http.Transport{MaxIdleConnsPerHost: 1000}, Timeout: 10 * time.Second}
+		const rate, dur = 500, 10 * time.Second
+		var mu sync.Mutex
+		var lat []time.Duration
+		codes := map[int]int{}
+		var wg sync.WaitGroup
+		tick := time.NewTicker(time.Second / rate)
+		begin := time.Now()
+		sent := 0
+		for time.Since(begin) < dur {
+			<-tick.C
+			i := sent
+			sent++
+			wg.Go(func() {
+				ch, body := "sms", fmt.Sprintf(`{"to":"+90532%07d","text":"x","campaign_id":"s8","user_id":%d,"message_id":"m%d"}`, i, i, i)
+				if i%2 == 1 {
+					ch, body = "email", fmt.Sprintf(`{"to":"u%d@example.com","subject":"s","html":"<p>x</p>","text":"x","campaign_id":"s8","user_id":%d,"message_id":"m%d"}`, i, i, i)
+				}
+				req, _ := http.NewRequest(http.MethodPost, psrv.URL+"/v1/"+ch, strings.NewReader(body))
+				req.Header.Set("Content-Type", "application/json")
+				req.Header.Set("Idempotency-Key", fmt.Sprintf("s8-%d", i))
+				st := time.Now()
+				resp, err := client.Do(req)
+				d := time.Since(st)
+				code := 0
+				if err == nil {
+					_, _ = io.Copy(io.Discard, resp.Body)
+					resp.Body.Close()
+					code = resp.StatusCode
+				}
+				mu.Lock()
+				codes[code]++
+				lat = append(lat, d)
+				mu.Unlock()
+			})
+		}
+		tick.Stop()
+		offered := time.Since(begin)
+		wg.Wait()
+		achieved := float64(codes[http.StatusOK]) / offered.Seconds()
+		r.param("requests offered / answered 200", fmt.Sprintf("%d in %s / %d", sent, offered.Round(time.Millisecond), codes[http.StatusOK]))
+		r.param("throughput (200s per second of offered load)", fmt.Sprintf("%.0f/s", achieved))
+		r.param("responses by status", fmt.Sprint(codes))
+		r.param("latency (configured 20–300 ms)", latencies(lat))
+		r.check(codes[http.StatusOK] == sent && achieved >= 0.95*rate, "R-RES-3: the provider answers every request at 500 rps", fmt.Sprintf("%d/%d ok, %.0f/s", codes[http.StatusOK], sent, achieved))
+		r.check(pct(lat, .99) < 400*time.Millisecond, "it adds no queueing of its own: p99 within the configured latency + 100 ms", "p99 "+pct(lat, .99).Round(time.Millisecond).String())
+		reportsMu.Lock()
+		reports = append(reports, r)
+		reportsMu.Unlock()
+	})
+
 	t.Run("S6_dashboard_fanout", func(t *testing.T) {
 		if !wanted("S6") {
 			t.Skip()
