@@ -554,14 +554,20 @@ func (d *Dispatcher) afterSend(ctx context.Context, log *slog.Logger, c Claimed,
 // pause stops claiming and sending on the channel for dur, never shortening an existing pause. sentAt is
 // when the request that caused it went out: with ~30 requests in flight, one overload event produces a burst
 // of 429s, and answers to requests sent before the current pause began belong to that same event, so they
-// must not each restart the clock (which would turn a 1 s Retry-After into a pause of many seconds).
+// must not each restart the clock (which would turn a 1 s Retry-After into a pause of many seconds). They may
+// still extend it to their own Retry-After, counted from the start of the pause.
 func (d *Dispatcher) pause(dur time.Duration, sentAt time.Time) {
 	now := d.Clock.Now()
+	var until int64
 	if start := d.pauseStart.Load(); start != 0 && sentAt.UnixNano() < start {
-		return
+		// Same overload event as the current pause, answered late. Its Retry-After counts from when the
+		// pause began, so a longer one extends the pause (never restarts or shortens it) and a shorter one
+		// changes nothing.
+		until = start + dur.Nanoseconds()
+	} else {
+		d.pauseStart.Store(now.UnixNano())
+		until = now.Add(dur).UnixNano()
 	}
-	d.pauseStart.Store(now.UnixNano())
-	until := now.Add(dur).UnixNano()
 	for {
 		cur := d.paused.Load()
 		if cur >= until || d.paused.CompareAndSwap(cur, until) {

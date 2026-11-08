@@ -6,8 +6,42 @@ import (
 	"testing"
 	"time"
 
+	"smartcampaign/internal/clock"
 	"smartcampaign/internal/store/storetest"
 )
+
+// A late 429 for a request sent before the current pause began is part of the same overload event: its
+// Retry-After is measured from the start of that pause. It may lengthen the pause, never restart or shorten
+// it (N-DEL-002, KICKOFF §7.3: the channel waits for the longest Retry-After it was told).
+func TestThrottle_InFlightRetryAfterExtendsPause_RSND4(t *testing.T) {
+	clk := clock.NewFake(t0)
+	d := &Dispatcher{Channel: SMS, Clock: clk}
+	d.setup()
+
+	d.pause(time.Second, clk.Now()) // first 429: Retry-After 1 s
+	clk.Advance(200 * time.Millisecond)
+	sentBefore := t0.Add(-50 * time.Millisecond)
+
+	d.pause(5*time.Second, sentBefore) // an in-flight request answers 429 with Retry-After 5
+	if got, want := d.PausedUntil(), t0.Add(5*time.Second); !got.Equal(want) {
+		t.Fatalf("pause ends at +%v, want +5s: counted from when the pause began, not from now (+5.2s) and not left at +1s", got.Sub(t0))
+	}
+	d.pause(2*time.Second, sentBefore) // a shorter one from the same burst
+	if got, want := d.PausedUntil(), t0.Add(5*time.Second); !got.Equal(want) {
+		t.Fatalf("a shorter late Retry-After moved the pause to +%v", got.Sub(t0))
+	}
+
+	// A request sent after the pause began is a new event: it restarts the clock, but still never shortens.
+	clk.Advance(200 * time.Millisecond)
+	d.pause(time.Second, clk.Now())
+	if got, want := d.PausedUntil(), t0.Add(5*time.Second); !got.Equal(want) {
+		t.Fatalf("a new 1 s throttle shortened the pause to +%v", got.Sub(t0))
+	}
+	clk.Advance(5 * time.Second)
+	if !d.PausedUntil().IsZero() {
+		t.Fatal("pause did not end")
+	}
+}
 
 func TestThrottle_BurstOfInFlight429sIsOneEvent_RSND4(t *testing.T) {
 	pool := storetest.NewDB(t)
