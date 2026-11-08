@@ -106,7 +106,7 @@ simplest to explain.
 - **Consequences.** A Turkish SMS of 93 code points is valid but costs 2 UCS-2 segments; the UI says so.
   Switching to single-segment is ~1 h (rule, vectors, prompt budget, UI).
 
-## D-6 · Postgres is the datastore and the queue [L-4, N-PLAN-010]
+## D-6 · Postgres is the datastore and the queue [L-4, N-PLAN-010, N-ORC-013]
 
 - **Context.** R-SND-1 asks for an asynchronous queue; the choice is ours.
 - **Decision.** Transactional outbox plus `FOR UPDATE SKIP LOCKED`.
@@ -114,6 +114,9 @@ simplest to explain.
     content, a set-based `INSERT INTO messages … SELECT … FROM users WHERE <compiled rule> AND
     <channel>_consent ON CONFLICT DO NOTHING`, and a guarded `content_ready → sending` transition. No dual
     write between a DB and a broker. 5000 users enqueue in ~0.16 s.
+  - Concurrent approves of *different* campaigns enqueue one at a time behind a transaction-scoped advisory
+    lock [N-ORC-013]: ten bulk inserts in parallel took 14–55 s each on the compose Postgres and timed out;
+    in sequence all ten finish in seconds (stress S3).
   - Workers claim batches with `UPDATE … WHERE id IN (SELECT … FOR UPDATE SKIP LOCKED LIMIT n)`, set a 30 s
     lease and re-check consent in the same statement.
   - The dashboard reads the same tables: one aggregate query per campaign every 500 ms, shared by all
