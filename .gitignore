@@ -23,3 +23,7 @@ web/test-results/
 web/playwright-report/
 *.test
 coverage.out
+
+# python
+__pycache__/
+*.pyc
