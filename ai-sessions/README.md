@@ -22,6 +22,8 @@ Each Agent-tool launch by the orchestrator (KICKOFF §12.0). Transcripts: `subag
 | W1 | builder-delivery | sonnet | worktree | `docs/tasks/delivery.md` | done 10:39 · P0 complete + stress S1/S2/S7 · merged 72b9797 (`go test -race ./...` and `make test` re-run on main) |
 | W1 | builder-web | sonnet | worktree | `docs/tasks/web.md` | done 10:23 · P0 complete, 106 Vitest tests · merged f194e8a (typecheck/test/build re-run on main) |
 | CP1 | reliability-reviewer (as general-purpose; project agent types load at session start) | opus | none, read-only | `.claude/agents/reliability-reviewer.md` + delivery diff 46a3fc1..72b9797 | stopped by the orchestrator at the usage limit before reporting; to be re-run |
+| CP1 | reliability-reviewer, re-run (as general-purpose) | opus | none, read-only | `.claude/agents/reliability-reviewer.md` + delivery diff + live 101/s finding | running (launched 2026-11-08 14:30) |
+| CP1 | llm-red-team (as general-purpose) | opus | worktree | `.claude/agents/llm-red-team.md` + llm/segment/content/campaign | running (launched 2026-11-08 14:30) |
 
 ## How the agents were connected
 

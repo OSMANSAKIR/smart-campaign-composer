@@ -463,7 +463,7 @@ _Last updated: 2026-11-08 by the orchestrator (W1 done: web, delivery, llm merge
 - **Requirement(s):** R-SND-2
 - **Context:** The limiter frees the next send exactly 1 s after the send N places back, but the provider measures arrivals; jitter makes about half of such pairs arrive < 1 s apart, so the provider would count 101.
 - **Options:** A) window = 1 s + guard (default 25 ms ≈ 97.6/s). B) Only `RATE_LIMIT_SAFETY_MARGIN` (costs 1/s per unit). C) No guard.
-- **Decision taken:** A, env `RATE_LIMIT_WINDOW_GUARD_MS` (read in `cmd/worker`; orchestrator added it to `.env.example`). S1: provider-measured max = 100 in any 1 s window, 0 provider-limiter rejections.
+- **Decision taken:** A, env `RATE_LIMIT_WINDOW_GUARD_MS` (read in `cmd/worker`; orchestrator added it to `.env.example`). S1: provider-measured max = 100 in any 1 s window, 0 provider-limiter rejections. **Orchestrator update:** on the real compose stack the provider measured 101 requests in a 1 s window on sms (1 provider-limiter rejection) at 100/s + 25 ms guard, so the default `RATE_LIMIT_SAFETY_MARGIN` is now 5 (95/s) while the reliability reviewer looks for the root cause (the limiter records the scheduled slot, not the actual departure).
 - **Cost to change later:** low (one env var).
 - **Question for owner:** OK to trade ~2.4 % throughput for never exceeding 100/s at the provider?
 - **Owner response:**
