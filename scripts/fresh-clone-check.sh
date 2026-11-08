@@ -26,7 +26,9 @@ docker compose up -d --build --wait --wait-timeout 300
 elapsed=$(( $(date +%s) - start ))
 echo "compose healthy after ${elapsed}s"
 
-for url in "http://localhost:18080/readyz" "http://localhost:19091/readyz" "http://localhost:18090/readyz" "http://localhost:18080/"; do
+# The worker publishes a port range (so it can be scaled to two replicas); ask compose which one it got.
+worker_port=$(docker compose port worker 9091 | sed 's/.*://')
+for url in "http://localhost:18080/readyz" "http://localhost:${worker_port}/readyz" "http://localhost:18090/readyz" "http://localhost:18080/"; do
   code=$(curl -s -o /dev/null -w '%{http_code}' "$url")
   echo "$url -> $code"
   [ "$code" = 200 ] || { echo "FAILED: $url"; exit 1; }

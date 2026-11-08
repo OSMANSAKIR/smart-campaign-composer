@@ -50,7 +50,7 @@ make smoke-live CONFIRM_SPEND=yes
 | Service | URL |
 |---|---|
 | Web UI + API | <http://localhost:8080> (`/healthz`, `/readyz`, `/metrics`, `/api/…`) |
-| Worker | <http://localhost:9091> (`/healthz`, `/readyz`, `/metrics`) |
+| Worker | <http://localhost:9091> or 9092 (`/healthz`, `/readyz`, `/metrics`); a port range so it can run as two replicas — `docker compose port worker 9091` shows which |
 | Mock provider | <http://localhost:8090> (`/stats`, `/admin/config`, `/admin/reset`) |
 | Postgres | `localhost:55432`, user/password/db `scc` |
 

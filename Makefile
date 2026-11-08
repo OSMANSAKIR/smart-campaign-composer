@@ -78,8 +78,8 @@ smoke-live: ## One real Claude API call per task (needs CONFIRM_SPEND=yes and AN
 sanitize-check: ## gitleaks over git history and ai-sessions/, plus the owner-term grep
 	scripts/sanitize-check.sh
 
-fresh-clone-check: ## Clean clone -> compose up (alternate ports) -> healthy -> seed present -> make test
-	scripts/fresh-clone-check.sh
+fresh-clone-check: ## Clean clone -> compose up (alternate ports, no .env) -> healthy -> seed present -> make test
+	scripts/fresh-clone-check.sh --with-tests
 
 harvest-sessions: ## Copy this project's Claude Code transcripts into ai-sessions/_raw/ (gitignored)
 	scripts/harvest-sessions.sh
