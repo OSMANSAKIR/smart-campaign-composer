@@ -220,6 +220,6 @@ func TestRedTeam_UnknownVariableIssuesUnbounded_RCNT3(t *testing.T) {
 	enc, _ := json.Marshal(r.Errors)
 	t.Logf("SMS of %d bytes → %d errors, %d bytes of JSON", len(sms), len(r.Errors), len(enc))
 	if len(r.Errors) > 50 {
-		t.Skipf("FINDING RT-1: %d unknown_variable issues (%d bytes) from one field; ParseVariables should cap them", len(r.Errors), len(enc))
+		t.Fatalf("RT-1: %d unknown_variable issues (%d bytes) from one field; ParseVariables should cap them", len(r.Errors), len(enc))
 	}
 }

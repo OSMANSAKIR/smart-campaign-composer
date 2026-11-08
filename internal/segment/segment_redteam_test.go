@@ -259,7 +259,7 @@ func TestRedTeam_StrictDecodeIssuesUnbounded_RAI1(t *testing.T) {
 	t.Logf("input %d bytes → %d issues, %d bytes of JSON issues (%.1fx)", len(raw), len(issues), len(enc), float64(len(enc))/float64(len(raw)))
 	const maxIssues = 50
 	if len(issues) > maxIssues {
-		t.Skipf("FINDING RT-1: %d issues (%d bytes) from a %d-byte answer; strictDecode/walk should cap issues (e.g. %d)",
+		t.Fatalf("RT-1: %d issues (%d bytes) from a %d-byte answer; strictDecode/walk should cap issues (e.g. %d)",
 			len(issues), len(enc), len(raw), maxIssues)
 	}
 }
