@@ -23,6 +23,18 @@ import (
 // lockKeyBase namespaces the per-channel advisory locks (distinct from the migration lock).
 const lockKeyBase = 7_261_108_100
 
+const (
+	// lockCheckEvery is how often the lock connection is probed, and lockOpTimeout how long any one statement
+	// on it may take (a timed-out statement closes the connection, which is what "lock lost" means).
+	lockCheckEvery = time.Second
+	lockOpTimeout  = 2 * time.Second
+	// lockLossBound is the longest a dispatcher can keep sending after its lock is gone: it finds out at the
+	// next probe (lockCheckEvery) at the latest, and that probe or a claim in progress takes at most
+	// lockOpTimeout. A new holder waits W + this bound before its first send, so the old holder is silent by
+	// then (N-ORC-012).
+	lockLossBound = lockCheckEvery + lockOpTimeout
+)
+
 // LockKey is the advisory-lock key of a channel's single active dispatcher.
 func LockKey(ch Channel) int64 {
 	if ch == Email {
@@ -57,6 +69,7 @@ type Dispatcher struct {
 	ConfigPause    time.Duration  // pause after 401/403; default 30 s
 	HeartbeatEvery time.Duration  // default 2 s
 	StandbyPoll    time.Duration  // how often a standby retries the advisory lock; default 1 s
+	TakeoverWait   time.Duration  // quiet time after winning the lock; 0 = W + lock-loss bound (about 4 s), negative = none (tests)
 	Rand           func() float64 // jitter source; default math/rand/v2
 
 	once       sync.Once
@@ -105,7 +118,12 @@ func (d *Dispatcher) setup() {
 		d.ConfigPause = defaultDur(d.ConfigPause, 30*time.Second)
 		d.HeartbeatEvery = defaultDur(d.HeartbeatEvery, 2*time.Second)
 		d.StandbyPoll = defaultDur(d.StandbyPoll, time.Second)
-		d.StandbyPoll = defaultDur(d.StandbyPoll, time.Second)
+		switch {
+		case d.TakeoverWait == 0:
+			d.TakeoverWait = time.Second + d.WindowGuard + lockLossBound
+		case d.TakeoverWait < 0:
+			d.TakeoverWait = 0
+		}
 		if d.Rand == nil {
 			d.Rand = rand.Float64
 		}
@@ -250,29 +268,66 @@ func (d *Dispatcher) tryLock(ctx context.Context) (*pgx.Conn, bool, error) {
 	return conn, true, nil
 }
 
-// active is the claim loop of the lock holder. It returns nil on shutdown and an error when the lock
+// active is the claim loop of one lock term. It returns nil on shutdown and an error when the lock
 // connection died (the lock is gone then, so the caller must stop claiming and re-acquire).
+//
+// The term context ends the moment the lock is found lost (or on shutdown). It is what sends wait on in the
+// limiter, so a send that was queued behind the limiter is released unsent instead of leaving after another
+// replica may already have taken over (N-ORC-012). Claim and reclaim run on the lock connection itself: when
+// that session is terminated or times out they fail, so a dispatcher that lost its lock cannot claim more.
 func (d *Dispatcher) active(ctx context.Context, lock *pgx.Conn) error {
 	var inflight sync.WaitGroup
 	sem := make(chan struct{}, d.MaxInFlight)
-	lockCheck, lastReclaim := time.Now(), time.Time{}
-	dbBackoff := 100 * time.Millisecond
+	termCtx, endTerm := context.WithCancel(ctx)
+	defer endTerm()
 	defer d.drain(&inflight)
 
+	// The lock connection is used by this goroutine only (pgx connections are not concurrency-safe), so
+	// `lost` and `lastProbe` need no lock.
+	var lost error
+	markLost := func(err error) {
+		lost = fmt.Errorf("lock connection: %w", err)
+		d.holds.Store(false)
+		endTerm()
+	}
+	lastProbe, lastReclaim := time.Now(), time.Time{}
+	dbBackoff := 100 * time.Millisecond
+	probe := func() {
+		if time.Since(lastProbe) < lockCheckEvery || lost != nil {
+			return
+		}
+		pctx, cancel := context.WithTimeout(ctx, lockOpTimeout)
+		_, err := lock.Exec(pctx, "SELECT 1")
+		cancel()
+		lastProbe = time.Now()
+		if err != nil && ctx.Err() == nil {
+			markLost(err)
+		}
+	}
+	// A failed statement on the lock connection that leaves the connection closed means the lock is gone.
+	checkConn := func(err error) {
+		if err != nil && ctx.Err() == nil && lock.IsClosed() && lost == nil {
+			markLost(err)
+		}
+	}
+
 	// Sends and their bookkeeping must survive a shutdown signal long enough to finish (drain), so they run
-	// on a context that ignores cancellation; only the pre-send waits watch ctx.
+	// on a context that ignores cancellation; only the pre-send waits watch the term context.
 	bg := context.WithoutCancel(ctx)
 
-	for ctx.Err() == nil {
+	// Nothing is sent for TakeoverWait after the lock is won: the previous holder may still have sends that
+	// are queued or on the wire, and its last departure must be a full window behind our first.
+	quietUntil := d.Clock.Now().Add(d.TakeoverWait)
+
+	for ctx.Err() == nil && lost == nil {
 		d.touch()
-		if time.Since(lockCheck) >= time.Second {
-			pctx, cancel := context.WithTimeout(ctx, 2*time.Second)
-			_, err := lock.Exec(pctx, "SELECT 1")
-			cancel()
-			if err != nil && ctx.Err() == nil {
-				return fmt.Errorf("lock connection: %w", err)
-			}
-			lockCheck = time.Now()
+		probe()
+		if lost != nil {
+			break
+		}
+		if rem := quietUntil.Sub(d.Clock.Now()); rem > 0 {
+			d.sleep(ctx, min(rem, lockCheckEvery))
+			continue
 		}
 		if until := d.PausedUntil(); !until.IsZero() {
 			d.Metrics.ChannelPaused.WithLabelValues(string(d.Channel)).Set(1)
@@ -282,18 +337,28 @@ func (d *Dispatcher) active(ctx context.Context, lock *pgx.Conn) error {
 		d.Metrics.ChannelPaused.WithLabelValues(string(d.Channel)).Set(0)
 
 		if time.Since(lastReclaim) >= time.Second {
-			if err := d.reclaim(ctx); err != nil && ctx.Err() == nil {
+			rctx, cancel := context.WithTimeout(ctx, lockOpTimeout)
+			requeued, failed, err := d.queue.ReclaimExpiredOn(rctx, lock, d.Policy.MaxAttempts)
+			cancel()
+			d.noteReclaimed(requeued, failed)
+			if err != nil && ctx.Err() == nil {
 				d.Log.Warn("reclaim failed", "err", err)
+				checkConn(err)
 			}
 			lastReclaim = time.Now()
+			if lost != nil {
+				break
+			}
 		}
 
 		// Take slots first so we never claim more than we can start: a claimed row's lease is ticking.
-		n := d.acquireSlots(ctx, sem)
+		n := d.acquireSlots(termCtx, sem, probe)
 		if n == 0 {
 			break
 		}
-		rows, err := d.queue.Claim(ctx, n)
+		cctx, cancel := context.WithTimeout(ctx, lockOpTimeout)
+		rows, err := d.queue.ClaimOn(cctx, lock, n)
+		cancel()
 		for range n - len(rows) {
 			<-sem
 		}
@@ -301,6 +366,7 @@ func (d *Dispatcher) active(ctx context.Context, lock *pgx.Conn) error {
 			if ctx.Err() == nil {
 				d.Log.Warn("claim failed, backing off", "err", err, "retry_in", dbBackoff)
 			}
+			checkConn(err)
 			d.sleep(ctx, dbBackoff)
 			dbBackoff = min(dbBackoff*2, 5*time.Second)
 			continue
@@ -315,19 +381,20 @@ func (d *Dispatcher) active(ctx context.Context, lock *pgx.Conn) error {
 			}
 			inflight.Go(func() {
 				defer func() { <-sem }()
-				d.handle(ctx, bg, c)
+				d.handle(termCtx, bg, c)
 			})
 		}
 		if len(rows) == 0 {
 			d.sleep(ctx, d.PollInterval)
 		}
 	}
-	return nil
+	return lost
 }
 
 // acquireSlots reserves one in-flight slot (blocking) plus any other free ones, and returns how many it got;
-// 0 means ctx ended.
-func (d *Dispatcher) acquireSlots(ctx context.Context, sem chan struct{}) int {
+// 0 means ctx ended. While every slot is busy it calls probe once a second, so a lost lock is noticed even
+// when the loop is not claiming.
+func (d *Dispatcher) acquireSlots(ctx context.Context, sem chan struct{}, probe func()) int {
 	for {
 		select {
 		case sem <- struct{}{}:
@@ -345,6 +412,7 @@ func (d *Dispatcher) acquireSlots(ctx context.Context, sem chan struct{}) int {
 			return 0
 		case <-d.Clock.After(time.Second): // keep the readiness beat fresh while every slot is busy
 			d.touch()
+			probe()
 		}
 	}
 }
@@ -360,13 +428,11 @@ func (d *Dispatcher) drain(wg *sync.WaitGroup) {
 	}
 }
 
-func (d *Dispatcher) reclaim(ctx context.Context) error {
-	requeued, failed, err := d.queue.ReclaimExpired(ctx, d.Policy.MaxAttempts)
+func (d *Dispatcher) noteReclaimed(requeued, failed int) {
 	if requeued+failed > 0 {
 		d.Log.Warn("reclaimed expired leases", "requeued", requeued, "failed", failed)
 		d.Metrics.Messages.WithLabelValues(string(d.Channel), StatusFailed).Add(float64(failed))
 	}
-	return err
 }
 
 // handle sends one claimed message and records the outcome. runCtx ends at shutdown (pre-send waits abort
@@ -404,6 +470,11 @@ func (d *Dispatcher) handle(runCtx, bg context.Context, c Claimed) {
 		return
 	}
 	d.Metrics.LimiterWait.WithLabelValues(ch).Observe(time.Since(waitStart).Seconds())
+	if runCtx.Err() != nil { // the lock was lost (or we are shutting down) while the limiter admitted us
+		tk.Departed(d.Clock.Now())
+		d.release(bg, log, c, 0)
+		return
+	}
 	if until := d.PausedUntil(); !until.IsZero() {
 		// Another send was throttled while we waited: do not add to the pressure, come back after the pause.
 		tk.Departed(d.Clock.Now())

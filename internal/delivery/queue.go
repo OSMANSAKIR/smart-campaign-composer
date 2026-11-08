@@ -5,8 +5,15 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
+
+// querier is what Claim and ReclaimExpired need: a pool, or the dispatcher's lock connection. Running them
+// on the lock connection ties claiming to holding the lock: when that session dies, claims fail with it.
+type querier interface {
+	Query(ctx context.Context, sql string, args ...any) (pgx.Rows, error)
+}
 
 // Queue is the Postgres outbox for one channel: the `messages` table is the queue (KICKOFF §7, N-PLAN-010).
 // All time arithmetic uses the database clock (now()), so replicas agree on leases and due times.
@@ -33,11 +40,16 @@ type Claimed struct {
 // consented rows to `sending` with a lease while unconsented rows go straight to skipped_no_consent.
 // Only messages of campaigns in `sending` are due, so a cancelled campaign stops draining.
 func (q *Queue) Claim(ctx context.Context, n int) ([]Claimed, error) {
+	return q.ClaimOn(ctx, q.Pool, n)
+}
+
+// ClaimOn is Claim on a specific connection source.
+func (q *Queue) ClaimOn(ctx context.Context, db querier, n int) ([]Claimed, error) {
 	consent := "u.sms_consent" // the column comes from the Channel constant, never from input
 	if q.Channel == Email {
 		consent = "u.email_consent"
 	}
-	rows, err := q.Pool.Query(ctx, fmt.Sprintf(`
+	rows, err := db.Query(ctx, fmt.Sprintf(`
 		UPDATE messages m SET
 			status      = CASE WHEN %[1]s THEN 'sending' ELSE 'skipped_no_consent' END,
 			lease_until = CASE WHEN %[1]s THEN now() + make_interval(secs => $3) END,
@@ -77,7 +89,12 @@ func (q *Queue) Claim(ctx context.Context, n int) ([]Claimed, error) {
 // forever (a poison message that crashes the worker). The retry keeps the same Idempotency-Key, so a send
 // that did reach the provider is deduplicated there.
 func (q *Queue) ReclaimExpired(ctx context.Context, maxAttempts int) (requeued, failed int, err error) {
-	rows, err := q.Pool.Query(ctx, `
+	return q.ReclaimExpiredOn(ctx, q.Pool, maxAttempts)
+}
+
+// ReclaimExpiredOn is ReclaimExpired on a specific connection source.
+func (q *Queue) ReclaimExpiredOn(ctx context.Context, db querier, maxAttempts int) (requeued, failed int, err error) {
+	rows, err := db.Query(ctx, `
 		UPDATE messages SET
 			status          = CASE WHEN attempts >= $2 THEN 'failed' ELSE 'retry' END,
 			last_error      = CASE WHEN attempts >= $2 THEN 'lease_expired' ELSE last_error END,
