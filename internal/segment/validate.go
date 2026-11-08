@@ -34,6 +34,7 @@ func ValidateProposal(p Proposal) (ValidRule, []Issue, []Issue) {
 	errs = append(errs, checkEnum("language", p.Language, catalog.Locales)...)
 	errs = append(errs, checkNotes("unsupported_criteria", p.UnsupportedCriteria)...)
 	errs = append(errs, checkNotes("assumptions", p.Assumptions)...)
+	errs = append(errs, ControlIssue("explanation", p.Explanation)...)
 	if n := utf8.RuneCountInString(p.Explanation); n > catalog.MaxExplanationRunes {
 		errs = append(errs, Issue{Path: "explanation", Code: "string_too_long",
 			Message: fmt.Sprintf("explanation has %d characters; the limit is %d", n, catalog.MaxExplanationRunes)})
@@ -58,6 +59,7 @@ func checkNotes(path string, items []string) []Issue {
 			Message: fmt.Sprintf("%s has %d items; the limit is %d", path, len(items), catalog.MaxNoteItems)})
 	}
 	for i, s := range items {
+		out = append(out, ControlIssue(fmt.Sprintf("%s[%d]", path, i), s)...)
 		if n := utf8.RuneCountInString(s); n > catalog.MaxNoteRunes {
 			out = append(out, Issue{Path: fmt.Sprintf("%s[%d]", path, i), Code: "string_too_long",
 				Message: fmt.Sprintf("item has %d characters; the limit is %d", n, catalog.MaxNoteRunes)})

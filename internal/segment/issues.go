@@ -37,6 +37,18 @@ func TooManyIssue(k int) Issue {
 	return Issue{Code: CodeTooManyErrors, Message: fmt.Sprintf("and %d more problems were not listed; fix the ones above first", k)}
 }
 
+// ControlIssue reports the first control character (Unicode Cc) in model free text, other than newline and
+// tab, as a control_character issue at path. NUL would make Postgres reject the INSERT (text 22021, jsonb
+// 22P05), and the other controls have no place in text shown to a marketer (RT-8a).
+func ControlIssue(path, s string) []Issue {
+	for _, r := range s {
+		if unicode.IsControl(r) && r != '\n' && r != '\t' {
+			return []Issue{{Path: path, Code: "control_character", Message: fmt.Sprintf("remove the control character U+%04X", r)}}
+		}
+	}
+	return nil
+}
+
 // SafeText makes model-chosen text fit to quote in a path or message: invalid UTF-8, control, format,
 // line/paragraph separator, private-use and surrogate characters are dropped, and at most n runes are kept
 // (an ellipsis marks the cut). The model must not be able to smuggle an instruction, a line break or a bidi
