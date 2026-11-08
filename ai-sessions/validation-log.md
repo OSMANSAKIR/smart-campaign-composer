@@ -99,3 +99,17 @@ Append-only (union-merged). Format: KICKOFF.md §13.
 - **How it was caught:** test — 45-case hostile corpus and Postgres-backed tests committed with `t.Skip("FINDING RT-n")` (merge cd74fc7). Held: no hostile value reached SQL text, consent cannot be targeted, refusal/max_tokens/repair limits, rune-safe streaming, single-pass escaped rendering, approve-time revalidation.
 - **Fix:** orchestrator: `PUT …/segment` uses `segment.ParseRule` (422 with paths), `Create` rejects NUL/invalid UTF-8/control characters; llm fix round for the rest (RT-1, RT-3..RT-9; bidi controls and U+2028/2029 are stripped from values).
 - **Lesson / guard added:** every endpoint that accepts a rule uses the same strict decoder as model output; red-team tests stay in the suite and their skips are removed as findings close.
+
+### V-015 · Takeover repro killed other tests' lock sessions; I5 assumed exact equality under chaos
+- **When / agent:** 2026-11-08 · reliability-reviewer (repro) and builder-delivery (stress invariant), caught by the delivery fix round
+- **AI proposed:** (1) a takeover repro that terminated advisory-lock sessions with an unscoped `pg_locks` query (cluster-wide), which would also hit other tests' dispatchers; (2) a stress check requiring provider `accepted == DB sent` exactly under chaos faults.
+- **How it was caught:** test — asserting `killed == 1` (2 were killed); S2 failing I5 in 2 of 7 runs.
+- **Fix:** `terminateLockSession` filters on `current_database()`; I5 bounded by failed-with-ambiguous-attempt count (need.md N-DEL-009).
+- **Lesson / guard added:** shared-Postgres tests scope every cluster-wide query to their own database.
+
+### V-016 · A scheduling-sensitive limiter bound failed only in the container
+- **When / agent:** 2026-11-08 · builder-delivery fix round; caught by the orchestrator's `make test`
+- **AI proposed:** an upper time bound of 5.5 s for 53 concurrent callers on a fake clock whose driver keeps advancing while admitted goroutines have not yet reported departure.
+- **How it was caught:** test — `make test` (containerized) measured 6.3 s; host runs passed.
+- **Fix:** keep the 5 s lower bound (the safety property); upper bound 8 s only guards gross slowness (8e0f514).
+- **Lesson / guard added:** always re-run `make test` at merge; host-green is not enough.

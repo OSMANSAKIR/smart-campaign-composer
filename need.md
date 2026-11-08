@@ -465,7 +465,7 @@ _Last updated: 2026-11-08 by the orchestrator (W1 done: web, delivery, llm merge
 - **Requirement(s):** R-SND-2
 - **Context:** The limiter frees the next send exactly 1 s after the send N places back, but the provider measures arrivals; jitter makes about half of such pairs arrive < 1 s apart, so the provider would count 101.
 - **Options:** A) window = 1 s + guard (default 25 ms ≈ 97.6/s). B) Only `RATE_LIMIT_SAFETY_MARGIN` (costs 1/s per unit). C) No guard.
-- **Decision taken:** A, env `RATE_LIMIT_WINDOW_GUARD_MS` (read in `cmd/worker`; orchestrator added it to `.env.example`). S1: provider-measured max = 100 in any 1 s window, 0 provider-limiter rejections. **Orchestrator update:** on the real compose stack the provider measured 101 requests in a 1 s window on sms (1 provider-limiter rejection) at 100/s + 25 ms guard, so the default `RATE_LIMIT_SAFETY_MARGIN` is now 5 (95/s) while the reliability reviewer looks for the root cause (the limiter records the scheduled slot, not the actual departure). Re-measured on compose at 95/s (all 5000 users, 7542 messages, default faults): provider max 95 requests in any 1 s window per channel, 0 provider-limiter rejections, 0 duplicate deliveries, completed in 65 s.
+- **Decision taken:** A, env `RATE_LIMIT_WINDOW_GUARD_MS` (read in `cmd/worker`; orchestrator added it to `.env.example`). S1: provider-measured max = 100 in any 1 s window, 0 provider-limiter rejections. **Orchestrator update:** on the real compose stack the provider measured 101 requests in a 1 s window on sms (1 provider-limiter rejection) at 100/s + 25 ms guard, so the default `RATE_LIMIT_SAFETY_MARGIN` was set to 5 (95/s) as a stopgap. **Superseded by N-ORC-012:** the limiter now paces real departures; margin is back to 0. Re-measured on compose at 95/s (all 5000 users, 7542 messages, default faults): provider max 95 requests in any 1 s window per channel, 0 provider-limiter rejections, 0 duplicate deliveries, completed in 65 s.
 - **Cost to change later:** low (one env var).
 - **Question for owner:** OK to trade ~2.4 % throughput for never exceeding 100/s at the provider?
 - **Owner response:**
@@ -476,7 +476,7 @@ _Last updated: 2026-11-08 by the orchestrator (W1 done: web, delivery, llm merge
 - **Requirement(s):** R-SND-4
 - **Context:** With ~30 requests in flight, one overload returns many 429s; restarting the Retry-After pause for each (literal reading of KICKOFF §7.3) kept a channel paused for many seconds (S2 fell to ~17 msg/s).
 - **Options:** A) Every 429 restarts the pause. B) 429s for requests sent before the current pause began do not extend it.
-- **Decision taken:** B. The pause is never shortened; throttles still do not count as attempts; cap of 20 throttles per message unchanged. Test `TestThrottle_BurstOfInFlight429sIsOneEvent_RSND4`.
+- **Decision taken:** B. The pause is never shortened; throttles still do not count as attempts; cap of 20 throttles per message unchanged. Test `TestThrottle_BurstOfInFlight429sIsOneEvent_RSND4`. Update after CP1: a late in-flight 429 with a longer Retry-After extends the pause to pauseStart + its Retry-After (still never restarts it).
 - **Cost to change later:** ~15 min.
 - **Question for owner:** Accept B as the reading of "pause the whole channel until Retry-After"?
 - **Owner response:**
@@ -600,5 +600,27 @@ _Last updated: 2026-11-08 by the orchestrator (W1 done: web, delivery, llm merge
 - **Decision taken:** A, plus: per-lock-term context so queued sends are released when the lock is lost; claim/reclaim on the lock connection; wait W + lock-loss detection bound (~4 s) after acquiring the lock before sending; disable net/http's hidden replay of POSTs (`GetBody = nil`); provider stamps arrivals before decode and never encodes stats under its mutex. Margin back to 0 after the fix. B stays a one-line switch if the owner prefers a proof without a network assumption.
 - **Cost to change later:** A→B: one call-site change.
 - **Question for owner:** A (≈97.6/s, bounded under a stated sub-25 ms network assumption) or B (≈84/s, no assumption)?
+- **Owner response:**
+- **Status:** OPEN
+
+### 🟡 N-DEL-008 · Quiet time after winning the channel lock · impact: medium
+- **Date / agent / session:** 2026-11-08 · delivery · builder-delivery fix round (subagent)
+- **Requirement(s):** R-SND-2 (I3)
+- **Context:** A new lock holder cannot know what the previous holder sent in the last second, so starting at once let the provider see 129–182 requests in 1 s on takeover.
+- **Options:** A) Wait W + lock-loss detection bound (1.025 s + 1 s check + 2 s statement timeout ≈ 4.025 s) after acquiring the lock, also at first start. B) Share limiter state through Postgres. C) No wait.
+- **Decision taken:** A. Statement timeout on the lock connection is 2 s (not 5 s) to keep the bound short; a claim that times out counts as lock lost. Cost: a worker sends nothing for ~4 s after start or takeover; S1 averages ~89/s instead of 96/s.
+- **Cost to change later:** constants `lockCheckEvery`, `lockOpTimeout`, `Dispatcher.TakeoverWait`.
+- **Question for owner:** —
+- **Owner response:**
+- **Status:** OPEN
+
+### 🟡 N-DEL-009 · Stress invariant I5 tolerates "delivered but failed" after unanswered tries · impact: medium
+- **Date / agent / session:** 2026-11-08 · delivery · builder-delivery fix round (subagent)
+- **Requirement(s):** R-SND-3 (I5)
+- **Context:** Under chaos faults a provider can record a message whose every answer was lost (hang after record, then retries exhausted), so DB says `failed` while the provider counted it. S2 hit this in 2 of 7 runs.
+- **Options:** A) Allow a provider-vs-DB gap up to the number of `failed` messages that had an ambiguous attempt; still fail if the DB has more `sent` than the provider. B) Fix the root cause: an expired or exhausted-but-ambiguous message gets one final idempotent replay (needs a separate lease-expiry counter, schema change).
+- **Decision taken:** A for now (the stress report prints when the allowance is used). B is the real fix; scheduled after CP2 if time allows.
+- **Cost to change later:** B ~1–2 h (migration + dispatcher + test).
+- **Question for owner:** —
 - **Owner response:**
 - **Status:** OPEN
