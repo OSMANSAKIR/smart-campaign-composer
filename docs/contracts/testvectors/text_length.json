@@ -1,0 +1,31 @@
+{
+  "description": "Shared character-counting vectors (R-CNT-1, R-CNT-2). Run by Go (internal/content) and Vitest (web). The input is `input` repeated `repeat` times (default 1). A character is a Unicode code point. Encoding is gsm7 when every code point is in the GSM 03.38 basic or extension table (Unicode GSM0338 mapping; extension characters cost 2 septets), otherwise ucs2. Segments: gsm7 1 if septets <= 160 else ceil(septets / 153); ucs2 1 if utf16_units <= 70 else ceil(utf16_units / 67); 0 for empty text. Encoding and segments are display-only (need.md N-PLAN-005).",
+  "vectors": [
+    { "name": "empty", "input": "", "runes": 0, "utf16_units": 0, "encoding": "gsm7", "gsm7_septets": 0, "segments": 0 },
+    { "name": "ascii_hello", "input": "Hello", "runes": 5, "utf16_units": 5, "encoding": "gsm7", "gsm7_septets": 5, "segments": 1 },
+    { "name": "ascii_160_single_segment", "input": "a", "repeat": 160, "runes": 160, "utf16_units": 160, "encoding": "gsm7", "gsm7_septets": 160, "segments": 1 },
+    { "name": "ascii_161_two_segments", "input": "a", "repeat": 161, "runes": 161, "utf16_units": 161, "encoding": "gsm7", "gsm7_septets": 161, "segments": 2 },
+    { "name": "ascii_306_two_segments", "input": "a", "repeat": 306, "runes": 306, "utf16_units": 306, "encoding": "gsm7", "gsm7_septets": 306, "segments": 2 },
+    { "name": "ascii_307_three_segments", "input": "a", "repeat": 307, "runes": 307, "utf16_units": 307, "encoding": "gsm7", "gsm7_septets": 307, "segments": 3 },
+    { "name": "newline_is_gsm", "input": "a\nb", "runes": 3, "utf16_units": 3, "encoding": "gsm7", "gsm7_septets": 3, "segments": 1 },
+    { "name": "gsm_umlauts_stay_gsm", "input": "Gözlük", "runes": 6, "utf16_units": 6, "encoding": "gsm7", "gsm7_septets": 6, "segments": 1 },
+    { "name": "precomposed_e_acute_is_gsm", "input": "café", "runes": 4, "utf16_units": 4, "encoding": "gsm7", "gsm7_septets": 4, "segments": 1 },
+    { "name": "gsm_extension_euro_costs_two", "input": "€5", "runes": 2, "utf16_units": 2, "encoding": "gsm7", "gsm7_septets": 3, "segments": 1 },
+    { "name": "gsm_extension_brackets", "input": "[x]", "runes": 3, "utf16_units": 3, "encoding": "gsm7", "gsm7_septets": 5, "segments": 1 },
+    { "name": "gsm_extension_80_fits_one", "input": "€", "repeat": 80, "runes": 80, "utf16_units": 80, "encoding": "gsm7", "gsm7_septets": 160, "segments": 1 },
+    { "name": "gsm_extension_81_needs_two", "input": "€", "repeat": 81, "runes": 81, "utf16_units": 81, "encoding": "gsm7", "gsm7_septets": 162, "segments": 2 },
+    { "name": "turkish_s_cedilla_forces_ucs2", "input": "Merhaba Ayşe", "runes": 12, "utf16_units": 12, "encoding": "ucs2", "gsm7_septets": null, "segments": 1 },
+    { "name": "turkish_dotted_capital_i", "input": "İstanbul", "runes": 8, "utf16_units": 8, "encoding": "ucs2", "gsm7_septets": null, "segments": 1 },
+    { "name": "turkish_dotless_i", "input": "ılık", "runes": 4, "utf16_units": 4, "encoding": "ucs2", "gsm7_septets": null, "segments": 1 },
+    { "name": "turkish_g_breve", "input": "Değerli", "runes": 7, "utf16_units": 7, "encoding": "ucs2", "gsm7_septets": null, "segments": 1 },
+    { "name": "ucs2_70_single_segment", "input": "ş", "repeat": 70, "runes": 70, "utf16_units": 70, "encoding": "ucs2", "gsm7_septets": null, "segments": 1 },
+    { "name": "ucs2_71_two_segments", "input": "ş", "repeat": 71, "runes": 71, "utf16_units": 71, "encoding": "ucs2", "gsm7_septets": null, "segments": 2 },
+    { "name": "ucs2_160_runes_three_segments", "input": "ş", "repeat": 160, "runes": 160, "utf16_units": 160, "encoding": "ucs2", "gsm7_septets": null, "segments": 3 },
+    { "name": "ucs2_161_runes", "input": "ş", "repeat": 161, "runes": 161, "utf16_units": 161, "encoding": "ucs2", "gsm7_septets": null, "segments": 3 },
+    { "name": "emoji_is_one_rune_two_utf16_units", "input": "👋", "runes": 1, "utf16_units": 2, "encoding": "ucs2", "gsm7_septets": null, "segments": 1 },
+    { "name": "emoji_with_skin_tone_is_two_runes", "input": "Hi 👋🏽", "runes": 5, "utf16_units": 7, "encoding": "ucs2", "gsm7_septets": null, "segments": 1 },
+    { "name": "emoji_80_is_160_runes_but_160_utf16_units", "input": "👋", "repeat": 80, "runes": 80, "utf16_units": 160, "encoding": "ucs2", "gsm7_septets": null, "segments": 3 },
+    { "name": "combining_acute_counts_two_runes", "input": "é", "runes": 2, "utf16_units": 2, "encoding": "ucs2", "gsm7_septets": null, "segments": 1 },
+    { "name": "rtl_override_counts_one_rune", "input": "‮abc", "runes": 4, "utf16_units": 4, "encoding": "ucs2", "gsm7_septets": null, "segments": 1 }
+  ]
+}

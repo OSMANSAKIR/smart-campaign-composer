@@ -1,0 +1,40 @@
+{
+  "description": "Shared personalization vectors (R-CNT-3). `parse` is run by Go (internal/content) and Vitest (web); `render` by Go. Grammar: a variable is `{{`, optional whitespace, a name without braces or whitespace, optional whitespace, `}}`. Allowed names: first_name, city. A well-formed variable with another name is `unknown_variable`. After removing well-formed variables, any remaining `{` or `}` is `malformed_variable` (braces are reserved for variables). `variables` lists allowed names in order of first appearance, without duplicates. Rendering is a single pass: substituted values are never re-scanned. Values are trimmed and stripped of control characters (Unicode Cc); a value that is then empty or longer than max_value_runes is replaced by the locale's fallback (need.md N-ORC-005). Format characters such as U+202E are kept.",
+  "allowed": ["first_name", "city"],
+  "max_value_runes": 20,
+  "fallbacks": {
+    "tr": { "first_name": "Değerli müşterimiz", "city": "Türkiye" },
+    "en": { "first_name": "Valued customer", "city": "Türkiye" }
+  },
+  "parse": [
+    { "name": "no_variables", "template": "Merhaba!", "variables": [], "errors": [] },
+    { "name": "first_name", "template": "Merhaba {{first_name}}!", "variables": ["first_name"], "errors": [] },
+    { "name": "inner_spaces", "template": "Merhaba {{ first_name }}!", "variables": ["first_name"], "errors": [] },
+    { "name": "both_in_order", "template": "{{city}} mağazasında {{first_name}} için %30", "variables": ["city", "first_name"], "errors": [] },
+    { "name": "repeated_listed_once", "template": "{{first_name}}, {{ first_name }}", "variables": ["first_name"], "errors": [] },
+    { "name": "unknown_name", "template": "Hi {{last_name}}", "variables": [], "errors": ["unknown_variable"] },
+    { "name": "case_sensitive", "template": "Hi {{FIRST_NAME}}", "variables": [], "errors": ["unknown_variable"] },
+    { "name": "unknown_and_known", "template": "{{first_name}} {{coupon}}", "variables": ["first_name"], "errors": ["unknown_variable"] },
+    { "name": "unclosed", "template": "Hi {{first_name", "variables": [], "errors": ["malformed_variable"] },
+    { "name": "unopened", "template": "Hi first_name}}", "variables": [], "errors": ["malformed_variable"] },
+    { "name": "empty_braces", "template": "Hi {{}}", "variables": [], "errors": ["malformed_variable"] },
+    { "name": "single_braces", "template": "Hi {first_name}", "variables": [], "errors": ["malformed_variable"] },
+    { "name": "triple_braces", "template": "Hi {{{first_name}}}", "variables": ["first_name"], "errors": ["malformed_variable"] },
+    { "name": "space_inside_name", "template": "Hi {{first name}}", "variables": [], "errors": ["malformed_variable"] },
+    { "name": "nested", "template": "{{ {{first_name}} }}", "variables": ["first_name"], "errors": ["malformed_variable"] }
+  ],
+  "render": [
+    { "name": "basic", "template": "Merhaba {{first_name}}!", "locale": "tr", "vars": { "first_name": "Ayşe", "city": "İzmir" }, "expected": "Merhaba Ayşe!" },
+    { "name": "inner_spaces", "template": "{{ city }} mağazası", "locale": "tr", "vars": { "first_name": "Ayşe", "city": "İzmir" }, "expected": "İzmir mağazası" },
+    { "name": "single_pass_value_not_rescanned", "template": "Hi {{first_name}}", "locale": "en", "vars": { "first_name": "{{city}}", "city": "Ankara" }, "expected": "Hi {{city}}" },
+    { "name": "html_is_not_escaped_in_plain_text", "template": "Hi {{first_name}}", "locale": "en", "vars": { "first_name": "<script>", "city": "Ankara" }, "expected": "Hi <script>" },
+    { "name": "empty_name_fallback_tr", "template": "Merhaba {{first_name}}", "locale": "tr", "vars": { "first_name": "", "city": "Bursa" }, "expected": "Merhaba Değerli müşterimiz" },
+    { "name": "empty_name_fallback_en", "template": "Hello {{first_name}}", "locale": "en", "vars": { "first_name": "", "city": "Bursa" }, "expected": "Hello Valued customer" },
+    { "name": "whitespace_name_fallback", "template": "Merhaba {{first_name}}", "locale": "tr", "vars": { "first_name": "   ", "city": "Bursa" }, "expected": "Merhaba Değerli müşterimiz" },
+    { "name": "name_exactly_20_runes_kept", "template": "Hi {{first_name}}", "locale": "en", "vars": { "first_name": "Abcdefghijklmnopqrşt", "city": "Bursa" }, "expected": "Hi Abcdefghijklmnopqrşt" },
+    { "name": "name_21_runes_fallback", "template": "Hi {{first_name}}", "locale": "en", "vars": { "first_name": "Abcdefghijklmnopqrstu", "city": "Bursa" }, "expected": "Hi Valued customer" },
+    { "name": "control_characters_stripped", "template": "Hi {{first_name}}", "locale": "en", "vars": { "first_name": "Ay\u0000şe\u0007", "city": "Bursa" }, "expected": "Hi Ayşe" },
+    { "name": "rtl_override_kept_literally", "template": "Hi {{first_name}}", "locale": "en", "vars": { "first_name": "‮ilA", "city": "Bursa" }, "expected": "Hi ‮ilA" },
+    { "name": "missing_var_uses_fallback", "template": "{{city}}", "locale": "tr", "vars": { "first_name": "Ali" }, "expected": "Türkiye" }
+  ]
+}
