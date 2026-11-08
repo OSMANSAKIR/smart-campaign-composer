@@ -236,6 +236,7 @@ func (d *Dispatcher) Run(ctx context.Context) error {
 		d.Log.Info("dispatcher: lock acquired", "worker_id", d.WorkerID)
 		err = d.active(ctx, conn)
 		d.holds.Store(false)
+		d.zeroDepth()
 		closeCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 2*time.Second)
 		_ = conn.Close(closeCtx) // closing the session releases the advisory lock
 		cancel()
@@ -288,6 +289,7 @@ func (d *Dispatcher) active(ctx context.Context, lock *pgx.Conn) error {
 	markLost := func(err error) {
 		lost = fmt.Errorf("lock connection: %w", err)
 		d.holds.Store(false)
+		d.zeroDepth()
 		endTerm()
 	}
 	lastProbe, lastReclaim := time.Now(), time.Time{}
@@ -640,6 +642,14 @@ func (d *Dispatcher) template(ctx context.Context, c Claimed) (Template, error) 
 	return t, nil
 }
 
+// zeroDepth resets this channel's queue_depth gauges. The gauge is exported by every worker replica and
+// summed or maxed by the dashboards, so a replica that lost the lock must not keep its last reading.
+func (d *Dispatcher) zeroDepth() {
+	for _, s := range depthStatuses {
+		d.Metrics.QueueDepth.WithLabelValues(string(d.Channel), s).Set(0)
+	}
+}
+
 // heartbeatLoop writes the worker_heartbeats row and samples queue_depth every HeartbeatEvery.
 func (d *Dispatcher) heartbeatLoop(ctx context.Context) {
 	t := time.NewTicker(d.HeartbeatEvery)
@@ -653,10 +663,12 @@ func (d *Dispatcher) heartbeatLoop(ctx context.Context) {
 		}
 		if holds {
 			if depth, err := d.queue.Depth(hctx); err == nil {
-				for _, s := range []string{StatusQueued, StatusRetry, StatusSending} {
+				for _, s := range depthStatuses {
 					d.Metrics.QueueDepth.WithLabelValues(ch, s).Set(float64(depth[s]))
 				}
 			}
+		} else {
+			d.zeroDepth() // only the lock holder reports depth; a replica must not export a stale reading
 		}
 		cancel()
 		select {

@@ -7,6 +7,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"smartcampaign/internal/config"
@@ -95,6 +96,40 @@ func terminateLockSession(t testing.TB, pool *pgxpool.Pool) int {
 		t.Fatal(err)
 	}
 	return killed
+}
+
+// A replica that lost the lock must not keep exporting the queue depth it last saw (R-OBS-2): the gauge is
+// shared by every replica's scrape.
+func TestLockLoss_QueueDepthGaugesAreZeroed_ROBS2(t *testing.T) {
+	pool := storetest.NewDB(t)
+	camp := newCampaign(t, pool)
+	enqueue(t, pool, camp, SMS, newUsers(t, pool, 8))
+	m := metrics.New()
+	d := fastDispatcher(pool, SMS, &scriptedClient{fn: func(_ int, r SendRequest) (SendResult, error) { return ok200(r) }})
+	d.Limiter, d.MaxInFlight, d.Metrics = &cancelCountingLimiter{}, 3, m
+	startDispatcher(t, d)
+	depth := func(status string) float64 { return valueOf(m.QueueDepth.WithLabelValues("sms", status)) }
+	eventually(t, 5*time.Second, "depth reported while holding the lock", func() bool {
+		return depth(StatusQueued) == 5 && depth(StatusSending) == 3
+	})
+
+	// Keep the lock away from d after its session dies, so the only thing that can zero the gauge is the loss.
+	terminateLockSession(t, pool)
+	thief, err := pgx.ConnectConfig(context.Background(), pool.Config().ConnConfig)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = thief.Close(context.Background()) })
+	eventually(t, 5*time.Second, "another session takes the lock", func() bool {
+		var got bool
+		return thief.QueryRow(context.Background(), `SELECT pg_try_advisory_lock($1)`, LockKey(SMS)).Scan(&got) == nil && got
+	})
+	eventually(t, 5*time.Second, "queue_depth zeroed", func() bool {
+		return depth(StatusQueued) == 0 && depth(StatusRetry) == 0 && depth(StatusSending) == 0
+	})
+	if d.HoldsLock() {
+		t.Fatal("dispatcher still claims to hold the lock")
+	}
 }
 
 // TestLockLoss_QueuedSendsAreReleasedUnsent_RSND2: when the lock session dies, sends queued behind the
