@@ -31,3 +31,4 @@ __pycache__/
 /api
 /worker
 /mockprovider
+.playwright-mcp/
