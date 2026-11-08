@@ -220,3 +220,17 @@ export type GenerateEvent =
   | { type: 'repairing'; data: { attempt: number; errors: Issue[] } }
   | { type: 'result'; data: { content: ContentVersion; llm: LlmMeta } }
   | { type: 'error'; data: ErrorBody }
+
+// Mock provider fault configuration (docs/contracts/provider-api.md §3), edited from the System page.
+export interface ProviderConfig {
+  latency_min_ms: number
+  latency_max_ms: number
+  spike_rate: number
+  spike_ms: number
+  error_rate: number
+  rate_429: number
+  retry_after_s: number
+  hang_rate: number
+  rate_limit: number
+  seed: number
+}

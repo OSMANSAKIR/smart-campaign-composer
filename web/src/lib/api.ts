@@ -12,6 +12,7 @@ import type {
   LlmMeta,
   MessageItem,
   Page,
+  ProviderConfig,
   SystemStatus,
   ValidateRequest,
   ValidationReport,
@@ -114,6 +115,11 @@ export const api = {
     ),
 
   systemStatus: (signal?: AbortSignal) => request<SystemStatus>('GET', '/api/system/status', { signal }),
+
+  providerConfig: (signal?: AbortSignal) => request<ProviderConfig>('GET', '/api/system/provider-config', { signal }),
+
+  saveProviderConfig: (patch: Partial<ProviderConfig>) =>
+    request<ProviderConfig>('PUT', '/api/system/provider-config', { body: patch }),
 }
 
 // crypto.randomUUID exists only in secure contexts (https, localhost); over plain http on another host

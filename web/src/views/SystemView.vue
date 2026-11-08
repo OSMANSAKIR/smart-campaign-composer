@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { onBeforeUnmount, onMounted, ref } from 'vue'
 import ErrorNotice from '../components/ErrorNotice.vue'
+import ProviderFaults from '../components/ProviderFaults.vue'
 import { api } from '../lib/api'
 import { describeError, type UserMessage } from '../lib/errors'
 import { formatClock } from '../lib/format'
@@ -110,6 +111,7 @@ const WORD: Record<string, string> = {
           </dl>
         </section>
       </div>
+      <ProviderFaults />
     </div>
   </div>
 </template>

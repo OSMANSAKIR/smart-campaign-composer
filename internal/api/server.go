@@ -84,6 +84,8 @@ func (s *Server) Handler() http.Handler {
 		writeJSON(w, http.StatusOK, catalog.Doc())
 	})
 	mux.HandleFunc("GET /api/system/status", s.systemStatus)
+	mux.HandleFunc("GET /api/system/provider-config", s.getProviderConfig)
+	mux.HandleFunc("PUT /api/system/provider-config", s.putProviderConfig)
 
 	mux.HandleFunc("POST /api/campaigns", s.createCampaign)
 	mux.HandleFunc("GET /api/campaigns", s.listCampaigns)

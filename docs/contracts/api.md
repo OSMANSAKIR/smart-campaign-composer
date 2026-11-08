@@ -127,6 +127,8 @@ Terminal: `sent`, `failed`, `skipped_no_consent`.
 | `GET /api/campaigns/{id}/messages` | `?status=&channel=&limit=50&cursor=` (limit 1..500) | 200 `{ items, next_cursor }` | Items: `id, user_id, channel, status, attempts, last_error, sent_at, updated_at` |
 | `GET /api/campaigns/{id}/events` | — | 200 `text/event-stream` (§7) | Live progress |
 | `GET /api/system/status` | — | 200 status | §8 |
+| `GET /api/system/provider-config` | — | 200 the mock provider's fault config (provider-api.md §3) | 502 `provider_unavailable` when the provider does not answer |
+| `PUT /api/system/provider-config` | any subset of the config fields | 200 merged config | Forwarded to the provider's `/admin/config`; unknown fields or bad values → 400 `validation_failed` (need.md N-WEB-003) |
 | `GET /healthz`, `GET /readyz`, `GET /metrics` | — | | See `observability.md` |
 
 ## 5. Generation stream (`POST …/content/generate`)
