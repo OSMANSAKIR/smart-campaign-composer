@@ -1,9 +1,9 @@
 # Session 76094f6f-4357-43bc-9bab-c4747eda27f6
 
 - Source: `76094f6f-4357-43bc-9bab-c4747eda27f6.jsonl`
-- Time: 2026-11-07T23:38:45.181Z → 2026-11-08T22:43:53.564Z
+- Time: 2026-11-07T23:38:45.181Z → 2026-11-08T23:12:46.445Z
 - Models: claude-opus-5-5
-- Tokens: input_tokens 1,836, output_tokens 1,357,664, cache_read_input_tokens 214,483,271, cache_creation_input_tokens 2,577,110
+- Tokens: input_tokens 2,274, output_tokens 1,521,793, cache_read_input_tokens 324,869,124, cache_creation_input_tokens 2,839,037
 
 ---
 ### User
@@ -15187,4 +15187,3209 @@ python3 -I - "$in" "$out" "$terms" "$HOME" <<'PY'
 import sys
 from pathlib
 … [5933 more characters truncated]
+```
+
+### Assistant
+
+P0 first: harvesting the transcripts, converting them to Markdown, and sanitizing.
+
+**Tool call · Bash**
+
+```json
+{
+  "command": "scripts/harvest-sessions.sh && find ai-sessions/_raw/harvest -name '*.jsonl' | sed 's|ai-sessions/_raw/harvest/||' | awk -F/ '{print $1\" | \"$0}' | cut -c1-160 | head -40; du -sh ai-sessions/_raw/harvest",
+  "description": "Harvest project transcripts into gitignored raw dir"
+}
+```
+
+**Tool result**
+
+```
+harvest: copied 10 transcript files from 1 project dir(s) into ai-sessions/_raw/harvest/
+-Users-owner-projeler-smart-campaign-composer | -Users-owner-projeler-smart-campaign-composer/76094f6f-4357-43bc-9bab-c4747eda27f6.jsonl
+-Users-owner-projeler-smart-campaign-composer | -Users-owner-projeler-smart-campaign-composer/76094f6f-4357-43bc-9bab-c4747eda27f6/subagents/agent-a585902e0e3f0
+-Users-owner-projeler-smart-campaign-composer | -Users-owner-projeler-smart-campaign-composer/76094f6f-4357-43bc-9bab-c4747eda27f6/subagents/agent-a741bfb01c996
+-Users-owner-projeler-smart-campaign-composer | -Users-owner-projeler-smart-campaign-composer/76094f6f-4357-43bc-9bab-c4747eda27f6/subagents/agent-a08ab20eac451
+-Users-owner-projeler-smart-campaign-composer | -Users-owner-projeler-smart-campaign-composer/76094f6f-4357-43bc-9bab-c4747eda27f6/subagents/agent-a7bc525dfe12c
+-Users-owner-projeler-smart-campaign-composer | -Users-owner-projeler-smart-campaign-composer/76094f6f-4357-43bc-9bab-c4747eda27f6/subagents/agent-a449e7a5dade9
+-Users-owner-projeler-smart-campaign-composer | -Users-owner-projeler-smart-campaign-composer/76094f6f-4357-43bc-9bab-c4747eda27f6/subagents/agent-af8b94c725758
+-Users-owner-projeler-smart-campaign-composer | -Users-owner-projeler-smart-campaign-composer/76094f6f-4357-43bc-9bab-c4747eda27f6/subagents/agent-a6ef03d91c91b
+-Users-owner-projeler-smart-campaign-composer | -Users-owner-projeler-smart-campaign-composer/76094f6f-4357-43bc-9bab-c4747eda27f6/subagents/agent-a744dd708edec
+-Users-owner-projeler-smart-campaign-composer | -Users-owner-projeler-smart-campaign-composer/76094f6f-4357-43bc-9bab-c4747eda27f6/subagents/agent-a8172f7da6be6
+ 24M	ai-sessions/_raw/harvest
+```
+
+**Tool call · Bash**
+
+```json
+{
+  "command": "rm -rf ai-sessions/_raw/md && python3 -I scripts/transcript2md.py ai-sessions/_raw/harvest ai-sessions/_raw/md 2>&1 | tail -3; find ai-sessions/_raw/md -name '*.md' -exec du -h {} + | sort -h | tail -12; ls ai-sessions/_raw/harvest/*/76094f6f*/subagents/ | grep json$ | head; ",
+  "description": "Convert transcripts to Markdown and list sizes"
+}
+```
+
+**Tool result**
+
+```
+transcript2md: converted 10 file(s) into ai-sessions/_raw/md
+ 64K	ai-sessions/_raw/md/-Users-owner-projeler-smart-campaign-composer/76094f6f-4357-43bc-9bab-c4747eda27f6/subagents/agent-a744dd708edecbffb.md
+ 68K	ai-sessions/_raw/md/-Users-owner-projeler-smart-campaign-composer/76094f6f-4357-43bc-9bab-c4747eda27f6/subagents/agent-a6ef03d91c91b5074.md
+104K	ai-sessions/_raw/md/-Users-owner-projeler-smart-campaign-composer/76094f6f-4357-43bc-9bab-c4747eda27f6/subagents/agent-a7bc525dfe12c3fb3.md
+112K	ai-sessions/_raw/md/-Users-owner-projeler-smart-campaign-composer/76094f6f-4357-43bc-9bab-c4747eda27f6/subagents/agent-a8172f7da6be6e56c.md
+116K	ai-sessions/_raw/md/-Users-owner-projeler-smart-campaign-composer/76094f6f-4357-43bc-9bab-c4747eda27f6/subagents/agent-a449e7a5dade9eee6.md
+128K	ai-sessions/_raw/md/-Users-owner-projeler-smart-campaign-composer/76094f6f-4357-43bc-9bab-c4747eda27f6/subagents/agent-a741bfb01c996775a.md
+160K	ai-sessions/_raw/md/-Users-owner-projeler-smart-campaign-composer/76094f6f-4357-43bc-9bab-c4747eda27f6/subagents/agent-a08ab20eac4510a3e.md
+184K	ai-sessions/_raw/md/-Users-owner-projeler-smart-campaign-composer/76094f6f-4357-43bc-9bab-c4747eda27f6/subagents/agent-af8b94c725758286e.md
+240K	ai-sessions/_raw/md/-Users-owner-projeler-smart-campaign-composer/76094f6f-4357-43bc-9bab-c4747eda27f6/subagents/agent-a585902e0e3f036be.md
+836K	ai-sessions/_raw/md/-Users-owner-projeler-smart-campaign-composer/76094f6f-4357-43bc-9bab-c4747eda27f6.md
+agent-a08ab20eac4510a3e.meta.json
+agent-a449e7a5dade9eee6.meta.json
+agent-a585902e0e3f036be.meta.json
+agent-a6ef03d91c91b5074.meta.json
+agent-a741bfb01c996775a.meta.json
+agent-a744dd708edecbffb.meta.json
+agent-a7bc525dfe12c3fb3.meta.json
+agent-a8172f7da6be6e56c.meta.json
+agent-af8b94c725758286e.meta.json
+```
+
+**Tool call · Bash**
+
+```json
+{
+  "command": "for f in ai-sessions/_raw/harvest/*/76094f6f*/subagents/*.meta.json; do echo \"$(basename $f .meta.json): $(python3 -c \"import json,sys;d=json.load(open('$f'));print(d.get('description') or d)\" | cut -c1-100)\"; done",
+  "description": "Map subagent ids to their descriptions"
+}
+```
+
+**Tool result**
+
+```
+agent-a08ab20eac4510a3e: W1 builder-delivery
+agent-a449e7a5dade9eee6: CP3 spec audit of requirements
+agent-a585902e0e3f036be: W1 builder-llm
+agent-a6ef03d91c91b5074: CP1 reliability review delivery
+agent-a741bfb01c996775a: W1 builder-web
+agent-a744dd708edecbffb: CP1 reliability review delivery
+agent-a7bc525dfe12c3fb3: CP1 llm red team
+agent-a8172f7da6be6e56c: LLM fix round (red-team findings)
+agent-af8b94c725758286e: Delivery fix round (rate bound)
+```
+
+**Tool call · Bash**
+
+```json
+{
+  "command": "for a in a744dd708edecbffb a6ef03d91c91b5074; do f=$(ls ai-sessions/_raw/harvest/*/76094f6f*/subagents/agent-$a.jsonl); echo \"$a $(head -1 $f | python3 -c 'import json,sys;print(json.loads(sys.stdin.read()).get(\"timestamp\"))') $(wc -l < $f)\"; done",
+  "description": "Order the two reliability review transcripts"
+}
+```
+
+**Tool result**
+
+```
+a744dd708edecbffb 2026-11-08T07:40:52.160Z      121
+a6ef03d91c91b5074 2026-11-08T11:26:51.500Z      130
+```
+
+**Tool call · Bash**
+
+```json
+{
+  "command": "R=ai-sessions/_raw; M=$R/md/-Users-owner-projeler-smart-campaign-composer/76094f6f-4357-43bc-9bab-c4747eda27f6; rm -rf $R/named && mkdir -p $R/named/sessions $R/named/subagents && cp $M.md $R/named/sessions/01-orchestrator.md && while read id name; do cp $M/subagents/agent-$id.md $R/named/subagents/$name.md; done <<'EOF'\na585902e0e3f036be 02-builder-llm\na08ab20eac4510a3e 03-builder-delivery\na741bfb01c996775a 04-builder-web\na744dd708edecbffb 05-review-reliability-cp1-stopped\na6ef03d91c91b5074 05-review-reliability-cp1\na7bc525dfe12c3fb3 05-review-llm-red-team-cp1\naf8b94c725758286e 06-fix-delivery-rate-bound\na8172f7da6be6e56c 06-fix-llm-red-team\na449e7a5dade9eee6 07-review-spec-auditor-cp3\nEOF\nscripts/sanitize-sessions.sh $R/named ai-sessions 2>&1 | tail -3; ls ai-sessions/sessions ai-sessions/subagents",
+  "description": "Name transcripts and sanitize into ai-sessions"
+}
+```
+
+**Tool result**
+
+```
+sanitize: wrote 10 file(s) to ai-sessions
+[90m1:44AM[0m [32mINF[0m [1mscanned ~30945554 bytes (30.95 MB) in 7.45s[0m
+[90m1:44AM[0m [33mWRN[0m [1mleaks found: 77[0m
+ai-sessions/sessions:
+01-orchestrator.md
+
+ai-sessions/subagents:
+02-builder-llm.md
+03-builder-delivery.md
+04-builder-web.md
+05-review-llm-red-team-cp1.md
+05-review-reliability-cp1-stopped.md
+05-review-reliability-cp1.md
+06-fix-delivery-rate-bound.md
+06-fix-llm-red-team.md
+07-review-spec-auditor-cp3.md
+```
+
+### Assistant
+
+gitleaks scanned the whole `ai-sessions/` folder, including the raw gitignored copies. Re-scanning only the sanitized outputs.
+
+**Tool call · Bash**
+
+```json
+{
+  "command": "for d in ai-sessions/sessions ai-sessions/subagents; do gitleaks dir --config .gitleaks.toml --no-banner --redact --report-format json --report-path /private/tmp/claude-501/-Users-owner-projeler-smart-campaign-composer/76094f6f-4357-43bc-9bab-c4747eda27f6/scratchpad/gl-$(basename $d).json $d 2>&1 | tail -1; python3 -c \"\nimport json,collections;d=json.load(open('/private/tmp/claude-501/-Users-owner-projeler-smart-campaign-composer/76094f6f-4357-43bc-9bab-c4747eda27f6/scratchpad/gl-$(basename $d).json'))\nprint(collections.Counter((x['RuleID'],x['File'].split('/')[-1]) for x in d))\"; done",
+  "description": "Gitleaks scan of sanitized exports only"
+}
+```
+
+**Tool result**
+
+```
+[90m1:44AM[0m [32mINF[0m [1mno leaks found[0m
+Counter()
+[90m1:44AM[0m [33mWRN[0m [1mleaks found: 1[0m
+Counter({('generic-api-key', '03-builder-delivery.md'): 1})
+```
+
+**Tool call · Bash**
+
+```json
+{
+  "command": "python3 -c \"\nimport json;d=json.load(open('/private/tmp/claude-501/-Users-owner-projeler-smart-campaign-composer/76094f6f-4357-43bc-9bab-c4747eda27f6/scratchpad/gl-subagents.json'))\nfor x in d: print(x['StartLine'], x['RuleID'], x['Entropy'])\"; n=$(python3 -c \"\nimport json;d=json.load(open('/private/tmp/claude-501/-Users-owner-projeler-smart-campaign-composer/76094f6f-4357-43bc-9bab-c4747eda27f6/scratchpad/gl-subagents.json'));print(d[0]['StartLine'])\"); sed -n \"${n}p\" ai-sessions/subagents/03-builder-delivery.md | sed -E 's/([A-Za-z0-9_-]{6})[A-Za-z0-9_-]{10,}/\\1…/g' | cut -c1-300",
+  "description": "Inspect the flagged line with long tokens masked"
+}
+```
+
+**Tool result**
+
+```
+1481 generic-api-key 3.708003
+    dispatcher_test.go:270: plain-text part must keep the raw value, subject/to must be set: {Channel:email IdempotencyKey:b94010… To:ayse2@example.com Text:Merhaba Değerli müşterimiz,
+```
+
+**Tool call · Bash**
+
+```json
+{
+  "command": "python3 -c \"\nimport json,re;d=json.load(open('/private/tmp/claude-501/-Users-owner-projeler-smart-campaign-composer/76094f6f-4357-43bc-9bab-c4747eda27f6/scratchpad/gl-subagents.json'))\nm=d[0]['Match']; print(re.sub(r'[0-9a-f]','x',m))\"",
+  "description": "Show the shape of the flagged match"
+}
+```
+
+**Tool result**
+
+```
+IxxmpotxnxyKxy:REDACTED
+```
+
+**Tool call · Bash**
+
+```json
+{
+  "command": "cat >> .gitleaks.toml <<'EOF'\n\n[[allowlists]]\ndescription = \"a message id (UUID) printed as IdempotencyKey in Go test output inside session exports\"\ntargetRules = [\"generic-api-key\"]\nregexTarget = \"match\"\nregexes = ['''^IdempotencyKey:[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$''']\nEOF\ngitleaks dir --config .gitleaks.toml --no-banner --redact ai-sessions/subagents 2>&1 | tail -1; d=/private/tmp/claude-501/-Users-owner-projeler-smart-campaign-composer/76094f6f-4357-43bc-9bab-c4747eda27f6/scratchpad/gl; printf 'IdempotencyKey: \"sk_live_9fQ2Lm7Xv3Rt8Wk1Pb6Nc4Hy\"\\n' > $d/y.txt; gitleaks dir --config .gitleaks.toml --no-banner --redact $d/y.txt 2>&1 | tail -1",
+  "description": "Allowlist UUID idempotency keys; verify real-looking key still caught"
+}
+```
+
+**Tool result**
+
+```
+[90m1:45AM[0m [33mWRN[0m [1mleaks found: 1[0m
+[90m1:45AM[0m [33mWRN[0m [1mleaks found: 1[0m
+```
+
+**Tool call · Bash**
+
+```json
+{
+  "command": "S=/private/tmp/claude-501/-Users-owner-projeler-smart-campaign-composer/76094f6f-4357-43bc-9bab-c4747eda27f6/scratchpad; gitleaks dir --config .gitleaks.toml --no-banner --report-format json --report-path $S/gl-raw.json ai-sessions/subagents >/dev/null 2>&1; python3 -c \"\nimport json,re;d=json.load(open('$S/gl-raw.json'))\nm=d[0]['Match']; print(repr(re.sub(r'[0-9a-f]','h',re.sub(r'[g-zA-Z]','a',m[15:])))[:120], len(m))\"; rm $S/gl-raw.json",
+  "description": "Show the match's character classes without revealing it"
+}
+```
+
+**Tool result**
+
+```
+'hhhhhhhh-hhhh-hhhh-hhhh-hhhhhhhhhhhh ' 52
+```
+
+### Assistant
+
+Trailing space in the match. Adjusting the pattern.
+
+**Tool call · Bash**
+
+```json
+{
+  "command": "sed -i '' \"s/\\^IdempotencyKey:\\[0-9a-f\\]{8}-\\[0-9a-f\\]{4}-\\[0-9a-f\\]{4}-\\[0-9a-f\\]{4}-\\[0-9a-f\\]{12}\\\\$/^IdempotencyKey:[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\\\\\\\\s?\\$/\" .gitleaks.toml && tail -2 .gitleaks.toml && gitleaks dir --config .gitleaks.toml --no-banner --redact ai-sessions/subagents 2>&1 | tail -1; gitleaks dir --config .gitleaks.toml --no-banner --redact /private/tmp/claude-501/-Users-owner-projeler-smart-campaign-composer/76094f6f-4357-43bc-9bab-c4747eda27f6/scratchpad/gl/y.txt 2>&1 | tail -1",
+  "description": "Allow optional trailing whitespace and rescan"
+}
+```
+
+**Tool result**
+
+```
+regexTarget = "match"
+regexes = ['''^IdempotencyKey:[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\s?$''']
+[90m1:45AM[0m [32mINF[0m [1mno leaks found[0m
+[90m1:45AM[0m [33mWRN[0m [1mleaks found: 1[0m
+```
+
+### Assistant
+
+Now a personal-data scan of the exports, without printing any matches.
+
+**Tool call · Bash**
+
+```json
+{
+  "command": "f=\"ai-sessions/sessions ai-sessions/subagents\"; echo \"home path: $(grep -rlF \"$HOME\" $f | wc -l)\"; echo \"/Users/: $(grep -rl '/Users/' $f | wc -l)\"; echo \"gmail: $(grep -rli 'gmail' $f | wc -l)\"; n=0; while IFS= read -r t; do t=\"${t%%=>*}\"; t=\"$(echo \"$t\"|xargs)\"; [ -z \"$t\" ] || [ \"${t:0:1}\" = \"#\" ] && continue; c=$(grep -rliF -- \"$t\" $f | wc -l); [ \"$c\" -gt 0 ] && n=$((n+1)); done < .sanitize-terms; echo \"sanitize terms still present: $n\"; grep -rhoE '[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\\.[a-z]{2,}' $f | sed -E 's/^[^@]+//' | sort | uniq -c | sort -rn | head",
+  "description": "Scan exports for personal terms, paths and email domains"
+}
+```
+
+**Tool result**
+
+```
+ugrep: warning: ai-sessions/sessions ai-sessions/subagents: No such file or directory
+home path:        0
+ugrep: warning: ai-sessions/sessions ai-sessions/subagents: No such file or directory
+/Users/:        0
+ugrep: warning: ai-sessions/sessions ai-sessions/subagents: No such file or directory
+gmail:        0
+ugrep: warning: ai-sessions/sessions ai-sessions/subagents: No such file or directory
+ugrep: warning: ai-sessions/sessions ai-sessions/subagents: No such file or directory
+ugrep: warning: ai-sessions/sessions ai-sessions/subagents: No such file or directory
+ugrep: warning: ai-sessions/sessions ai-sessions/subagents: No such file or directory
+ugrep: warning: ai-sessions/sessions ai-sessions/subagents: No such file or directory
+ugrep: warning: ai-sessions/sessions ai-sessions/subagents: No such file or directory
+sanitize terms still present: 0
+ugrep: warning: ai-sessions/sessions ai-sessions/subagents: No such file or directory
+```
+
+**Tool call · Bash**
+
+```json
+{
+  "command": "D=(ai-sessions/sessions ai-sessions/subagents); echo \"home path: $(grep -rlF \"$HOME\" \"${D[@]}\" | wc -l)\"; echo \"/Users/: $(grep -rl '/Users/' \"${D[@]}\" | wc -l)\"; echo \"gmail: $(grep -rli 'gmail' \"${D[@]}\" | wc -l)\"; n=0; while IFS= read -r t; do t=\"${t%%=>*}\"; t=\"$(echo \"$t\"|xargs)\"; if [ -z \"$t\" ] || [ \"${t:0:1}\" = \"#\" ]; then continue; fi; c=$(grep -rliF -- \"$t\" \"${D[@]}\" | wc -l); [ \"$c\" -gt 0 ] && n=$((n+1)); done < .sanitize-terms; echo \"sanitize terms still present: $n\"; grep -rhoE '[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\\.[a-z]{2,}' \"${D[@]}\" | sed -E 's/^[^@]+//' | sort | uniq -c | sort -rn | head",
+  "description": "Rescan exports for personal data"
+}
+```
+
+**Tool result**
+
+```
+home path:        0
+/Users/:        2
+gmail:        0
+sanitize terms still present: 0
+ 107 @anthropic.com
+  11 @example.com
+   9 @b.co
+```
+
+**Tool call · Bash**
+
+```json
+{
+  "command": "grep -rnoE '/Users/[^ \"`)]{0,40}' ai-sessions/sessions ai-sessions/subagents | sed -E 's/(\\/Users\\/)[^\\/]+/\\1<user>/' | head",
+  "description": "Show /Users/ occurrences with username masked"
+}
+```
+
+**Tool result**
+
+```
+ai-sessions/sessions/01-orchestrator.md:556:/Users/<user>
+ai-sessions/sessions/01-orchestrator.md:13238:/Users/
+ai-sessions/sessions/01-orchestrator.md:13276:/Users/<user>
+ai-sessions/subagents/02-builder-llm.md:3129:/Users/\
+```
+
+**Tool call · Bash**
+
+```json
+{
+  "command": "for l in 556 13238 13276; do sed -n \"${l}p\" ai-sessions/sessions/01-orchestrator.md | grep -oE '.{0,60}/Users/.{0,30}' | sed -E 's/(\\/Users\\/)[A-Za-z0-9._-]+/\\1<user>/g'; done; sed -n 3129p ai-sessions/subagents/02-builder-llm.md | grep -oE '.{0,60}/Users/.{0,30}'",
+  "description": "Inspect context of remaining /Users/ mentions"
+}
+```
+
+**Tool result**
+
+```
+Exit code 2
+ugrep: error: error at position 83
+xbf][\x80-\xbf]*){0,30}
+                       \___exceeds complexity limits
+
+
+ugrep: error: error at position 83
+xbf][\x80-\xbf]*){0,30}
+                       \___exceeds complexity limits
+
+
+ugrep: error: error at position 83
+xbf][\x80-\xbf]*){0,30}
+                       \___exceeds complexity limits
+
+
+ugrep: error: error at position 83
+xbf][\x80-\xbf]*){0,30}
+                       \___exceeds complexity limits
+```
+
+**Tool call · Bash**
+
+```json
+{
+  "command": "python3 -I - <<'EOF'\nimport re\nfor f,ls in ((\"ai-sessions/sessions/01-orchestrator.md\",(556,13238,13276)),(\"ai-sessions/subagents/02-builder-llm.md\",(3129,))):\n    lines=open(f,encoding='utf-8').read().split('\\n')\n    for l in ls:\n        s=lines[l-1]; i=s.find('/Users/')\n        print(f.split('/')[-1], l, re.sub(r'/Users/[A-Za-z0-9._-]+', '/Users/<user>', s[max(0,i-60):i+40]))\nEOF",
+  "description": "Show context of /Users/ mentions with python"
+}
+```
+
+**Tool result**
+
+```
+01-orchestrator.md 556  server {{.Server.Version}}' && grep -n -i -E '<OWNER>|<OWNER>|/Users/' KICKOFF.md need.md .claude/sett
+01-orchestrator.md 13238 	for _, bad := range []string{"/Users/", "/home/", "@"} {
+01-orchestrator.md 13276 out.append(s)\ntext = '\\n'.join(out) + '\\n'\nfor bad in ['/Users/', '/home/', '/private/', '/var/f
+02-builder-llm.md 3129 ta/probe_segment.jsonl\")\n\tfor _, bad := range []string{\"/Users/\", \"/home/\", \"@\"} {\n\t\tif
+```
+
+### Assistant
+
+Line 556 contains the owner's first name inside a grep command. Checking how widely the name appears in the exports (count only).
+
+**Tool call · Bash**
+
+```json
+{
+  "command": "for t in <OWNER> <OWNER>; do echo \"$t: $(grep -rioF $t ai-sessions/sessions ai-sessions/subagents | wc -l) occurrences in $(grep -rliF $t ai-sessions/sessions ai-sessions/subagents | wc -l) files\"; done; grep -c . .sanitize-terms",
+  "description": "Count first-name occurrences in exports"
+}
+```
+
+**Tool result**
+
+```
+<OWNER>:       39 occurrences in        3 files
+<OWNER>:        1 occurrences in        1 files
+9
+```
+
+**Tool call · Bash**
+
+```json
+{
+  "command": "git grep -il -e <OWNER> -e <OWNER> -- . ':!ai-sessions/sessions' ':!ai-sessions/subagents' | head; echo \"---\"; grep -ciE '^\\s*<OWNER>\\s*(=>|$)|^\\s*<OWNER>' .sanitize-terms",
+  "description": "Check tracked files and terms file for the first name"
+}
+```
+
+**Tool result**
+
+```
+---
+1
+```
+
+**Tool call · Bash**
+
+```json
+{
+  "command": "for t in <OWNER> <OWNER>; do grep -qiE \"^\\s*$t\\s*(=>|$)\" .sanitize-terms || echo \"$t => <OWNER>\" >> .sanitize-terms; done; rm -rf ai-sessions/sessions ai-sessions/subagents && scripts/sanitize-sessions.sh ai-sessions/_raw/named ai-sessions >/dev/null 2>&1; for t in <OWNER> <OWNER>; do echo \"$t: $(grep -rioF $t ai-sessions/sessions ai-sessions/subagents | wc -l)\"; done; gitleaks dir --config .gitleaks.toml --no-banner --redact ai-sessions/sessions 2>&1 | tail -1; gitleaks dir --config .gitleaks.toml --no-banner --redact ai-sessions/subagents 2>&1 | tail -1",
+  "description": "Add first-name terms to sanitize list and re-sanitize"
+}
+```
+
+**Tool result**
+
+```
+<OWNER>:        0
+<OWNER>:        0
+[90m1:46AM[0m [32mINF[0m [1mno leaks found[0m
+[90m1:46AM[0m [32mINF[0m [1mno leaks found[0m
+```
+
+### Assistant
+
+Exports are clean. Adding the ccusage snapshots.
+
+**Tool call · Bash**
+
+```json
+{
+  "command": "ccusage daily --json --since 20261107 > ai-sessions/_raw/ccusage-daily.json 2>/dev/null; ccusage session --json > ai-sessions/_raw/ccusage-session.json 2>/dev/null; python3 -I - <<'EOF'\nimport json,os\nhome=os.path.expanduser('~'); enc=home.replace('/','-')\nd=json.load(open('ai-sessions/_raw/ccusage-daily.json'))\nopen('ai-sessions/usage/ccusage-daily-2026-11-09.json','w').write(json.dumps(d,indent=1))\ns=json.load(open('ai-sessions/_raw/ccusage-session.json'))\nkeep=[x for x in s.get('sessions',[]) if 'smart-campaign-composer' in json.dumps(x)]\ntxt=json.dumps({\"sessions\":keep,\"note\":\"ccusage session --json, filtered to this project; API-equivalent estimates on a subscription\"},indent=1)\ntxt=txt.replace(enc,'~').replace(home,'~')\nopen('ai-sessions/usage/ccusage-session-2026-11-09.json','w').write(txt)\nprint(len(keep),'project sessions;', [k for k in d.keys()])\nEOF\ngrep -ciE '<OWNER>|<OWNER>|/Users/' ai-sessions/usage/*.json",
+  "description": "Write sanitized ccusage snapshots"
+}
+```
+
+**Tool result**
+
+```
+0 project sessions; ['daily', 'totals']
+ai-sessions/usage/ccusage-daily-2026-11-09.json:0
+ai-sessions/usage/ccusage-session-2026-11-09.json:0
+```
+
+**Tool call · Bash**
+
+```json
+{
+  "command": "python3 -c \"\nimport json;s=json.load(open('ai-sessions/_raw/ccusage-session.json'));print(type(s), list(s.keys()) if isinstance(s,dict) else len(s)); x=s['sessions'][0] if isinstance(s,dict) else s[0]; print(list(x.keys())); print([ (y.get('sessionId','')[-60:]) for y in (s['sessions'] if isinstance(s,dict) else s)][:8])\"",
+  "description": "Inspect ccusage session JSON structure"
+}
+```
+
+**Tool result**
+
+```
+Exit code 1
+Traceback (most recent call last):
+  File "<string>", line 2, in <module>
+    import json;s=json.load(open('ai-sessions/_raw/ccusage-session.json'));print(type(s), list(s.keys()) if isinstance(s,dict) else len(s)); x=s['sessions'][0] if isinstance(s,dict) else s[0]; print(list(x.keys())); print([ (y.get('sessionId','')[-60:]) for y in (s['sessions'] if isinstance(s,dict) else s)][:8])
+                                                                                                                                               ~^^^^^^^^^^^^
+KeyError: 'sessions'
+<class 'dict'> ['session', 'totals']
+```
+
+**Tool call · Bash**
+
+```json
+{
+  "command": "python3 -I - <<'EOF'\nimport json,os\nhome=os.path.expanduser('~'); enc=home.replace('/','-')\ns=json.load(open('ai-sessions/_raw/ccusage-session.json'))\nrows=s['session']; print(list(rows[0].keys()))\nkeep=[x for x in rows if 'smart-campaign-composer' in json.dumps(x)]\ntxt=json.dumps({\"session\":keep,\"note\":\"ccusage session --json filtered to this project (API-equivalent estimates on a subscription)\"},indent=1)\ntxt=txt.replace(enc,'~').replace(home,'~')\nopen('ai-sessions/usage/ccusage-session-2026-11-09.json','w').write(txt)\nprint(len(keep),'project sessions')\nEOF\ngrep -ciE '<OWNER>|<OWNER>|/Users/' ai-sessions/usage/*.json",
+  "description": "Filter session usage to this project and sanitize"
+}
+```
+
+**Tool result**
+
+```
+['agent', 'cacheCreationTokens', 'cacheReadTokens', 'inputTokens', 'metadata', 'modelBreakdowns', 'modelsUsed', 'outputTokens', 'period', 'totalCost', 'totalTokens']
+0 project sessions
+ai-sessions/usage/ccusage-daily-2026-11-09.json:0
+ai-sessions/usage/ccusage-session-2026-11-09.json:0
+```
+
+**Tool call · Bash**
+
+```json
+{
+  "command": "python3 -I -c \"\nimport json,re;s=json.load(open('ai-sessions/_raw/ccusage-session.json'))\nfor r in s['session'][:40]:\n  m=json.dumps(r.get('metadata'))[:160]; print(re.sub(r'osma+n','<o>',m,flags=re.I), r.get('totalCost'))\" | head -40",
+  "description": "Look at session metadata to find this project's rows"
+}
+```
+
+**Tool result**
+
+```
+{"lastActivity": "2026-11-08T22:46:06.989Z"} 69.84442830000008
+{"lastActivity": "2026-07-13T16:48:14.826Z"} 24.996584999999996
+{"lastActivity": "2026-05-25T00:16:55.578Z"} 20.85621250000001
+{"lastActivity": "2026-11-08T22:34:36.554Z"} 13.797375500000001
+{"lastActivity": "2026-10-13T08:00:44.844Z"} 0.3600565
+```
+
+**Tool call · Bash**
+
+```json
+{
+  "command": "python3 -I - <<'EOF'\nimport json,os\ns=json.load(open('ai-sessions/_raw/ccusage-session.json'))\nkeep=[x for x in s['session'] if (x.get('metadata') or {}).get('lastActivity','')>='2026-11-07']\ntxt=json.dumps({\"session\":keep,\"note\":\"ccusage session --json, rows active on 2026-11-07 or later (this project's period; ccusage does not name projects in this mode). API-equivalent estimates on a subscription.\"},indent=1)\nhome=os.path.expanduser('~'); txt=txt.replace(home.replace('/','-'),'~').replace(home,'~')\nopen('ai-sessions/usage/ccusage-session-2026-11-09.json','w').write(txt)\nprint(len(keep), [k.get('agent') for k in keep])\nEOF\ngrep -ciE '<OWNER>|<OWNER>|/Users/' ai-sessions/usage/*.json; rm -f ai-sessions/usage/.gitkeep 2>/dev/null; ls ai-sessions/usage",
+  "description": "Keep only this period's sessions in usage snapshot"
+}
+```
+
+**Tool result**
+
+```
+2 ['claude', 'claude']
+ai-sessions/usage/ccusage-session-2026-11-09.json:0
+ai-sessions/usage/ccusage-daily-2026-11-09.json:0
+ccusage-daily-2026-11-09.json
+ccusage-session-2026-11-09.json
+```
+
+### Assistant
+
+Updating `ai-sessions/README.md` with an exports table, and making sanitize-check verify that every listed export exists.
+
+**Tool call · Bash**
+
+```json
+{
+  "command": "sed -n 1,16p ai-sessions/README.md | cut -c1-220; grep -n \"^## \" ai-sessions/README.md",
+  "description": "Read ai-sessions README head and sections"
+}
+```
+
+**Tool result**
+
+```
+# AI sessions — how Claude was used to build this project (R-DEL-6)
+
+Every Claude Code session that worked on this repo, what it did, and how its output was validated.
+Raw exports and harvested transcripts stay in the gitignored `_raw/`; only sanitized copies are committed
+(`sessions/`, `subagents/`). Process: KICKOFF.md §13 (`/export` → `scripts/harvest-sessions.sh` →
+`scripts/transcript2md.py` → `scripts/sanitize-sessions.sh` → gitleaks → human skim).
+
+## Session index
+
+| Session | Role | Model / effort | Date, duration | Purpose | Key outcomes | What was validated, and how |
+|---|---|---|---|---|---|---|
+| 00-planning | planning | Opus 5.5 | 2026-11-08 ~00:00–02:40 | Turn the case into a build brief with the owner | `KICKOFF.md`, `need.md`, project settings and plugins | Claude Code headless probe for the `claudecode` ad
+| 01-orchestrator | orchestrator | Opus 5.5 | 2026-11-08 02:40– | Phase 0: contracts, skeleton, compose, task files; W1–W5 orchestration | see commits `docs:`/`feat:`/`build:` of 2026-11-08 | `make test` green in contain
+
+## Agent launch log
+
+8:## Session index
+15:## Agent launch log
+31:## How the agents were connected
+52:## Tooling and connections
+62:## Usage data
+```
+
+**Tool call · Bash**
+
+```json
+{
+  "command": "python3 - <<'EOF'\np='ai-sessions/README.md'\ns=open(p).read()\ns=s.replace(\"| CP3 (early) | spec-auditor (as general-purpose) | opus | none, read-only | `.claude/agents/spec-auditor.md` + owner's evidence request (test + command + output per requirement) | running |\",\n\"| CP3 (early) | spec-auditor (as general-purpose) | opus | none, read-only | `.claude/agents/spec-auditor.md` + owner's evidence request (test + command + output per requirement) | done · 27 green, 2 gaps (R-DEL-1 repo = owner, R-DEL-6 exports), P1/P2 list · `docs/review/traceability.md` |\")\nexports='''## Exports\n\nSanitized Markdown of every harvested transcript (`scripts/harvest-sessions.sh` → `scripts/transcript2md.py` →\n`scripts/sanitize-sessions.sh`; gitleaks clean). Tool inputs and results are truncated to 2000 characters, images\nand base64 are dropped. `make sanitize-check` fails if a file listed here is missing or an export is unlisted.\n\n| File | Session / agent |\n|---|---|\n| `sessions/01-orchestrator.md` | 01-orchestrator (main session, all stages; includes the compacted history) |\n| `subagents/02-builder-llm.md` | W1 builder-llm |\n| `subagents/03-builder-delivery.md` | W1 builder-delivery |\n| `subagents/04-builder-web.md` | W1 builder-web |\n| `subagents/05-review-reliability-cp1-stopped.md` | CP1 reliability-reviewer, stopped at the usage limit |\n| `subagents/05-review-reliability-cp1.md` | CP1 reliability-reviewer, re-run |\n| `subagents/05-review-llm-red-team-cp1.md` | CP1 llm-red-team |\n| `subagents/06-fix-delivery-rate-bound.md` | CP1 fix round, delivery |\n| `subagents/06-fix-llm-red-team.md` | CP1 fix round, llm |\n| `subagents/07-review-spec-auditor-cp3.md` | CP3 spec-auditor |\n\n`00-planning` ran in the home directory, outside this project's transcript folder; its export is the owner's\n`/export` (KICKOFF §13 step 1).\n\n## How the agents were connected'''\ns=s.replace(\"## How the agents were connected\", exports, 1)\nopen(p,'w').write(s)\n\np='s
+… [1180 more characters truncated]
+```
+
+**Tool result**
+
+```
+[90m1:47AM[0m [32mINF[0m [1m95 commits scanned.[0m
+[90m1:47AM[0m [32mINF[0m [1mscanned ~1368401 bytes (1.37 MB) in 309ms[0m
+[90m1:47AM[0m [32mINF[0m [1mno leaks found[0m
+== gitleaks: committed ai-sessions files
+== session exports listed in ai-sessions/README.md exist, and every export is listed
+== .env must not be tracked
+== personal terms in tracked files
+sanitize-check: clean
+```
+
+**Tool call · Bash**
+
+```json
+{
+  "command": "git status --short | head; git commit -q -m \"docs(ai-sessions): sanitized exports of the orchestrator session and all 9 subagents, usage snapshots [R-DEL-6]\n\nHarvest -> transcript2md -> sanitize-sessions; gitleaks clean (one more narrow allowlist: a UUID printed as\nIdempotencyKey in Go test output). sanitize-check now fails when a listed export is missing or an export is\nunlisted. 00-planning ran in the home directory and stays the owner's /export.\n\nCo-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>\" && make sanitize-check 2>&1 | tail -1; du -sh ai-sessions/sessions ai-sessions/subagents",
+  "description": "Commit session exports and re-run sanitize-check"
+}
+```
+
+**Tool result**
+
+```
+M  .gitleaks.toml
+M  ai-sessions/README.md
+A  ai-sessions/sessions/01-orchestrator.md
+A  ai-sessions/subagents/02-builder-llm.md
+A  ai-sessions/subagents/03-builder-delivery.md
+A  ai-sessions/subagents/04-builder-web.md
+A  ai-sessions/subagents/05-review-llm-red-team-cp1.md
+A  ai-sessions/subagents/05-review-reliability-cp1-stopped.md
+A  ai-sessions/subagents/05-review-reliability-cp1.md
+A  ai-sessions/subagents/06-fix-delivery-rate-bound.md
+sanitize-check: clean
+832K	ai-sessions/sessions
+1.1M	ai-sessions/subagents
+```
+
+### Assistant
+
+P0 is closed. Now the P1s. First, an HTTP-level test of the content generation stream (R-FLOW-2).
+
+**Tool call · Bash**
+
+```json
+{
+  "command": "grep -n \"^func \\|type Step struct\" -A0 internal/llm/mock/*.go | head -30; grep -n \"type Step struct\" -A12 internal/llm/mock/scripted.go; grep -n \"func TestStream_CancelStopsProvider_RFLOW2\" -A40 internal/llm/*_test.go | head -50",
+  "description": "Read scripted mock API and existing cancel test"
+}
+```
+
+**Tool result**
+
+```
+internal/llm/mock/mock.go:20:type Step struct {
+internal/llm/mock/mock.go:42:func NewScripted(steps ...Step) *Scripted { return &Scripted{steps: steps} }
+internal/llm/mock/mock.go:44:func (*Scripted) Name() string  { return "mock" }
+internal/llm/mock/mock.go:45:func (*Scripted) Model() string { return ScriptedModel }
+internal/llm/mock/mock.go:51:func (s *Scripted) Generate(ctx context.Context, req llm.Request, onDelta func(llm.Delta)) (llm.Response, error) {
+internal/llm/mock/mock.go:109:func (s *Scripted) Requests() []llm.Request {
+internal/llm/mock/mock.go:116:func (s *Scripted) Cancelled() int {
+internal/llm/mock/mock.go:123:func (s *Scripted) Remaining() int {
+internal/llm/mock/demo.go:34:func NewDemo() *Demo { return &Demo{clk: clock.Real{}, delay: 25 * time.Millisecond, chunkSize: 6} }
+internal/llm/mock/demo.go:37:func NewDemoWith(clk clock.Clock, delay time.Duration, chunkSize int) *Demo {
+internal/llm/mock/demo.go:41:func (*Demo) Name() string  { return "mock" }
+internal/llm/mock/demo.go:42:func (*Demo) Model() string { return DemoModel }
+internal/llm/mock/demo.go:50:func (d *Demo) Generate(ctx context.Context, req llm.Request, onDelta func(llm.Delta)) (llm.Response, error) {
+internal/llm/mock/demo.go:100:func fold(s string) string {
+internal/llm/mock/demo.go:130:func DemoSegment(brief string) segment.Proposal {
+internal/llm/mock/demo.go:282:func firstNumber(m []string) int {
+internal/llm/mock/demo.go:291:func containsAny(s string, subs ...string) bool {
+internal/llm/mock/demo.go:298:func DemoContent(brief, lang string) content.Proposal {
+internal/llm/mock/demo.go:336:func subjectOffer(discount, lang string) string {
+ugrep: warning: internal/llm/mock/scripted.go: No such file or directory
+internal/llm/service_test.go:238:func TestStream_CancelStopsProvider_RFLOW2(t *testing.T) {
+internal/llm/service_test.go-239-	defer goleak.VerifyNone(t)
+internal/llm/service_test.go-240-	p := mock.NewScripted(mock.Step{Chunks: []string{`{"language":"tr",`, `"sms":{}}`}, Blo
+… [2724 more characters truncated]
+```
+
+**Tool call · Bash**
+
+```json
+{
+  "command": "sed -n 20,40p internal/llm/mock/mock.go; grep -n \"golden\\|GoldenRule\\|OfficialRule\" internal/segment/*.go internal/llm/prompts.go | grep func | head -5",
+  "description": "Read scripted Step fields and golden rule helpers"
+}
+```
+
+**Tool result**
+
+```
+type Step struct {
+	JSON            string
+	Chunks          []string
+	StopReason      llm.StopReason // default end_turn
+	RefusalCategory string
+	Err             error
+	Usage           llm.Usage
+	Model           string
+	// BlockAfterChunks > 0 makes the step stop after that many chunks and wait until the context ends, like a
+	// slow upstream; used to prove that cancellation stops the provider.
+	BlockAfterChunks int
+}
+
+// Scripted replays a queue of steps, one per Generate call, and records every request.
+type Scripted struct {
+	mu        sync.Mutex
+	steps     []Step
+	requests  []llm.Request
+	cancelled int
+}
+
+internal/llm/prompts.go:99:func goldenContent() content.Proposal {
+internal/segment/segment_test.go:278:func goldenRule() Rule {
+```
+
+**Tool call · Write**
+
+```json
+{
+  "file_path": "~/projeler/smart-campaign-composer/internal/api/generate_test.go",
+  "content": "package api\n\nimport (\n\t\"bufio\"\n\t\"context\"\n\t\"encoding/json\"\n\t\"io\"\n\t\"net/http\"\n\t\"net/http/httptest\"\n\t\"strings\"\n\t\"testing\"\n\t\"time\"\n\n\t\"smartcampaign/internal/llm\"\n\t\"smartcampaign/internal/llm/mock\"\n\t\"smartcampaign/internal/metrics\"\n\t\"smartcampaign/internal/store/storetest\"\n)\n\n// The generation stream through the real HTTP handler (R-FLOW-2): the service-level tests prove deltas,\n// repairs and cancellation inside llm.Service; these prove the wire format and that a browser closing the\n// request stops the upstream call.\n\nconst streamedContent = `{\"language\":\"tr\",\"sms\":{\"text\":\"Merhaba {{first_name}}, sepetin seni bekliyor!\"},` +\n\t`\"email\":{\"subject\":\"{{first_name}}, indirim\",\"body\":\"Merhaba {{first_name}},\\n\\nİndirim seni bekliyor.\"},\"notes\":\"\"}`\n\nfunc streamServer(t *testing.T, p llm.Provider) (*httptest.Server, string) {\n\tt.Helper()\n\tpool := storetest.NewDB(t)\n\tsrv := httptest.NewServer(New(Deps{Pool: pool, Metrics: metrics.New(), LLM: llm.NewService(p, nil),\n\t\tProviderURL: \"http://127.0.0.1:1\", Version: \"test\"}).Handler())\n\tt.Cleanup(srv.Close)\n\tcode, _, body := do(t, http.MethodPost, srv.URL+\"/api/campaigns\", `{\"brief\":\"İstanbul'a indirim duyurusu\"}`, nil)\n\tif code != http.StatusCreated {\n\t\tt.Fatalf(\"create: %d %s\", code, body)\n\t}\n\tvar c struct{ ID string }\n\t_ = json.Unmarshal(body, &c)\n\trule := `{\"rule\":{\"groups\":[{\"conditions\":[{\"field\":\"city\",\"op\":\"eq\",\"value\":\"İstanbul\"}]}]}}`\n\tif code, _, body := do(t, http.MethodPut, srv.URL+\"/api/campaigns/\"+c.ID+\"/segment\", rule, nil); code != http.StatusOK {\n\t\tt.Fatalf(\"segment: %d %s\", code, body)\n\t}\n\treturn srv, c.ID\n}\n\ntype frame struct{ event, data string }\n\n// frames reads SSE frames until the body ends or stop returns true.\nfunc frames(r io.Read
+… [4016 more characters truncated]
+```
+
+**Tool result**
+
+```
+File created successfully at: ~/projeler/smart-campaign-composer/internal/api/generate_test.go (file state is current in your context — no need to Read it back)
+```
+
+**Tool call · Bash**
+
+```json
+{
+  "command": "TEST_DATABASE_URL='postgres://scc:scc@localhost:55432/postgres?sslmode=disable' go test -race -count=1 -run 'TestGenerateStream' -v ./internal/api/ 2>&1 | grep -E \"^(---|ok|FAIL)|_test.go\" | head",
+  "description": "Run the new SSE handler tests",
+  "timeout": 300000
+}
+```
+
+**Tool result**
+
+```
+--- PASS: TestGenerateStream_MetaDeltasResult_RFLOW2 (0.11s)
+--- PASS: TestGenerateStream_ClientDisconnectCancelsUpstream_RFLOW2 (0.09s)
+ok  	smartcampaign/internal/api	1.916s
+```
+
+**Tool call · Bash**
+
+```json
+{
+  "command": "golangci-lint run ./internal/api/... | tail -1 && git add internal/api/generate_test.go && git commit -q -m \"test(api): generation stream through the HTTP handler: meta, deltas, result; disconnect cancels upstream [R-FLOW-2]\n\nCloses spec-auditor P1: the SSE handler had no Go test. A chunk split inside 'İ' still yields the exact model\ntext; closing the request cancels the provider and saves no content version.\n\nCo-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>\" && echo ok",
+  "description": "Lint and commit SSE handler tests"
+}
+```
+
+**Tool result**
+
+```
+0 issues.
+ok
+```
+
+### Assistant
+
+Next: a consent property test (R-AUD-2) and an every-user SMS render test (R-CNT-1), both against the real approve path on a seeded database. Checking the service signatures first.
+
+**Tool call · Bash**
+
+```json
+{
+  "command": "grep -n \"^func (s \\*Service)\" internal/campaign/*.go; grep -n \"type ContentInput\\|type SaveInput\" -A6 internal/campaign/*.go | head -20; grep -n \"^func RenderMessage\\|^type Recipient\\|^type Template\" -A8 internal/delivery/render.go internal/delivery/delivery.go | head -40; sed -n 1,60p internal/campaign/service_test.go | grep -n \"func \\|seed\\.\" ",
+  "description": "Gather signatures for new property tests"
+}
+```
+
+**Tool result**
+
+```
+internal/campaign/approve.go:32:func (s *Service) Approve(ctx context.Context, id, key string, channels []string, contentVersion int) (ApproveResult, error) {
+internal/campaign/service.go:56:func (s *Service) Create(ctx context.Context, brief string) (Campaign, error) {
+internal/campaign/service.go:83:func (s *Service) Get(ctx context.Context, id string) (Campaign, error) {
+internal/campaign/service.go:99:func (s *Service) List(ctx context.Context, limit int, cursor string) ([]Summary, string, error) {
+internal/campaign/service.go:134:func (s *Service) GenerateSegment(ctx context.Context, id string) (Campaign, llm.Meta, error) {
+internal/campaign/service.go:163:func (s *Service) PutSegment(ctx context.Context, id string, rule segment.Rule) (Campaign, error) {
+internal/campaign/service.go:187:func (s *Service) storeSegment(ctx context.Context, id string, v segment.ValidRule, meta SegmentMeta, language string) error {
+internal/campaign/service.go:218:func (s *Service) ContentInput(ctx context.Context, id string) (llm.ContentInput, error) {
+internal/campaign/service.go:241:func (s *Service) GenerateContent(ctx context.Context, id string, in llm.ContentInput, onDelta func(llm.Delta), onRepair func(llm.RepairNotice)) (ContentVersion, llm.Meta, error) {
+internal/campaign/service.go:255:func (s *Service) SaveContent(ctx context.Context, id string, c content.Content, baseVersion int) (ContentVersion, error) {
+internal/campaign/service.go:275:func (s *Service) saveVersion(ctx context.Context, id string, c content.Content, source string, report content.Report, baseVersion int) (ContentVersion, error) {
+internal/campaign/service.go:308:func (s *Service) ValidateContent(ctx context.Context, c content.Content, campaignID, language string) (content.Report, error) {
+internal/campaign/service.go:334:func (s *Service) Messages(ctx context.Context, id, status, channel string, limit int, cursor string) ([]Message, string, error) {
+internal/campaign/service.go:384:func (s *Service) loa
+… [2462 more characters truncated]
+```
+
+**Tool call · Bash**
+
+```json
+{
+  "command": "sed -n 1,53p internal/campaign/service_test.go; grep -n \"type Report struct\" -A14 internal/content/*.go | head -30; grep -n \"Fields\\|WorstCaseRunes\" internal/content/validate.go | head",
+  "description": "Read campaign test helpers and content report shape"
+}
+```
+
+**Tool result**
+
+```
+package campaign
+
+import (
+	"context"
+	"encoding/json"
+	"errors"
+	"runtime"
+	"strings"
+	"sync"
+	"testing"
+	"time"
+
+	"github.com/jackc/pgx/v5/pgxpool"
+	"go.uber.org/goleak"
+
+	"smartcampaign/internal/clock"
+	"smartcampaign/internal/content"
+	"smartcampaign/internal/llm"
+	"smartcampaign/internal/llm/mock"
+	"smartcampaign/internal/metrics"
+	"smartcampaign/internal/seed"
+	"smartcampaign/internal/segment"
+	"smartcampaign/internal/store/storetest"
+)
+
+// goldenRule is the official brief's rule (docs/contracts/segment-dsl.md §7).
+const goldenRule = `{"groups":[
+	{"conditions":[{"field":"city","op":"eq","value":"İstanbul"}]},
+	{"conditions":[{"field":"last_cart_add_at","op":"within_last_days","value":30}]},
+	{"conditions":[{"field":"cart_abandoned","op":"is_true","value":null}]}]}`
+
+func newService(t *testing.T, users int) (*Service, *pgxpool.Pool) {
+	t.Helper()
+	pool := storetest.NewDB(t)
+	if users > 0 {
+		if _, err := seed.Run(context.Background(), pool, seed.Generate(users, 20261108, time.Now())); err != nil {
+			t.Fatal(err)
+		}
+	}
+	return &Service{Pool: pool, LLM: llm.NewService(mock.NewDemo(), nil), Metrics: metrics.New()}, pool
+}
+
+func codeOf(err error) string {
+	var ce *Error
+	if errors.As(err, &ce) {
+		return ce.Code
+	}
+	if err == nil {
+		return ""
+	}
+	return "unexpected: " + err.Error()
+}
+
+internal/content/content.go:131:type Report struct {
+internal/content/content.go-132-	Valid     bool              `json:"valid"`
+internal/content/content.go-133-	ValidFor  map[string]bool   `json:"valid_for"`
+internal/content/content.go-134-	Fields    map[string]any    `json:"fields"`
+internal/content/content.go-135-	WorstCase map[string]string `json:"worst_case"`
+internal/content/content.go-136-	Variables []string          `json:"variables"`
+internal/content/content.go-137-	Errors    []Issue           `json:"errors"`
+internal/content/content.go-138-	Warnings  []Issue           `json:"warnings"`
+internal/content/content.go-139-}
+internal/content/content.go-140-
+internal/content/co
+… [1034 more characters truncated]
+```
+
+**Tool call · Bash**
+
+```json
+{
+  "command": "head -c 600 internal/segment/testdata/redteam/hostile_outputs.json; echo; grep -n \"hostile_outputs\" internal/*/*_test.go | head -3; sed -n 1,40p internal/segment/fuzz_test.go; grep -n \"^func Count\\|^func Validate\\|^func ParseProposal\\|^func Parse(\" internal/segment/*.go",
+  "description": "Inspect hostile corpus and fuzz target"
+}
+```
+
+**Tool result**
+
+```
+{
+  "description": "Hostile model outputs for the segment path (llm-red-team, CP1). Each case is one of: `condition` (placed as the only condition of a one-group proposal), `proposal` (a whole JSON document) or `text` (raw bytes, for documents that are not valid JSON). `codes` must all appear in the issues returned by Parse + ValidateProposal; `layer` names the defense that must stop it.",
+  "cases": [
+    { "id": "RT-S01", "layer": "compiler", "name": "unknown field password", "condition": { "field": "password", "op": "eq", "value": "x" }, "codes": ["unknown_field"] },
+    { "id": "RT-S02", "
+internal/segment/segment_redteam_test.go:31:	b, err := os.ReadFile("testdata/redteam/hostile_outputs.json")
+package segment
+
+import (
+	"strings"
+	"testing"
+	"unicode/utf8"
+)
+
+// FuzzParseValidateCompile feeds arbitrary bytes through the whole untrusted-input path. Invariants: no
+// panic; Compile succeeds exactly for validated rules; the SQL text never contains a quote or a semicolon
+// (values are parameters, so no literal can appear); placeholders match the argument count.
+func FuzzParseValidateCompile(f *testing.F) {
+	f.Add([]byte(goldenProposal))
+	f.Add([]byte(`{"segment":{"groups":[{"conditions":[{"field":"city","op":"in","value":["Ankara","x'; DROP TABLE users; --"]}]}]},"unsupported_criteria":[],"assumptions":[],"channels_requested":"sms","language":"en","explanation":""}`))
+	f.Add([]byte(`{"segment":{"groups":[{"conditions":[{"field":"age","op":"between","value":[18,1e308]}]}]},"unsupported_criteria":[],"assumptions":[],"channels_requested":"both","language":"tr","explanation":""}`))
+	f.Add([]byte(`{"segment":{"groups":[]},"unsupported_criteria":[],"assumptions":[],"channels_requested":"both","language":"tr","explanation":""} trailing`))
+	f.Fuzz(func(t *testing.T, raw []byte) {
+		p, issues := Parse(raw)
+		if len(issues) > 0 {
+			return
+		}
+		vr, errs, _ := ValidateProposal(p)
+		sql, args, err := Compile(vr, 1)
+		if len(errs) > 0 {
+			if err == nil {
+				t.Fatal("invali
+… [766 more characters truncated]
+```
+
+**Tool call · Bash**
+
+```json
+{
+  "command": "grep -n \"func TestValidate_EveryFieldOperator_RAUD1\" -A45 internal/segment/segment_test.go | head -60; grep -n \"func TestCount_MatchesDirectSQL_RFLOW1\" -A20 internal/segment/count_test.go | head -25",
+  "description": "Read every-field-operator test and count test setup"
+}
+```
+
+**Tool result**
+
+```
+73:func TestValidate_EveryFieldOperator_RAUD1(t *testing.T) {
+74-	for _, f := range catalog.Fields() {
+75-		for _, op := range allOps() {
+76-			t.Run(f.Name+"/"+string(op), func(t *testing.T) {
+77-				allowed := slices.Contains(f.Ops, op)
+78-				val := "null"
+79-				if allowed {
+80-					val = goodValue(f, op)
+81-				}
+82-				vr, errs, _ := Validate(rule(one(c(f.Name, string(op), val))))
+83-				if allowed {
+84-					if len(errs) != 0 || !vr.Valid() {
+85-						t.Fatalf("want valid, got %+v", errs)
+86-					}
+87-					if _, _, err := Compile(vr, 1); err != nil {
+88-						t.Fatalf("compile: %v", err)
+89-					}
+90-					for _, loc := range []string{"tr", "en"} {
+91-						if got := Render(vr, loc); len(got) != 1 || got[0] == "" || got[0] == f.Name+" "+string(op) {
+92-							t.Fatalf("render %s: %q", loc, got)
+93-						}
+94-					}
+95-					return
+96-				}
+97-				if got := codes(errs); !slices.Equal(got, []string{"op_type_mismatch"}) {
+98-					t.Fatalf("want op_type_mismatch, got %v", got)
+99-				}
+100-				if errs[0].Path != "segment.groups[0].conditions[0].op" {
+101-					t.Fatalf("path = %q", errs[0].Path)
+102-				}
+103-			})
+104-		}
+105-	}
+106-}
+107-
+108-func TestValidate_InvalidConditions_RAUD1(t *testing.T) {
+109-	long := strings.Repeat("a", 101)
+110-	many := make([]string, 51)
+111-	for i := range many {
+112-		many[i] = fmt.Sprintf("v%d", i)
+113-	}
+114-	manyJSON, _ := json.Marshal(many)
+115-	tests := []struct {
+116-		name string
+117-		cond Condition
+118-		code string
+128:func TestCount_MatchesDirectSQL_RFLOW1(t *testing.T) {
+129-	pool := storetest.NewDB(t)
+130-	ctx := context.Background()
+131-	if _, err := seed.Run(ctx, pool, seed.Generate(3000, 20261108, time.Now())); err != nil {
+132-		t.Fatal(err)
+133-	}
+134-	tests := []struct {
+135-		name   string
+136-		r      Rule
+137-		direct string
+138-	}{
+139-		{"official brief golden rule", goldenRule(),
+140-			`u.city = 'İstanbul' AND u.last_cart_add_at >= now() - interval '30 days' AND u.cart_abandoned`},
+141-		{"age band or premi
+… [725 more characters truncated]
+```
+
+**Tool call · Bash**
+
+```json
+{
+  "command": "sed -n 15,75p internal/segment/segment_redteam_test.go; grep -n \"^func goodValue\\|^func rule\\|^func one\\|^func c(\" internal/segment/*_test.go; grep -n \"type Audience\" -A6 internal/segment/count.go",
+  "description": "Read hostile corpus loader and test helpers"
+}
+```
+
+**Tool result**
+
+```
+	"smartcampaign/internal/store/storetest"
+)
+
+type hostileCase struct {
+	ID        string          `json:"id"`
+	Layer     string          `json:"layer"`
+	Name      string          `json:"name"`
+	Condition json.RawMessage `json:"condition"`
+	Proposal  json.RawMessage `json:"proposal"`
+	Text      *string         `json:"text"`
+	Codes     []string        `json:"codes"`
+}
+
+func loadHostile(t *testing.T) []hostileCase {
+	t.Helper()
+	b, err := os.ReadFile("testdata/redteam/hostile_outputs.json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var file struct {
+		Cases []hostileCase `json:"cases"`
+	}
+	if err := json.Unmarshal(b, &file); err != nil {
+		t.Fatal(err)
+	}
+	if len(file.Cases) < 25 {
+		t.Fatalf("corpus has %d cases, want >= 25", len(file.Cases))
+	}
+	return file.Cases
+}
+
+// proposalWith wraps one raw condition into an otherwise valid proposal.
+func proposalWith(cond json.RawMessage) []byte {
+	return []byte(`{"segment":{"groups":[{"conditions":[` + string(cond) + `]}]},"unsupported_criteria":[],` +
+		`"assumptions":[],"channels_requested":"both","language":"tr","explanation":"x"}`)
+}
+
+func (h hostileCase) raw() []byte {
+	switch {
+	case h.Condition != nil:
+		return proposalWith(h.Condition)
+	case h.Proposal != nil:
+		return h.Proposal
+	default:
+		return []byte(*h.Text)
+	}
+}
+
+// parseAndValidate is the service's validate step (llm.Service.ProposeSegment).
+func parseAndValidate(raw []byte) (ValidRule, []Issue, []Issue) {
+	p, issues := Parse(raw)
+	if len(issues) > 0 {
+		return ValidRule{}, issues, nil
+	}
+	return ValidateProposal(p)
+}
+
+func TestRedTeam_HostileOutputsRejected_RAI1(t *testing.T) {
+	for _, h := range loadHostile(t) {
+		t.Run(h.ID+" "+h.Name, func(t *testing.T) {
+internal/segment/segment_test.go:16:func c(field, op, value string) Condition {
+internal/segment/segment_test.go:20:func rule(groups ...[]Condition) Rule {
+internal/segment/segment_test.go:28:func one(cs ...Condition) []Condition { return cs }
+internal/segment/segment_test.go:39:func goodValue(f catalog.Field, o
+… [22 more characters truncated]
+```
+
+**Tool call · Bash**
+
+```json
+{
+  "command": "sed -n 36,72p internal/segment/segment_test.go; grep -n \"Audience struct\" -A8 internal/segment/*.go | head -10; head -20 internal/segment/count_test.go | grep -n import -A14",
+  "description": "Read goodValue helper, Audience type, imports"
+}
+```
+
+**Tool result**
+
+```
+}
+
+// goodValue returns a valid JSON value for a field/op pair.
+func goodValue(f catalog.Field, op catalog.Op) string {
+	switch f.Type {
+	case catalog.Number:
+		if op == catalog.OpBetween {
+			return fmt.Sprintf("[%v, %v]", f.Min, f.Max)
+		}
+		return fmt.Sprintf("%v", f.Min)
+	case catalog.Enum:
+		if op == catalog.OpIn || op == catalog.OpNotIn {
+			b, _ := json.Marshal(f.Values[:2])
+			return string(b)
+		}
+		b, _ := json.Marshal(f.Values[0])
+		return string(b)
+	case catalog.Date:
+		switch op {
+		case catalog.OpWithinLastDays, catalog.OpNotWithinLastDays:
+			return "30"
+		case catalog.OpBefore, catalog.OpAfter:
+			return `"2026-01-15"`
+		}
+	}
+	return "null"
+}
+
+func allOps() []catalog.Op {
+	var out []catalog.Op
+	for _, t := range []catalog.Type{catalog.Number, catalog.Enum, catalog.Bool, catalog.Date} {
+		out = append(out, catalog.OpsByType[t]...)
+	}
+	return out
+}
+
+// Every field × every operator: allowed pairs validate, compile and render; the rest are op_type_mismatch.
+internal/segment/segment.go:95:type Audience struct {
+internal/segment/segment.go-96-	Total          int `json:"total"`
+internal/segment/segment.go-97-	SMSReachable   int `json:"sms_reachable"`
+internal/segment/segment.go-98-	EmailReachable int `json:"email_reachable"`
+internal/segment/segment.go-99-	Both           int `json:"both"`
+internal/segment/segment.go-100-}
+internal/segment/segment.go-101-
+internal/segment/segment.go-102-// Querier is satisfied by *pgxpool.Pool and pgx.Tx. Begin is needed so Count can scope
+internal/segment/segment.go-103-// `SET LOCAL statement_timeout` to its own transaction (or savepoint, inside a caller's transaction).
+3:import (
+4-	"context"
+5-	"errors"
+6-	"fmt"
+7-	"testing"
+8-	"time"
+9-
+10-	"github.com/jackc/pgx/v5"
+11-	"github.com/jackc/pgx/v5/pgconn"
+12-	"github.com/jackc/pgx/v5/pgxpool"
+13-
+14-	"smartcampaign/internal/seed"
+15-	"smartcampaign/internal/store/storetest"
+16-)
+17-
+```
+
+<details><summary>Thinking</summary>
+
+P0 oturum export'ları ve SSE handler testi tamamlandı; şimdi P1 testlerini yazıyorum.
+
+</details>
+
+**Tool call · Write**
+
+```json
+{
+  "file_path": "~/projeler/smart-campaign-composer/internal/segment/postgres_test.go",
+  "content": "package segment\n\nimport (\n\t\"context\"\n\t\"encoding/json\"\n\t\"fmt\"\n\t\"math/rand/v2\"\n\t\"slices\"\n\t\"testing\"\n\t\"time\"\n\n\t\"smartcampaign/internal/catalog\"\n\t\"smartcampaign/internal/seed\"\n\t\"smartcampaign/internal/store/storetest\"\n)\n\n// TestCount_EveryAcceptedRuleRunsOnPostgres_RAUD1: compiling is not enough; every rule the validator accepts\n// must also execute on Postgres (types, casts, parameter binding) and give a sane audience. Sources: every\n// field × allowed operator, 300 random multi-group rules, the fuzz seeds, and the hostile corpus cases that\n// validation lets through (values that are hostile text but legal, e.g. an injection string as a city).\nfunc TestCount_EveryAcceptedRuleRunsOnPostgres_RAUD1(t *testing.T) {\n\tpool := storetest.NewDB(t)\n\tctx := context.Background()\n\tif _, err := seed.Run(ctx, pool, seed.Generate(500, 20261108, time.Now())); err != nil {\n\t\tt.Fatal(err)\n\t}\n\ttype src struct {\n\t\tname string\n\t\traw  []byte // a whole proposal\n\t\tr    *Rule\n\t}\n\tvar all []src\n\n\t// 1. every field × allowed operator\n\tvar conds []Condition\n\tfor _, f := range catalog.Fields() {\n\t\tfor _, op := range f.Ops {\n\t\t\tcond := c(f.Name, string(op), goodValue(f, op))\n\t\t\tconds = append(conds, cond)\n\t\t\tr := rule(one(cond))\n\t\t\tall = append(all, src{name: \"single \" + f.Name + \"/\" + string(op), r: &r})\n\t\t}\n\t}\n\t// 2. random CNF combinations of those conditions\n\trng := rand.New(rand.NewPCG(20261109, 1))\n\tfor i := range 300 {\n\t\tvar groups [][]Condition\n\t\tfor range 1 + rng.IntN(4) {\n\t\t\tvar g []Condition\n\t\t\tfor range 1 + rng.IntN(3) {\n\t\t\t\tg = append(g, conds[rng.IntN(len(conds))])\n\t\t\t}\n\t\t\tgroups = append(groups, g)\n\t\t}\n\t\tr := rule(groups...)\n\t\tall = append(all, src{name: fmt.Sprintf(\"random %d\", i), r: &r})\n\t}\n\t// 3. fuzz seeds and 
+… [1610 more characters truncated]
+```
+
+**Tool result**
+
+```
+File created successfully at: ~/projeler/smart-campaign-composer/internal/segment/postgres_test.go (file state is current in your context — no need to Read it back)
+```
+
+**Tool call · Bash**
+
+```json
+{
+  "command": "grep -n \"goldenProposal\\b\" internal/segment/*_test.go | head -2; grep -n \"func (v ValidRule) Rule\\|func (v \\*ValidRule) Rule\" internal/segment/*.go; grep -n \"edgeUsers\\|len(edge\" internal/seed/seed.go | head -3; TEST_DATABASE_URL='postgres://scc:scc@localhost:55432/postgres?sslmode=disable' go test -count=1 -run TestCount_EveryAcceptedRuleRunsOnPostgres -v ./internal/segment/ 2>&1 | grep -E \"^(---|ok|FAIL)|_test.go\" | head",
+  "description": "Run the Postgres execution test",
+  "timeout": 300000
+}
+```
+
+**Tool result**
+
+```
+internal/segment/postgres_test.go:59:	for i, raw := range [][]byte{[]byte(goldenProposal),
+internal/segment/parse_test.go:9:const goldenProposal = `{
+internal/segment/segment.go:61:func (v ValidRule) Rule() Rule { return cloneRule(v.rule) }
+60:	for _, e := range edgeUsers(now) {
+121:// edgeUsers exercise rendering, escaping, consent and provider failure paths. Most of them match the
+123:func edgeUsers(now time.Time) []User {
+    postgres_test.go:91: 410 inputs, 361 accepted, 361 executed on Postgres
+--- PASS: TestCount_EveryAcceptedRuleRunsOnPostgres_RAUD1 (0.35s)
+ok  	smartcampaign/internal/segment	0.937s
+```
+
+### Assistant
+
+The diagnostics come from gopls's stale index of the deleted worktrees; the real build passes. Now running the extended fuzz in the background.
+
+**Tool call · Bash**
+
+```json
+{
+  "command": "go test ./internal/segment -run '^$' -fuzz FuzzParseValidateCompile -fuzztime 2m > /private/tmp/claude-501/-Users-owner-projeler-smart-campaign-composer/76094f6f-4357-43bc-9bab-c4747eda27f6/scratchpad/fuzz.log 2>&1; echo \"exit $?\" >> /private/tmp/claude-501/-Users-owner-projeler-smart-campaign-composer/76094f6f-4357-43bc-9bab-c4747eda27f6/scratchpad/fuzz.log",
+  "description": "Run 2-minute fuzz of the segment pipeline",
+  "run_in_background": true
+}
+```
+
+**Tool result**
+
+```
+Command running in background with ID: bqfnbmoe7. Output is being written to: /private/tmp/claude-501/-Users-owner-projeler-smart-campaign-composer/76094f6f-4357-43bc-9bab-c4747eda27f6/tasks/bqfnbmoe7.output. You will be notified when it completes. To check interim output, use Read on that file path.
+```
+
+### Assistant
+
+Now the campaign-level property tests (consent and the per-recipient SMS length).
+
+**Tool call · Write**
+
+```json
+{
+  "file_path": "~/projeler/smart-campaign-composer/internal/campaign/property_test.go",
+  "content": "package campaign\n\nimport (\n\t\"context\"\n\t\"encoding/json\"\n\t\"fmt\"\n\t\"math/rand/v2\"\n\t\"strings\"\n\t\"testing\"\n\t\"unicode/utf8\"\n\n\t\"smartcampaign/internal/content\"\n\t\"smartcampaign/internal/delivery\"\n\t\"smartcampaign/internal/segment\"\n)\n\n// randomRule builds a random CNF rule from condition templates covering every field type.\nfunc randomRule(rng *rand.Rand) string {\n\tcities := []string{\"İstanbul\", \"Ankara\", \"İzmir\", \"Bursa\", \"Antalya\", \"Konya\"}\n\ttiers := []string{\"bronze\", \"silver\", \"gold\", \"platinum\"}\n\ttemplates := []func() string{\n\t\tfunc() string {\n\t\t\ta, b := cities[rng.IntN(len(cities))], cities[rng.IntN(len(cities))]\n\t\t\treturn fmt.Sprintf(`{\"field\":\"city\",\"op\":\"in\",\"value\":[%q,%q]}`, a, b)\n\t\t},\n\t\tfunc() string {\n\t\t\tlo := 18 + rng.IntN(40)\n\t\t\treturn fmt.Sprintf(`{\"field\":\"age\",\"op\":\"between\",\"value\":[%d,%d]}`, lo, lo+5+rng.IntN(30))\n\t\t},\n\t\tfunc() string { return fmt.Sprintf(`{\"field\":\"loyalty_tier\",\"op\":\"eq\",\"value\":%q}`, tiers[rng.IntN(len(tiers))]) },\n\t\tfunc() string { return fmt.Sprintf(`{\"field\":\"purchase_count\",\"op\":\"gte\",\"value\":%d}`, rng.IntN(10)) },\n\t\tfunc() string {\n\t\t\treturn fmt.Sprintf(`{\"field\":\"last_purchase_at\",\"op\":\"not_within_last_days\",\"value\":%d}`, 7+rng.IntN(180))\n\t\t},\n\t\tfunc() string { return `{\"field\":\"cart_abandoned\",\"op\":\"is_true\",\"value\":null}` },\n\t\tfunc() string { return fmt.Sprintf(`{\"field\":\"total_spent\",\"op\":\"lt\",\"value\":%d}`, 100+rng.IntN(20000)) },\n\t}\n\tvar groups []string\n\tfor range 1 + rng.IntN(3) {\n\t\tvar cs []string\n\t\tfor range 1 + rng.IntN(2) {\n\t\t\tcs = append(cs, templates[rng.IntN(len(templates))]())\n\t\t}\n\t\tgroups = append(groups, `{\"conditions\":[`+strings.Join(cs, \",\")+`]}`)\n\t}\n\treturn `{\"groups\":[` + strings.
+… [5823 more characters truncated]
+```
+
+**Tool result**
+
+```
+File created successfully at: ~/projeler/smart-campaign-composer/internal/campaign/property_test.go (file state is current in your context — no need to Read it back)
+```
+
+**Tool call · Bash**
+
+```json
+{
+  "command": "grep -n \"PathSMS\\b\" internal/content/*.go | head -2; TEST_DATABASE_URL='postgres://scc:scc@localhost:55432/postgres?sslmode=disable' go test -race -count=1 -run 'TestApprove_ConsentProperty|TestApprove_SMSFitsForEveryRecipient' -v ./internal/campaign/ 2>&1 | grep -E \"^(---|ok|FAIL)|_test.go\" | head",
+  "description": "Run new campaign property tests",
+  "timeout": 600000
+}
+```
+
+**Tool result**
+
+```
+internal/content/content_redteam_test.go:45:			if got := errCodes(r, PathSMS); !slices.Equal(got, tt.codes) {
+internal/content/content_redteam_test.go:48:			if f := r.Fields[PathSMS].(SMSField); f.WorstCaseRunes != tt.runes {
+    property_test.go:110: 30 approved, 0 rejected as empty audience
+--- PASS: TestApprove_ConsentProperty_RAUD2 (2.93s)
+    property_test.go:178: 3530 recipients rendered, longest 159 code points
+--- PASS: TestApprove_SMSFitsForEveryRecipient_RCNT1 (0.91s)
+ok  	smartcampaign/internal/campaign	5.295s
+```
+
+### Assistant
+
+Both pass (30 random rounds with no messages to non-consenting users; 3530 recipients, longest 159 code points). Committing each gap separately.
+
+**Tool call · Bash**
+
+```json
+{
+  "command": "golangci-lint run ./internal/segment/... ./internal/campaign/... | tail -1 && git add internal/segment/postgres_test.go && git commit -q -m \"test(segment): every accepted rule executes on Postgres: all field/op pairs, 300 random rules, fuzz seeds, hostile corpus [R-AUD-1]\n\nCloses spec-auditor P1: the fuzz target only compiled. 361 accepted inputs ran through Count on a seeded\ndatabase without error and with consistent audiences.\n\nCo-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>\" && python3 - <<'EOF'\n# split property_test.go into the two commits: first only the consent test\np='internal/campaign/property_test.go'\ns=open(p).read()\ni=s.index('// TestApprove_SMSFitsForEveryRecipient_RCNT1')\nopen('/private/tmp/claude-501/-Users-owner-projeler-smart-campaign-composer/76094f6f-4357-43bc-9bab-c4747eda27f6/scratchpad/prop_full.go','w').write(s)\nfirst=s[:i].rstrip()+\"\\n\"\nfor imp in ['\\t\"encoding/json\"\\n','\\t\"unicode/utf8\"\\n','\\t\"smartcampaign/internal/delivery\"\\n']:\n    first=first.replace(imp,'')\nopen(p,'w').write(first)\nEOF\ngofmt -l internal/campaign; go vet ./internal/campaign/ && git add internal/campaign/property_test.go && git commit -q -m \"test(campaign): consent property: random rules x random consent x random channels never enqueue a non-consented user [R-AUD-2]\n\nCloses spec-auditor P1. 30 rounds on 2000 users: 0 messages to users without consent, and approve enqueues\nexactly the consented audience every time.\n\nCo-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>\" && cp /private/tmp/claude-501/-Users-owner-projeler-smart-campaign-composer/76094f6f-4357-43bc-9bab-c4747eda27f6/scratchpad/prop_full.go internal/campaign/property_test.go && go vet ./internal/campaign/ && git add internal/campaign/property_test.go && git commit -q -m \"test(campaign): an SMS validated at exactly 160 worst case fits for every seeded recipient [R-CNT-1]\n\nCloses spec-auditor P1. 3530 consented recipients (incl. 40-rune, empty 
+… [286 more characters truncated]
+```
+
+**Tool result**
+
+```
+* gofmt: 1
+internal/campaign/property_test.go
+72f4225 test(campaign): an SMS validated at exactly 160 worst case fits for every seeded recipient [R-CNT-1]
+2a3a0f5 test(campaign): consent property: random rules x random consent x random channels never enqueue a non-consented user [R-AUD-2]
+98fc5fc test(segment): every accepted rule executes on Postgres: all field/op pairs, 300 random rules, fuzz seeds, hostile corpus [R-AUD-1]
+```
+
+### Assistant
+
+A gofmt issue slipped into those commits (my pipe hid the lint exit code). Fixing with a follow-up commit.
+
+**Tool call · Bash**
+
+```json
+{
+  "command": "gofmt -l ./internal ./cmd; gofmt -w internal/campaign/property_test.go && golangci-lint run ./... ; echo \"lint exit $?\"; git diff --stat",
+  "description": "Format the file and run full lint"
+}
+```
+
+**Tool result**
+
+```
+internal/campaign/property_test.go
+0 issues.
+lint exit 0
+ internal/campaign/property_test.go | 4 +++-
+ 1 file changed, 3 insertions(+), 1 deletion(-)
+```
+
+**Tool call · Bash**
+
+```json
+{
+  "command": "git add internal/campaign/property_test.go && git commit -q -m \"style(campaign): gofmt property_test.go\n\nCo-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>\" && echo ok",
+  "description": "Commit gofmt fix"
+}
+```
+
+**Tool result**
+
+```
+ok
+```
+
+### Assistant
+
+Next, the stress-side P1s. Checking the exact §10.3 wording for R-SND-1, R-RES-2 and R-RES-3.
+
+**Tool call · Bash**
+
+```json
+{
+  "command": "sed -n 746,778p KICKOFF.md | grep -E \"R-SND-1|R-RES-2|R-RES-3|R-FLOW-4|R-DEL-2|R-DEL-3\"",
+  "description": "Read matrix rows for remaining P1s"
+}
+```
+
+**Tool result**
+
+```
+| R-FLOW-4 | Integration: approve → every expected message reaches the provider | S1, S2 | stress report |
+| R-SND-1 | Approve returns in < 200 ms for 5k recipients; the work happens in the worker | S2: SIGKILL a worker mid-run → it completes after restart with I1 holding | stress report |
+| R-RES-2 | The seed is deterministic and idempotent, has ≥ 3k users (default 5k), and contains the edge-case users | `SEED_USERS=100000`: segment counts stay < 300 ms with indexes (S5) | stress report |
+| R-RES-3 | Provider unit tests for every fault mode, idempotency and `/stats` | The provider sustains 500 rps without becoming the bottleneck | stress report |
+| R-DEL-2 | `scripts/fresh-clone-check.sh`: clean clone → `docker compose up -d` → healthy in < 180 s → UI reachable → seed present | Run it twice (restart idempotency), then `down -v && up` | script log |
+| R-DEL-3 | `make test` from a clean clone, needing only Docker, in < 5 minutes | Run it in CI (B-4) | CI log |
+```
+
+**Tool call · Bash**
+
+```json
+{
+  "command": "sed -n 160,196p internal/seed/seed.go; grep -n \"func newHarness\" -A8 cmd/api/stress_test.go | head -12; grep -n \"/v1/sms\" docs/contracts/provider-api.md | head -3",
+  "description": "Check seed insert method and harness signature"
+}
+```
+
+**Tool result**
+
+```
+}
+
+// Run inserts the users; existing seed_keys are left untouched (idempotent). It returns how many were new.
+func Run(ctx context.Context, pool *pgxpool.Pool, users []User) (int, error) {
+	const q = `INSERT INTO users (seed_key, first_name, last_name, email, phone, city, locale, birth_date, signup_at,
+		last_login_at, last_purchase_at, purchase_count, total_spent, last_cart_add_at, favorite_category, loyalty_tier,
+		sms_consent, email_consent, consent_updated_at)
+		VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19)
+		ON CONFLICT (seed_key) DO NOTHING`
+	inserted := 0
+	for start := 0; start < len(users); start += 1000 {
+		batch := &pgx.Batch{}
+		for _, u := range users[start:min(start+1000, len(users))] {
+			batch.Queue(q, u.SeedKey, u.FirstName, u.LastName, u.Email, u.Phone, u.City, u.Locale, u.BirthDate, u.SignupAt,
+				u.LastLoginAt, u.LastPurchaseAt, u.PurchaseCount, u.TotalSpent, u.LastCartAddAt, u.FavoriteCategory, u.LoyaltyTier,
+				u.SMSConsent, u.EmailConsent, u.ConsentUpdatedAt)
+		}
+		err := pgx.BeginFunc(ctx, pool, func(tx pgx.Tx) error {
+			br := tx.SendBatch(ctx, batch)
+			for range batch.Len() {
+				tag, err := br.Exec()
+				if err != nil {
+					br.Close()
+					return err
+				}
+				inserted += int(tag.RowsAffected())
+			}
+			return br.Close()
+		})
+		if err != nil {
+			return inserted, fmt.Errorf("insert users: %w", err)
+		}
+	}
+	return inserted, nil
+}
+
+func tier(spent float64) string {
+138:func newHarness(t *testing.T, providerURL string) *harness {
+139-	t.Helper()
+140-	testPool := storetest.NewDB(t) // creates, migrates and drops the database
+141-	ctx := context.Background()
+142-	if _, err := seed.Run(ctx, testPool, seed.Generate(5000, 20261108, time.Now())); err != nil {
+143-		t.Fatal(err)
+144-	}
+145-	// Same database, production pool size (store.Open uses 20; storetest's pool is smaller).
+146-	cfg := testPool.Config()
+11:`POST /v1/sms` and `POST /v1/email`, `Content-Type: application/json`, header `Idempotency-Key` (required)
+… [15 more characters truncated]
+```
+
+### Assistant
+
+Adding S3(c) single-approve latency, a 100k-user count scenario, and a 500 rps provider scenario to the API stress suite.
+
+**Tool call · Bash**
+
+```json
+{
+  "command": "python3 - <<'EOF'\np='cmd/api/stress_test.go'\ns=open(p).read()\n# parametrize harness size\ns=s.replace('''func newHarness(t *testing.T, providerURL string) *harness {\n\tt.Helper()\n\ttestPool := storetest.NewDB(t) // creates, migrates and drops the database\n\tctx := context.Background()\n\tif _, err := seed.Run(ctx, testPool, seed.Generate(5000, 20261108, time.Now())); err != nil {''','''func newHarness(t *testing.T, providerURL string) *harness { return newHarnessN(t, providerURL, 5000) }\n\nfunc newHarnessN(t *testing.T, providerURL string, users int) *harness {\n\tt.Helper()\n\ttestPool := storetest.NewDB(t) // creates, migrates and drops the database\n\tctx := context.Background()\n\tif _, err := seed.Run(ctx, testPool, seed.Generate(users, 20261108, time.Now())); err != nil {''')\n\n# S3(c): single all-user approve before the storm\nold='''\t\t// (a) one campaign, 100 racing approves\n\t\tid, ver, wantSMS, wantEmail := h.readyCampaign(officialBrief)'''\nnew='''\t\t// (c) R-SND-1: one all-user approve on its own returns fast and leaves the work to the worker.\n\t\t{\n\t\t\tid, ver, s5, e5 := h.readyCampaign(everyoneBrief)\n\t\t\tvar lat []time.Duration\n\t\t\tcode, _, d, err := h.approve(id, ver, \"single\")\n\t\t\tlat = append(lat, d)\n\t\t\tvar queued, total int\n\t\t\tif qerr := h.pool.QueryRow(context.Background(), `SELECT count(*) FILTER (WHERE status = 'queued'), count(*) FROM messages WHERE campaign_id = $1`, id).Scan(&queued, &total); qerr != nil {\n\t\t\t\tt.Fatal(qerr)\n\t\t\t}\n\t\t\tfor i := range 4 { // more samples for a stable number; each on its own all-user campaign\n\t\t\t\tid, ver, _, _ := h.readyCampaign(everyoneBrief)\n\t\t\t\t_, _, d, _ := h.approve(id, ver, \"single-\"+strconv.Itoa(i))\n\t\t\t\tlat = append(lat, d)\n\t\t\t}\n\t\t\tr.param(\"(c) one all-user approve on its own (5 campaigns)\", fmt.Sprintf(\"%d messages (%d sms + %d email); latency %s\", total, s5, e5, latencies(lat)))\n\t\t\tr.check(err == nil && code ==
+… [7143 more characters truncated]
+```
+
+**Tool result**
+
+```
+vet-ok
+```
+
+**Tool call · Bash**
+
+```json
+{
+  "command": "cat /private/tmp/claude-501/-Users-owner-projeler-smart-campaign-composer/76094f6f-4357-43bc-9bab-c4747eda27f6/scratchpad/fuzz.log | tail -4; STRESS=1 STRESS_ONLY=S3,S8 STRESS_API_REPORT=/private/tmp/claude-501/-Users-owner-projeler-smart-campaign-composer/76094f6f-4357-43bc-9bab-c4747eda27f6/scratchpad/api-new.md TEST_DATABASE_URL='postgres://scc:scc@localhost:55432/postgres?sslmode=disable' go test -tags stress -count=1 -run TestStressAPI -timeout 30m ./cmd/api/ 2>&1 | grep -v \"^time=\\|INFO\" | tail -3; grep -E \"^\\| \\(c\\)|R-SND-1|queued|S8|R-RES-3|throughput|latency \\(conf|offered|responses by\" /private/tmp/claude-501/-Users-owner-projeler-smart-campaign-composer/76094f6f-4357-43bc-9bab-c4747eda27f6/scratchpad/api-new.md",
+  "description": "Check fuzz result; run S3 and S8",
+  "timeout": 1800000
+}
+```
+
+**Tool result**
+
+```
+fuzz: elapsed: 1m48s, execs: 5374812 (27612/sec), new interesting: 365 (total: 514)
+fuzz: elapsed: 1m51s, execs: 5440009 (21728/sec), new interesting: 366 (total: 515)
+fuzz: elapsed: 1m54s, execs: 5640699 (66938/sec), new interesting: 366 (total: 515)
+fuzz: elapsed: 1m57s, execs: 5908164 (89119/sec), new interesting: 368 (total: 517)
+ok  	smartcampaign/cmd/api	13.739s
+| S8 provider throughput | PASS |
+(c) one all-user approve on its own (R-SND-1 target < 200 ms); (a) 100 concurrent approves of the same campaign, each with its own Idempotency-Key, then a replay of the winning key; (b) 10 different all-user campaigns approved concurrently.
+| (c) one all-user approve on its own (5 campaigns) | 7542 messages (3530 sms + 4012 email); latency p50 147ms · p95 153ms · p99 153ms · max 215ms |
+| (a) responses by status | map[202:1 409:99] |
+| (b) campaigns / messages enqueued | 10 / 75420 (3530 sms + 4012 email each) |
+| R-SND-1: approve of a 5000-user campaign returns in < 200 ms (median of 5) | pass | status 202, median 147ms |
+| the approve only enqueues: every message is still `queued` when it returns (no worker runs here) | pass | 7542 of 7542 queued |
+| messages enqueued exactly once (= consented audience) | pass | messages sms/email 222/262, audience 222/262 |
+| each campaign enqueued exactly its consented audience | pass | 75420 messages in total |
+Before need.md N-ORC-013 the ten enqueues ran in parallel and each took 14–55 s on the compose Postgres (buffer and spinlock contention, reproduced in plain SQL); all ten hit the 60 s timeout and rolled back, so nothing was enqueued. Approve now takes a transaction-scoped advisory lock just before the bulk INSERT, so concurrent approves enqueue one after another: the slowest waits for the others, and every approve succeeds.
+## S8 provider throughput
+R-RES-3: an open-loop load of 500 requests per second for 10 s (one every 2 ms, alternating SMS and email, unique Idempotency-Keys) against the mock provider with its default la
+… [345 more characters truncated]
+```
+
+### Assistant
+
+S3(c): median 147 ms for 7542 messages, all still `queued` afterwards. S8: 5000/5000 at 500/s, p99 296 ms. Checking the fuzz result, then running the 100k scenario.
+
+**Tool call · Bash**
+
+```json
+{
+  "command": "tail -3 /private/tmp/claude-501/-Users-owner-projeler-smart-campaign-composer/76094f6f-4357-43bc-9bab-c4747eda27f6/scratchpad/fuzz.log; git status --short | head; STRESS=1 STRESS_ONLY=S5b STRESS_API_REPORT=/private/tmp/claude-501/-Users-owner-projeler-smart-campaign-composer/76094f6f-4357-43bc-9bab-c4747eda27f6/scratchpad/api-100k.md TEST_DATABASE_URL='postgres://scc:scc@localhost:55432/postgres?sslmode=disable' go test -tags stress -count=1 -run TestStressAPI -timeout 30m ./cmd/api/ 2>&1 | grep -v \"^time=\\|INFO\" | tail -3; sed -n '/## S5b/,$p' /private/tmp/claude-501/-Users-owner-projeler-smart-campaign-composer/76094f6f-4357-43bc-9bab-c4747eda27f6/scratchpad/api-100k.md",
+  "description": "Show fuzz verdict and run 100k counts scenario",
+  "timeout": 1800000
+}
+```
+
+**Tool result**
+
+```
+PASS
+ok  	smartcampaign/internal/segment	121.512s
+exit 0
+ M cmd/api/stress_test.go
+ok  	smartcampaign/cmd/api	3.180s
+## S5b segment counts at 100k users
+
+R-RES-2: the seed scaled to 100 000 users (`SEED_USERS=100000`); every golden rule of the counting tests is counted through `PUT …/segment` (validate, compile, count with the statement timeout), 5 times each.
+
+| Parameter / measurement | Value |
+|---|---|
+| count: age band or premium tier | p50 39ms · p95 41ms · p99 41ms · max 48ms |
+| count: big spenders in three cities | p50 6ms · p95 6ms · p99 6ms · max 7ms |
+| count: everyone | p50 10ms · p95 10ms · p99 10ms · max 11ms |
+| count: lapsed incl. never | p50 8ms · p95 8ms · p99 8ms · max 8ms |
+| count: official brief | p50 5ms · p95 5ms · p99 5ms · max 6ms |
+| seeding 100 000 users | 2s |
+
+| Check | Result | Evidence |
+|---|---|---|
+| R-RES-2: segment preview (incl. count) p95 < 300 ms at 100 000 users | pass | p95 39ms |
+```
+
+### Assistant
+
+The 100k timings look fast, so I'm adding an assertion that the database really holds 100k users.
+
+**Tool call · Bash**
+
+```json
+{
+  "command": "python3 - <<'EOF'\np='cmd/api/stress_test.go'\ns=open(p).read()\nold='''\t\tr.param(\"seeding 100 000 users\", seedTime.Round(time.Second).String())'''\nnew='''\t\tvar n int\n\t\tif err := h.pool.QueryRow(context.Background(), `SELECT count(*) FROM users`).Scan(&n); err != nil {\n\t\t\tt.Fatal(err)\n\t\t}\n\t\tvar everyone struct {\n\t\t\tCampaign campaignDoc `json:\"campaign\"`\n\t\t}\n\t\th.mustJSON(http.MethodPut, \"/api/campaigns/\"+c.ID+\"/segment\", map[string]any{\"rule\": json.RawMessage(rules[\"everyone\"])}, http.StatusOK, &everyone)\n\t\tr.param(\"users in the database / matched by the everyone rule (consent applies to reachable)\", fmt.Sprintf(\"%d / sms %d, email %d\",\n\t\t\tn, everyone.Campaign.Segment.Audience.SMS, everyone.Campaign.Segment.Audience.Email))\n\t\tr.check(n >= users, \"the database really holds the 100 000 users\", fmt.Sprint(n))\n\t\tr.param(\"seeding 100 000 users\", seedTime.Round(time.Second).String())'''\nassert old in s; s=s.replace(old,new)\nopen(p,'w').write(s)\nEOF\ngofmt -w cmd/api/stress_test.go && STRESS=1 STRESS_ONLY=S5b STRESS_API_REPORT=/private/tmp/claude-501/-Users-owner-projeler-smart-campaign-composer/76094f6f-4357-43bc-9bab-c4747eda27f6/scratchpad/api-100k.md TEST_DATABASE_URL='postgres://scc:scc@localhost:55432/postgres?sslmode=disable' go test -tags stress -count=1 -run TestStressAPI -timeout 30m ./cmd/api/ 2>&1 | grep -v \"^time=\\|INFO\" | tail -2; grep -E \"users in|really|p95 <\" /private/tmp/claude-501/-Users-owner-projeler-smart-campaign-composer/76094f6f-4357-43bc-9bab-c4747eda27f6/scratchpad/api-100k.md",
+  "description": "Assert 100k users exist and rerun S5b",
+  "timeout": 1800000
+}
+```
+
+**Tool result**
+
+```
+ok  	smartcampaign/cmd/api	3.439s
+| users in the database / matched by the everyone rule (consent applies to reachable) | 100000 / sms 69928, email 80178 |
+| the database really holds the 100 000 users | pass | 100000 |
+| R-RES-2: segment preview (incl. count) p95 < 300 ms at 100 000 users | pass | p95 40ms |
+```
+
+### Assistant
+
+Committing the three stress additions separately, staging the file in three steps.
+
+**Tool call · Bash**
+
+```json
+{
+  "command": "S=/private/tmp/claude-501/-Users-owner-projeler-smart-campaign-composer/76094f6f-4357-43bc-9bab-c4747eda27f6/scratchpad && cp cmd/api/stress_test.go $S/stress_full.go && python3 - \"$S\" <<'EOF'\nimport sys\nS=sys.argv[1]\nfull=open(S+'/stress_full.go').read()\na=full.index('\\tt.Run(\"S5b_100k_counts\"'); b=full.index('\\tt.Run(\"S8_provider_500rps\"'); c=full.index('\\tt.Run(\"S6_dashboard_fanout\"')\ns5b=full[a:b]; s8=full[b:c]\nstep1=full.replace(s5b,'').replace(s8,'')\nstep2=full.replace(s8,'')\nopen(S+'/step1.go','w').write(step1); open(S+'/step2.go','w').write(step2)\nEOF\ncp $S/step1.go cmd/api/stress_test.go && go vet -tags stress ./cmd/api/ 2>&1 | head -3",
+  "description": "Prepare staged versions of the stress file"
+}
+```
+
+**Tool result**
+
+```
+(Bash completed with no output)
+```
+
+**Tool call · Bash**
+
+```json
+{
+  "command": "S=/private/tmp/claude-501/-Users-owner-projeler-smart-campaign-composer/76094f6f-4357-43bc-9bab-c4747eda27f6/scratchpad && git add cmd/api/stress_test.go && git commit -q -m \"test(stress): S3(c) one all-user approve on its own: median 147 ms for 7542 messages, all still queued [R-SND-1]\n\nCloses spec-auditor P1: \\\"approve < 200 ms for 5k recipients\\\" had no committed evidence.\n\nCo-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>\" && cp $S/step2.go cmd/api/stress_test.go && go vet -tags stress ./cmd/api/ && git add cmd/api/stress_test.go && git commit -q -m \"test(stress): S5b segment previews at 100 000 users: p95 40 ms [R-RES-2]\n\nCloses spec-auditor P1 (KICKOFF §10.3: counts stay < 300 ms at SEED_USERS=100000).\n\nCo-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>\" && cp $S/stress_full.go cmd/api/stress_test.go && go vet -tags stress ./cmd/api/ && git add cmd/api/stress_test.go && git commit -q -m \"test(stress): S8 mock provider at 500 rps open loop: 5000/5000 answered, p99 296 ms [R-RES-3]\n\nCloses spec-auditor P1 (KICKOFF §10.3: the provider sustains 500 rps without becoming the bottleneck).\n\nCo-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>\" && git log --oneline -3 && git status --short",
+  "description": "Commit S3(c), S5b and S8 separately"
+}
+```
+
+**Tool result**
+
+```
+7b46d74 test(stress): S8 mock provider at 500 rps open loop: 5000/5000 answered, p99 296 ms [R-RES-3]
+934f3a8 test(stress): S5b segment previews at 100 000 users: p95 40 ms [R-RES-2]
+aeabc3c test(stress): S3(c) one all-user approve on its own: median 147 ms for 7542 messages, all still queued [R-SND-1]
+```
+
+### Assistant
+
+Next, the stress report's "peak" wording (P1 #13).
+
+**Tool call · Bash**
+
+```json
+{
+  "command": "grep -n \"peak\\|avg\" docs/stress/REPORT.md | head; sed -n 378,395p cmd/worker/stress_test.go; grep -n \"89\\|peak\" cmd/worker/stress_test.go | grep -v \"^3[89][0-9]:\" | head; grep -n \"89/s\\|~89\" DECISIONS.md README.md",
+  "description": "Find peak/average wording in report, code, docs"
+}
+```
+
+**Tool result**
+
+```
+24:| sms sent / avg / peak(5 s) | 4801 / 84.2/s / 107.9/s |
+25:| email sent / avg / peak(5 s) | 4896 / 85.9/s / 109.4/s |
+53:| sms sent / avg / peak(5 s) | 1921 / 30.0/s / 59.4/s |
+54:| email sent / avg / peak(5 s) | 1959 / 30.6/s / 59.6/s |
+109:  admissions gives up the slack the old limiter borrowed. Sustained 5 s peaks still reach 98-100/s; the 1 s
+	}
+}
+
+// peakPerSecond is the best 5-second average of sent messages per second for one channel.
+func peakPerSecond(samples []progress, ch string) float64 {
+	best := 0.0
+	for i := 5; i < len(samples); i++ {
+		dt := (samples[i].Elapsed - samples[i-5].Elapsed).Seconds()
+		if dt > 0 {
+			best = max(best, float64(samples[i].Sent[ch]-samples[i-5].Sent[ch])/dt)
+		}
+	}
+	return best
+}
+
+// checkInvariants asserts KICKOFF §10.2 I1-I7 and records them. metricSent, when non-nil, is a worker's
+// messages_total{sent} (only valid when that worker was never killed).
+func (e *env) checkInvariants(r *result, s seeded, completed bool, workers []*worker, metricSent map[string]float64, expectExact bool) {
+280:// enqueue. Every 50th user has an invalid phone (permanent 400), every 97th/89th never consented to
+302:		       'Ankara', 'tr', date '1990-01-01', now(), 'bronze', i % 97 <> 0, i % 89 <> 0
+579:			[2]string{"sms sent / avg / peak(5 s)", fmt.Sprintf("%d / %s / %s", c["sms"]["sent"], fmtRate(float64(c["sms"]["sent"])/dur.Seconds()), fmtRate(peakPerSecond(samples, "sms")))},
+580:			[2]string{"email sent / avg / peak(5 s)", fmt.Sprintf("%d / %s / %s", c["email"]["sent"], fmtRate(float64(c["email"]["sent"])/dur.Seconds()), fmtRate(peakPerSecond(samples, "email")))},
+629:			[2]string{"sms sent / avg / peak(5 s)", fmt.Sprintf("%d / %s / %s", c["sms"]["sent"], fmtRate(float64(c["sms"]["sent"])/dur.Seconds()), fmtRate(peakPerSecond(samples, "sms")))},
+630:			[2]string{"email sent / avg / peak(5 s)", fmt.Sprintf("%d / %s / %s", c["email"]["sent"], fmtRate(float64(c["email"]["sent"])/dur.Seconds()), fmtRate(peakPerSecond(samples, "email")))},
+
+… [360 more characters truncated]
+```
+
+**Tool call · Bash**
+
+```json
+{
+  "command": "sed -n 778,790p cmd/worker/stress_test.go",
+  "description": "Read the throughput paragraph in report footer"
+}
+```
+
+**Tool result**
+
+```
+  each request was written to the connection (see "Rate bound" below). The provider counts arrivals itself, stamped
+  before it decodes the body or takes its lock; "max requests" is the largest number of requests (retries
+  included) that arrived inside any 1 s span, and it must stay at or below 100 (I3). These runs use
+  RATE_LIMIT_SAFETY_MARGIN=0: the bound comes from the mechanism, not from a smaller N.
+- **Throughput after the rate-bound fix.** S1 averages about 89 sends/s per channel (96/s with the old limiter): roughly
+  4 s of the run is the quiet time after the lock is won at start-up, and pacing from departures instead of
+  admissions gives up the slack the old limiter borrowed. Sustained 5 s peaks still reach 98-100/s; the 1 s
+  maximum seen by the provider (I3) is what is bounded.
+- **Throughput under faults.** A 429 pauses the whole channel for its Retry-After (KICKOFF §7.3). One overload event
+  produces several 429s from requests that were in flight together, so they are counted as one event; even so, a
+  provider that answers 5% of requests with 429 holds each channel well below 100/s (S2 shows the measured rate).
+  Little's law also sets the in-flight bound: 100 sends/s at a 400 ms mean latency needs about 40 concurrent
+  requests, so S2 raises MAX_IN_FLIGHT_PER_CHANNEL from the default 32 to 64.
+```
+
+**Tool call · Bash**
+
+```json
+{
+  "command": "python3 - <<'EOF'\np='cmd/worker/stress_test.go'\ns=open(p).read()\ns=s.replace('// peakPerSecond is the best 5-second average of sent messages per second for one channel.',\n'// peakPerSecond is the best 5-second average of DB completions (rows turning `sent`) per second for one channel.\\n// It is not the send rate: answers to up to MaxInFlight earlier requests can land in the same window, so it can\\n// exceed 100/s while the provider-measured arrival rate (I3) never does.')\ns=s.replace('\"sms sent / avg / peak(5 s)\"','\"sms sent / avg / best 5 s of DB completions\"').replace('\"email sent / avg / peak(5 s)\"','\"email sent / avg / best 5 s of DB completions\"')\nold='''- **Throughput after the rate-bound fix.** S1 averages about 89 sends/s per channel (96/s with the old limiter): roughly\n  4 s of the run is the quiet time after the lock is won at start-up, and pacing from departures instead of\n  admissions gives up the slack the old limiter borrowed. Sustained 5 s peaks still reach 98-100/s; the 1 s\n  maximum seen by the provider (I3) is what is bounded.'''\nnew='''- **Throughput after the rate-bound fix.** S1 averages 84-90 sends/s per channel over the whole run (96/s with the old\n  limiter): about 4 s of the run is the quiet time after the lock is won at start-up, and pacing from departures\n  instead of admissions gives up the slack the old limiter borrowed. \"Best 5 s of DB completions\" counts rows turning\n  `sent`, not requests sent: answers to up to 32 in-flight requests can land in the same window, so it can read above\n  100/s. The rate that is bounded is the provider's own count of arrivals in any 1 s window (I3), which stays at 100.'''\nassert old in s; s=s.replace(old,new)\nopen(p,'w').write(s)\np='docs/stress/REPORT.md'\nr=open(p).read()\nr=r.replace('sent / avg / peak(5 s)','sent / avg / best 5 s of DB completions')\nr=r.replace(old,new)\nopen(p,'w').write(r)\np='DECISIONS.md'\nd=open(p).read()\nd=d.replace(\"Cost: ~4 s of si
+… [923 more characters truncated]
+```
+
+**Tool result**
+
+```
+Exit code 1
+4
+docs/stress/REPORT.md:107:- **Throughput after the rate-bound fix.** S1 averages 84-90 sends/s per channel over the whole run (96/s with the old
+DECISIONS.md:153:  Stress S1/S2/S7 assert the same bound. Cost: ~4 s of silence after start or takeover; S1 averages 84–90/s per channel over the whole run.
+cmd/worker/stress_test.go:787:4: expected ';', found sent
+```
+
+**Tool call · Bash**
+
+```json
+{
+  "command": "python3 - <<'EOF'\np='cmd/worker/stress_test.go'\ns=open(p).read()\ns=s.replace('counts rows turning\\n  `sent`, not requests sent','counts rows turning\\n  ` + \"`sent`\" + `, not requests sent')\nopen(p,'w').write(s)\nEOF\ngo vet -tags stress ./cmd/worker/ && git add cmd/worker/stress_test.go docs/stress/REPORT.md DECISIONS.md && git commit -q -m \"docs(stress): label the 5 s peak as DB completions, not send rate; S1 average stated as measured [R-SND-2]\n\nCloses spec-auditor P1: \\\"peak(5 s) 107.9/s\\\" read like a rate-limit violation. It counts rows turning sent,\nwhich bunch up when in-flight answers land together; the bounded rate is the provider's arrivals per 1 s (I3, 100).\n\nCo-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>\" && echo ok",
+  "description": "Fix raw-string backticks and commit"
+}
+```
+
+**Tool result**
+
+```
+ok
+```
+
+<details><summary>Thinking</summary>
+
+Next is P1, S2 at the KICKOFF scale (25,000 users, about 50k messages), which I'm making the default while the full stress suite runs in the background with only light work meanwhile.
+
+</details>
+
+**Tool call · Bash**
+
+```json
+{
+  "command": "grep -n 'STRESS_S2_USERS' cmd/worker/stress_test.go | head -3; sed -i '' 's/STRESS_S2_USERS (default 2000)/STRESS_S2_USERS (default 25000, ~50k messages as in KICKOFF §10.1)/; s/envInt(\"STRESS_S2_USERS\", 2000)/envInt(\"STRESS_S2_USERS\", 25000)/' cmd/worker/stress_test.go && grep -n 'STRESS_S2_USERS' cmd/worker/stress_test.go | head -3; grep -n '\"S2 chaos\"' -B2 -A3 cmd/worker/stress_test.go | grep -n \"25\\*time\\|Minute\" ; grep -n \"waitTerminal(s.campaign, 25\" cmd/worker/stress_test.go",
+  "description": "Make S2 default to 25k users"
+}
+```
+
+**Tool result**
+
+```
+12:// STRESS_S1_USERS (default 5000), STRESS_S2_USERS (default 2000), STRESS_S7_USERS (default 1500),
+594:		n := envInt("STRESS_S2_USERS", 2000)
+12:// STRESS_S1_USERS (default 5000), STRESS_S2_USERS (default 25000, ~50k messages as in KICKOFF §10.1), STRESS_S7_USERS (default 1500),
+594:		n := envInt("STRESS_S2_USERS", 25000)
+607:		samples, dur, done := e.waitTerminal(s.campaign, 25*time.Minute, func(p progress) {
+```
+
+**Tool call · Bash**
+
+```json
+{
+  "command": "go vet -tags stress ./cmd/worker/ && make stress > /private/tmp/claude-501/-Users-owner-projeler-smart-campaign-composer/76094f6f-4357-43bc-9bab-c4747eda27f6/scratchpad/stress-full3.log 2>&1; echo \"exit $?\" >> /private/tmp/claude-501/-Users-owner-projeler-smart-campaign-composer/76094f6f-4357-43bc-9bab-c4747eda27f6/scratchpad/stress-full3.log",
+  "description": "Run full stress suite with S2 at 25k users",
+  "run_in_background": true
+}
+```
+
+**Tool result**
+
+```
+Command running in background with ID: b0e0e3oft. Output is being written to: /private/tmp/claude-501/-Users-owner-projeler-smart-campaign-composer/76094f6f-4357-43bc-9bab-c4747eda27f6/tasks/b0e0e3oft.output. You will be notified when it completes. To check interim output, use Read on that file path.
+```
+
+### Assistant
+
+Stress suite (S2 at 25k) arka planda; bu arada dashboard'daki throughput grafiğini (KICKOFF P1) yazıyorum.
+
+**Tool call · Bash**
+
+```json
+{
+  "command": "cd ~/projeler/smart-campaign-composer/web/src && sed -n 1,110p views/DashboardView.vue; cat lib/progress.ts | head -64",
+  "description": "Read dashboard view and progress helpers"
+}
+```
+
+**Tool call · Bash**
+
+```json
+{
+  "command": "cd ~/projeler/smart-campaign-composer/web/src && sed -n 110,216p views/DashboardView.vue; grep -n \"^:root\\|--ok\\|--info\\|--warn\\|--line\\|--muted\" style.css | head",
+  "description": "Read dashboard template and CSS tokens"
+}
+```
+
+**Tool result**
+
+```
+<script setup lang="ts">
+import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
+import ErrorNotice from '../components/ErrorNotice.vue'
+import StatusPill from '../components/StatusPill.vue'
+import { api } from '../lib/api'
+import { describeError, type UserMessage } from '../lib/errors'
+import { formatClock, formatEta, formatInt } from '../lib/format'
+import {
+  applyEvent,
+  applySnapshot,
+  channelEntries,
+  channelFraction,
+  emptyDashboard,
+  errorLabel,
+  overallFraction,
+} from '../lib/progress'
+import { links } from '../lib/router'
+import { connectProgress, type ConnectionState } from '../lib/sse'
+import type { Campaign, Channel, ChannelProgress } from '../lib/types'
+
+const props = defineProps<{ campaignId: string }>()
+
+const campaign = ref<Campaign | null>(null)
+const state = ref(emptyDashboard())
+const conn = ref<ConnectionState>('connecting')
+const error = ref<UserMessage | null>(null)
+const loading = ref(true)
+const finalStatus = ref<string | null>(null)
+let stop: (() => void) | null = null
+
+const CHANNEL_NAME: Record<Channel, string> = { sms: 'SMS', email: 'Email' }
+
+const status = computed(() => finalStatus.value ?? state.value.progress?.status ?? campaign.value?.status)
+const active = computed(() => status.value === 'sending')
+const overall = computed(() => (state.value.progress ? Math.round(overallFraction(state.value.progress) * 100) : 0))
+const errors = computed(() => Object.entries(state.value.progress?.errors ?? {}).filter(([, n]) => n > 0))
+const channels = computed(() => (state.value.progress ? channelEntries(state.value.progress) : []))
+
+function pct(c: ChannelProgress, n: number) {
+  return c.total > 0 ? (n / c.total) * 100 : 0
+}
+
+async function load() {
+  loading.value = true
+  error.value = null
+  try {
+    campaign.value = await api.getCampaign(props.campaignId)
+    if (campaign.value.progress) state.value = applySnapshot(state.value, campaign.value.progress)
+    if (campaign.value.status === 'draft' || campaign.value.status === 'se
+… [4224 more characters truncated]
+```
+
+**Tool result**
+
+```
+      <a class="btn" :href="links.list()">Back to campaigns</a>
+    </ErrorNotice>
+
+    <div v-else-if="notSent" class="empty">
+      <p>This campaign has not been sent yet, so there is nothing to show.</p>
+      <a class="btn primary" :href="links.composer(campaignId)">Continue editing</a>
+    </div>
+
+    <div v-else-if="!state.progress" class="empty" role="status">
+      <span class="spinner" aria-hidden="true" />
+      <p>Waiting for the first progress update…</p>
+    </div>
+
+    <div v-else class="stack">
+      <div v-if="conn === 'reconnecting'" class="notice warn" role="status">
+        <strong>Connection lost.</strong>
+        <p>Reconnecting. The numbers below refresh as soon as the connection is back; nothing is lost.</p>
+      </div>
+
+      <div class="card">
+        <header>
+          <h2>Overall progress</h2>
+          <span class="num">
+            <b>{{ overall }}%</b>
+            <span class="muted"> · {{ active ? `ETA ${formatEta(state.progress.eta_seconds)}` : 'finished' }}</span>
+          </span>
+        </header>
+        <div
+          class="bar"
+          role="progressbar"
+          aria-label="Overall delivery progress"
+          :aria-valuenow="overall"
+          aria-valuemin="0"
+          aria-valuemax="100"
+        >
+          <span class="sent" :style="{ width: overall + '%' }" />
+        </div>
+      </div>
+
+      <div class="two">
+        <section v-for="[ch, c] in channels" :key="ch" class="card" :aria-labelledby="`ch-${ch}`">
+          <header>
+            <h2 :id="`ch-${ch}`">{{ CHANNEL_NAME[ch] }}</h2>
+            <span class="num muted">
+              {{ formatInt(c.throughput_per_s) }} msg/s · {{ formatInt(c.total) }} total
+            </span>
+          </header>
+          <div
+            class="bar"
+            role="progressbar"
+            :aria-label="`${CHANNEL_NAME[ch]} progress`"
+            :aria-valuenow="Math.round(channelFraction(c) * 100)"
+            aria-valuemin="0"
+            aria-valuemax="100"
+          >
+    
+… [3363 more characters truncated]
+```
+
+**Tool call · Bash**
+
+```json
+{
+  "command": "grep -n \"throughput_per_s\\|updated_at\" lib/types.ts; sed -n 1,30p style.css | grep -n \"\\-\\-\" | head -30",
+  "description": "Check progress type fields and CSS tokens"
+}
+```
+
+**Tool result**
+
+```
+109:  throughput_per_s: number
+120:  updated_at: string
+164:  updated_at: string
+5:  --paper: #f2f4f8;
+6:  --panel: #ffffff;
+7:  --ink: #17202f;
+8:  --ink-2: #4a5568;
+9:  --ink-3: #6b7587;
+10:  --line: #d8dde7;
+11:  --line-soft: #e8ebf1;
+12:  --accent: #3347d1;
+13:  --accent-ink: #ffffff;
+14:  --accent-soft: #e8ebfc;
+15:  --ok: #17724b;
+16:  --ok-soft: #e2f3ea;
+17:  --warn: #8a5a00;
+18:  --warn-soft: #fcf0d4;
+19:  --bad: #b3361b;
+20:  --bad-soft: #fbe6e1;
+21:  --radius: 8px;
+22:  --font: 'Avenir Next', 'Segoe UI Variable', 'Segoe UI', system-ui, -apple-system, sans-serif;
+23:  --mono: ui-monospace, 'SF Mono', 'Cascadia Mono', Menlo, monospace;
+30:  background: var(--paper);
+```
+
+**Tool call · Bash**
+
+```json
+{
+  "command": "cat > lib/throughput.ts <<'EOF'\n// Throughput history for the dashboard chart. Each snapshot carries the server's per-channel rate over the last\n// 5 s (throughput_per_s) and its database time (updated_at); the chart keeps the last WINDOW_MS of them.\nimport type { Channel, Progress } from './types'\n\nexport const WINDOW_MS = 120_000\nexport const LIMIT_PER_S = 100 // R-SND-2, drawn as the reference line\n\nexport interface Sample {\n  t: number // ms since epoch, from updated_at\n  sms: number\n  email: number\n}\n\nexport function appendSample(history: Sample[], p: Progress): Sample[] {\n  const t = Date.parse(p.updated_at)\n  if (Number.isNaN(t)) return history\n  const last = history[history.length - 1]\n  if (last && t <= last.t) return history // a reconnect can repeat or reorder snapshots\n  const s: Sample = { t, sms: p.channels.sms?.throughput_per_s ?? 0, email: p.channels.email?.throughput_per_s ?? 0 }\n  return [...history, s].filter((x) => x.t >= t - WINDOW_MS)\n}\n\n// SVG polyline points for one channel in a w×h box: x spans the window ending at the newest sample, y spans\n// 0..yMax (values above are clipped to the top).\nexport function linePoints(history: Sample[], ch: Channel, w: number, h: number, yMax: number): string {\n  const end = history[history.length - 1]?.t ?? 0\n  return history\n    .map((s) => {\n      const x = w - ((end - s.t) / WINDOW_MS) * w\n      const y = h - (Math.min(s[ch], yMax) / yMax) * h\n      return `${x.toFixed(1)},${y.toFixed(1)}`\n    })\n    .join(' ')\n}\nEOF\ncat > lib/throughput.test.ts <<'EOF'\nimport { describe, expect, it } from 'vitest'\nimport { appendSample, linePoints, WINDOW_MS } from './throughput'\nimport type { Progress } from './types'\n\nconst snap = (at: number, sms: number, email: number) =>\n  ({\n    updated_at: new Date(at).toISOString(),\n    channels: { sms: { throughput_per_s: sms }, email: { throughput_per_s: email } },\n  }) as unknown as Progress\n\ndescribe('throughput h
+… [1086 more characters truncated]
+```
+
+**Tool result**
+
+```
+      Tests  3 passed (3)
+```
+
+### Assistant
+
+Now wiring the chart into the dashboard.
+
+**Tool call · Bash**
+
+```json
+{
+  "command": "cd ~/projeler/smart-campaign-composer/web/src && python3 - <<'EOF'\np='views/DashboardView.vue'\ns=open(p).read()\ns=s.replace(\"import { links } from '../lib/router'\",\"import { links } from '../lib/router'\\nimport { appendSample, linePoints, LIMIT_PER_S, type Sample } from '../lib/throughput'\")\ns=s.replace(\"const finalStatus = ref<string | null>(null)\",\"const finalStatus = ref<string | null>(null)\\nconst history = ref<Sample[]>([]) // throughput chart; starts when this page opens\")\ns=s.replace(\"      onSnapshot: (p) => (state.value = applySnapshot(state.value, p)),\",\"\"\"      onSnapshot: (p) => {\n        state.value = applySnapshot(state.value, p)\n        history.value = appendSample(history.value, p)\n      },\"\"\")\ns=s.replace('''const connTone = computed''','''// Chart box in SVG units; the y axis leaves headroom above the 100/s limit line.\nconst CHART_W = 600\nconst CHART_H = 140\nconst Y_MAX = 120\nconst limitY = CHART_H - (LIMIT_PER_S / Y_MAX) * CHART_H\nconst chartLabel = computed(() => {\n  const last = history.value[history.value.length - 1]\n  return last\n    ? `Throughput over the last two minutes. Now: SMS ${last.sms} per second, email ${last.email} per second; limit ${LIMIT_PER_S} per second per channel.`\n    : 'Throughput chart, waiting for data.'\n})\n\nconst connTone = computed''')\nold='''      <div class=\"two\">\n        <section class=\"card\" aria-labelledby=\"err-h\">'''\nnew='''      <section v-if=\"history.length > 1\" class=\"card\" aria-labelledby=\"tp-h\">\n        <header>\n          <h2 id=\"tp-h\">Throughput</h2>\n          <span class=\"muted legend\">\n            <span class=\"key sms\" aria-hidden=\"true\" />SMS <span class=\"key email\" aria-hidden=\"true\" />Email\n            <span class=\"key limit\" aria-hidden=\"true\" />limit {{ LIMIT_PER_S }}/s\n          </span>\n        </header>\n        <svg class=\"chart\" :viewBox=\"`0 0 ${CHART_W} ${CHART_H}`\" preserveAspectRatio=\"no
+… [1622 more characters truncated]
+```
+
+**Tool result**
+
+```
+views/DashboardView.vue:251:<style scoped>
+npm notice run scc-web@0.0.0 npx
+npm notice run 'vue-tsc' --noEmit
+TSC_OK
+```
+
+### Assistant
+
+Typecheck passes. I'll check the chart in the browser after the stress run (rebuilding the stack now would load the host). Stress progress:
+
+**Tool call · Bash**
+
+```json
+{
+  "command": "grep -E \"^=== RUN|--- (PASS|FAIL)|^ok|^FAIL\" /private/tmp/claude-501/-Users-owner-projeler-smart-campaign-composer/76094f6f-4357-43bc-9bab-c4747eda27f6/scratchpad/stress-full3.log | tail -5",
+  "description": "Check stress run progress"
+}
+```
+
+**Tool result**
+
+```
+=== RUN   TestStress
+=== RUN   TestStress/S1_baseline
+```
+
+### Assistant
+
+While S1 runs, the README updates: the not-done list including the P2s, plus the remaining doc gaps (N-ORC-013 in DECISIONS, hours under time spent).
+
+**Tool call · Bash**
+
+```json
+{
+  "command": "cd ~/projeler/smart-campaign-composer && sed -n '/## Not done/,$p' README.md; grep -n \"N-PLAN-010\\]\" DECISIONS.md; git log --reverse --format='%ad' --date=format:'%Y-%m-%d %H:%M' | head -1; date '+%Y-%m-%d %H:%M'",
+  "description": "Read README tail, D-6 header and time range"
+}
+```
+
+**Tool result**
+
+```
+## Not done / next steps
+
+- Mock-provider fault controls in the UI (P1; today: `POST :8090/admin/config`) and a "retry failed
+  messages" button (P2).
+- One real Claude API run (`make smoke-live`, one eval with `PROVIDER=anthropic`) — the owner's, with a key.
+- The CI workflow (`.github/workflows/ci.yml`: `make test`, `make lint`, `make e2e`) has not run on GitHub yet.
+
+## Time spent
+
+Built between 2026-11-08 02:40 and the 2026-11-10 10:00 freeze (Europe/Istanbul): planning with the owner,
+one build day (Phase 0 backbone, three parallel builders, integration), then verification (reviews, red-team,
+stress, e2e, live measurements). Agent usage per day is in `ai-sessions/usage/`.
+109:## D-6 · Postgres is the datastore and the queue [L-4, N-PLAN-010]
+2026-11-08 02:59
+2026-11-09 01:54
+```
+
+**Tool call · Bash**
+
+```json
+{
+  "command": "grep -n \"admin/config\" -A25 docs/contracts/provider-api.md | head -45; sed -n '/N-WEB-003/,/Status/p' need.md",
+  "description": "Read provider admin config contract and N-WEB-003"
+}
+```
+
+**Tool result**
+
+````
+53:- `GET /admin/config` → current config. `POST /admin/config` with any subset of the JSON fields → merged
+54-  config. Invalid values → 400.
+55-- `POST /admin/reset` → clears stats, the idempotency store and limiter state (config is kept). For tests.
+56-
+57-## 4. Stats (`GET /stats`)
+58-
+59-```json
+60-{ "since": "…",
+61-  "channels": {
+62-    "sms": {
+63-      "requests": 5310,                      // every request received
+64-      "accepted": 5000,                      // new deliveries (200, not replay)
+65-      "unique_keys": 5000,
+66-      "replayed_keys": 12,
+67-      "duplicate_recipient_deliveries": 0,   // accepted deliveries beyond the first per (campaign_id, user_id)
+68-      "max_requests_in_any_1s_window": 100,  // arrivals, incl. retries — invariant I3
+69-      "max_deliveries_in_any_1s_window": 97, // accepted deliveries only
+70-      "rejected_by_limiter": 0,
+71-      "hangs": 25,
+72-      "status_counts": { "200": 5012, "400": 3, "429": 51, "500": 40, "503": 12 } },
+73-    "email": { … } },
+74-  "total": { same fields summed; max_* are the max over channels } }
+75-```
+76-
+77-`GET /stats/delivered?channel=sms&campaign_id=…` → `{ "items": [ { "campaign_id", "user_id", "message_id",
+78-"at" } ] }` — every accepted delivery, used for the consent cross-check (invariant I2).
+### 🟡 N-WEB-003 · Proxy for mock-provider fault controls (P1) · impact: low
+- **Date / agent / session:** 2026-11-08 10:20 · web · builder-web (W1 subagent)
+- **Requirement(s):** R-OBS-1 (P1 UI)
+- **Context:** The P1 fault-control panel needs an API proxy to the provider's `/admin/config`.
+- **Options:** A) `GET/PUT /api/system/provider-config` forwarding to the mock provider. B) Skip the panel.
+- **Decision taken:** Not built; deferred to after P0 integration (CP2). Orchestrator leans to A, since it makes the S-scenarios demoable from the UI.
+- **Cost to change later:** ~1.5 h UI + ~30 min API.
+- **Question for owner:** —
+- **Owner response:**
+- **Status:** OPEN
+````
+
+**Tool call · Bash**
+
+```json
+{
+  "command": "sed -n 30,53p docs/contracts/provider-api.md; curl -s localhost:8090/admin/config",
+  "description": "Read provider config fields and current values"
+}
+```
+
+**Tool result**
+
+```
+## 2. Idempotency
+
+- Responses with status 200, 400 and 422 are stored per `Idempotency-Key`. The same key again returns the
+  stored status and body and counts as a **replay**, not a new delivery.
+- 429, 5xx and hangs are not stored; a retry with the same key is processed anew.
+- Half of all hangs happen **after** the delivery was recorded (accepted, but the response is lost), so a
+  retry must be deduplicated by the key. This is the "crash after send" case of KICKOFF §7.4.
+
+## 3. Fault configuration
+
+Env vars at start (see `.env.example`), changeable at runtime:
+
+| Env | JSON field | Default | Meaning |
+|---|---|---|---|
+| `PROVIDER_LATENCY_MIN_MS` / `_MAX_MS` | `latency_min_ms` / `latency_max_ms` | 20 / 300 | Uniform latency |
+| `PROVIDER_SPIKE_RATE` / `PROVIDER_SPIKE_MS` | `spike_rate` / `spike_ms` | 0.01 / 2000 | Occasional extra delay |
+| `PROVIDER_ERROR_RATE` | `error_rate` | 0.02 | Fraction answered 500/502/503 |
+| `PROVIDER_429_RATE` | `rate_429` | 0.01 | Fraction answered 429 |
+| `PROVIDER_RETRY_AFTER_S` | `retry_after_s` | 1 | `Retry-After` value |
+| `PROVIDER_HANG_RATE` | `hang_rate` | 0.005 | Fraction never answered |
+| `PROVIDER_RATE_LIMIT` | `rate_limit` | 100 | Own limiter: max requests per channel in any 1 s window, excess → 429 (0 = off) |
+| `PROVIDER_SEED` | `seed` | 0 | Fault RNG seed (0 = random) |
+
+- `GET /admin/config` → current config. `POST /admin/config` with any subset of the JSON fields → merged
+{"latency_min_ms":20,"latency_max_ms":300,"spike_rate":0.01,"spike_ms":2000,"error_rate":0.02,"rate_429":0.01,"retry_after_s":1,"hang_rate":0.005,"rate_limit":100,"seed":0}
+```
+
+<details><summary>Thinking</summary>
+
+Closing the last known KICKOFF P1, the mock-provider fault controls (N-WEB-003), which the audit missed because README already listed it. I'm adding an API proxy and then a System page panel, starting with the route setup.
+
+</details>
+
+**Tool call · Bash**
+
+```json
+{
+  "command": "grep -n \"HandleFunc\\|Handle(\" internal/api/server.go | head -30; grep -n \"func decode\" -A20 internal/api/campaigns.go | head -25; grep -n \"systemStatus\\|getSystemStatus\\|async function\\|export const api\" web/src/lib/api.ts | head",
+  "description": "Read route registration, decode helper, web api client"
+}
+```
+
+**Tool result**
+
+```
+77:	mux.HandleFunc("GET /healthz", func(w http.ResponseWriter, r *http.Request) {
+80:	mux.HandleFunc("GET /readyz", s.readyz)
+81:	mux.Handle("GET /metrics", s.d.Metrics.Handler())
+83:	mux.HandleFunc("GET /api/catalog", func(w http.ResponseWriter, r *http.Request) {
+86:	mux.HandleFunc("GET /api/system/status", s.systemStatus)
+88:	mux.HandleFunc("POST /api/campaigns", s.createCampaign)
+89:	mux.HandleFunc("GET /api/campaigns", s.listCampaigns)
+90:	mux.HandleFunc("GET /api/campaigns/{id}", s.getCampaign)
+91:	mux.HandleFunc("POST /api/campaigns/{id}/segment/generate", s.generateSegment)
+92:	mux.HandleFunc("PUT /api/campaigns/{id}/segment", s.putSegment)
+93:	mux.HandleFunc("POST /api/campaigns/{id}/content/generate", s.generateContent)
+94:	mux.HandleFunc("PUT /api/campaigns/{id}/content", s.putContent)
+95:	mux.HandleFunc("POST /api/content/validate", s.validateContent)
+96:	mux.HandleFunc("POST /api/campaigns/{id}/approve", s.approve)
+97:	mux.HandleFunc("GET /api/campaigns/{id}/messages", s.listMessages)
+98:	mux.HandleFunc("GET /api/campaigns/{id}/events", s.events)
+99:	mux.HandleFunc("/api/", func(w http.ResponseWriter, r *http.Request) {
+102:	mux.Handle("/", s.spa())
+335:func decode(w http.ResponseWriter, r *http.Request, v any) bool {
+336-	dec := json.NewDecoder(http.MaxBytesReader(w, r.Body, maxBody))
+337-	if err := dec.Decode(v); err != nil {
+338-		msg := "The request body is not valid JSON."
+339-		if errors.Is(err, io.EOF) {
+340-			msg = "The request body is empty."
+341-		}
+342-		writeError(w, 400, "bad_request", msg, []Issue{{Path: "", Code: "invalid_json", Message: err.Error()}})
+343-		return false
+344-	}
+345-	if dec.More() {
+346-		writeError(w, 400, "bad_request", "Trailing data after the JSON body.", nil)
+347-		return false
+348-	}
+349-	return true
+350-}
+351-
+352-func intParam(w http.ResponseWriter, r *http.Request, name string, def, lo, hi int) (int, bool) {
+353-	raw := r.URL.Query().Get(name)
+354-	if raw == "" {
+355-		return def, true
+26:export async function re
+… [392 more characters truncated]
+```
+
+**Tool call · Bash**
+
+```json
+{
+  "command": "grep -n \"admin/config\" -A40 internal/mockprovider/server.go | grep -n \"400\\|json\\|func\" | head -15",
+  "description": "Check how provider validates admin config"
+}
+```
+
+**Tool result**
+
+```
+3:209-	mux.HandleFunc("POST /admin/reset", func(w http.ResponseWriter, r *http.Request) {
+12:218-	ok := func(w http.ResponseWriter, r *http.Request) {
+22:228-	To         string `json:"to"`
+23:229-	Text       string `json:"text"`
+24:230-	Subject    string `json:"subject"`
+25:231-	HTML       string `json:"html"`
+26:232-	CampaignID string `json:"campaign_id"`
+27:233-	UserID     int64  `json:"user_id"`
+28:234-	MessageID  string `json:"message_id"`
+40:246-func (s *Server) send(channel string) http.HandlerFunc {
+41:247-	return func(w http.ResponseWriter, r *http.Request) {
+```
+
+**Tool call · Bash**
+
+```json
+{
+  "command": "grep -rn '\"POST /admin/config\"\\|admin/config' internal/mockprovider/*.go | grep -v _test | head; grep -n \"func (s \\*Server) setConfig\\|func.*adminConfig\\|DisallowUnknownFields\" internal/mockprovider/*.go | head",
+  "description": "Locate provider admin config handler"
+}
+```
+
+**Tool result**
+
+```
+internal/mockprovider/server.go:207:	mux.HandleFunc("GET /admin/config", s.getConfig)
+internal/mockprovider/server.go:208:	mux.HandleFunc("POST /admin/config", s.postConfig)
+internal/mockprovider/server.go:484:	dec.DisallowUnknownFields()
+```
+
+### Assistant
+
+Mock-provider hata ayarları için API proxy'sini ve System sayfasındaki paneli ekliyorum (KICKOFF P1, N-WEB-003); stress testi arka planda devam ediyor.
+
+**Tool call · Bash**
+
+```json
+{
+  "command": "cat > internal/api/provider.go <<'EOF'\npackage api\n\nimport (\n\t\"bytes\"\n\t\"io\"\n\t\"net/http\"\n\t\"time\"\n)\n\n// Fault controls for the mock provider (need.md N-WEB-003, KICKOFF §8 P1): the dashboard changes the\n// provider's latency, error, 429 and hang rates at runtime to demo the retry and rate-limit behavior. The API\n// forwards to the provider's /admin/config, which validates the fields (unknown fields and bad values → 400).\n\nconst maxProviderConfigBody = 4 << 10\n\nfunc (s *Server) getProviderConfig(w http.ResponseWriter, r *http.Request) {\n\ts.forwardProvider(w, r, http.MethodGet, nil)\n}\n\nfunc (s *Server) putProviderConfig(w http.ResponseWriter, r *http.Request) {\n\tbody, err := io.ReadAll(http.MaxBytesReader(w, r.Body, maxProviderConfigBody))\n\tif err != nil {\n\t\twriteError(w, http.StatusBadRequest, \"bad_request\", \"The request body is too large or unreadable.\", nil)\n\t\treturn\n\t}\n\ts.forwardProvider(w, r, http.MethodPost, body)\n}\n\nfunc (s *Server) forwardProvider(w http.ResponseWriter, r *http.Request, method string, body []byte) {\n\tvar rd io.Reader\n\tif body != nil {\n\t\trd = bytes.NewReader(body)\n\t}\n\treq, err := http.NewRequestWithContext(r.Context(), method, s.d.ProviderURL+\"/admin/config\", rd)\n\tif err != nil {\n\t\twriteError(w, http.StatusInternalServerError, \"internal\", \"Could not build the provider request.\", nil)\n\t\treturn\n\t}\n\treq.Header.Set(\"Content-Type\", \"application/json\")\n\tclient := &http.Client{Timeout: 3 * time.Second}\n\tresp, err := client.Do(req)\n\tif err != nil {\n\t\twriteError(w, http.StatusBadGateway, \"provider_unavailable\", \"The message provider did not answer.\", nil)\n\t\treturn\n\t}\n\tdefer resp.Body.Close()\n\tout, err := io.ReadAll(io.LimitReader(resp.Body, 64<<10))\n\tif err != nil {\n\t\twriteError(w, http.StatusBadGateway, \"provider_unavailable\", \"The message provider's answer was cut off.\", nil)\n\t\treturn\n\t}\n\tif resp.StatusCode >= 300 
+… [1050 more characters truncated]
+```
+
+**Tool result**
+
+```
+internal/api/server.go:253:func writeError(w http.ResponseWriter, status int, code, message string, details []Issue) {
+31:var statusOf = map[string]int{
+build-ok
+```
+
+### Assistant
+
+Now a test for the proxy, using the real mock-provider handler.
+
+**Tool call · Bash**
+
+```json
+{
+  "command": "cat > internal/api/provider_test.go <<'EOF'\npackage api\n\nimport (\n\t\"encoding/json\"\n\t\"net/http\"\n\t\"net/http/httptest\"\n\t\"strings\"\n\t\"testing\"\n\n\t\"smartcampaign/internal/config\"\n\t\"smartcampaign/internal/llm\"\n\t\"smartcampaign/internal/llm/mock\"\n\t\"smartcampaign/internal/metrics\"\n\t\"smartcampaign/internal/mockprovider\"\n\t\"smartcampaign/internal/store/storetest\"\n)\n\n// The dashboard's fault controls reach the real provider handler through the API (R-RES-3, N-WEB-003).\nfunc TestProviderConfig_ProxyReadsAndUpdates_RRES3(t *testing.T) {\n\tprov := mockprovider.New(config.ProviderFaults{LatencyMinMS: 20, LatencyMaxMS: 300, ErrorRate: 0.02, RateLimit: 100}, metrics.New())\n\tpsrv := httptest.NewServer(prov.Handler())\n\tt.Cleanup(func() { prov.Close(); psrv.Close() })\n\tsrv := httptest.NewServer(New(Deps{Pool: storetest.NewDB(t), Metrics: metrics.New(), LLM: llm.NewService(mock.NewDemo(), nil),\n\t\tProviderURL: psrv.URL, Version: \"test\"}).Handler())\n\tt.Cleanup(srv.Close)\n\n\ttype cfg struct {\n\t\tErrorRate float64 `json:\"error_rate\"`\n\t\tRate429   float64 `json:\"rate_429\"`\n\t\tRateLimit int     `json:\"rate_limit\"`\n\t}\n\tget := func() cfg {\n\t\tt.Helper()\n\t\tcode, _, body := do(t, http.MethodGet, srv.URL+\"/api/system/provider-config\", \"\", nil)\n\t\tvar c cfg\n\t\tif code != http.StatusOK || json.Unmarshal(body, &c) != nil {\n\t\t\tt.Fatalf(\"get: %d %s\", code, body)\n\t\t}\n\t\treturn c\n\t}\n\tif c := get(); c.ErrorRate != 0.02 || c.RateLimit != 100 {\n\t\tt.Fatalf(\"initial config %+v\", c)\n\t}\n\tif code, _, body := do(t, http.MethodPut, srv.URL+\"/api/system/provider-config\", `{\"error_rate\":0.1,\"rate_429\":0.05}`, nil); code != http.StatusOK {\n\t\tt.Fatalf(\"put: %d %s\", code, body)\n\t}\n\tif c := get(); c.ErrorRate != 0.1 || c.Rate429 != 0.05 || c.RateLimit != 100 {\n\t\tt.Fatalf(\"after a partial update %+v, want merged\", c)\n\t}\n\tfor _, bad := range []string{`{\"error_rate\":
+… [815 more characters truncated]
+```
+
+**Tool result**
+
+```
+--- PASS: TestProviderConfig_ProxyReadsAndUpdates_RRES3 (0.15s)
+ok  	smartcampaign/internal/api	0.776s
+```
+
+### Assistant
+
+Adding the endpoint to the API contract, then the panel on the System page.
+
+**Tool call · Bash**
+
+```json
+{
+  "command": "python3 - <<'EOF'\np='docs/contracts/api.md'\ns=open(p).read()\nold=\"| `GET /api/system/status` | — | 200 status | §8 |\"\nnew=old+\"\\n| `GET /api/system/provider-config` | — | 200 the mock provider's fault config (provider-api.md §3) | 502 `provider_unavailable` when the provider does not answer |\\n| `PUT /api/system/provider-config` | any subset of the config fields | 200 merged config | Forwarded to the provider's `/admin/config`; unknown fields or bad values → 400 `validation_failed` (need.md N-WEB-003) |\"\nassert old in s; s=s.replace(old,new)\nopen(p,'w').write(s)\nEOF\nsed -n 1,60p web/src/views/SystemView.vue; sed -n 60,129p web/src/lib/api.ts | head -70",
+  "description": "Document endpoint; read SystemView and api client"
+}
+```
+
+**Tool result**
+
+```
+<script setup lang="ts">
+import { onBeforeUnmount, onMounted, ref } from 'vue'
+import ErrorNotice from '../components/ErrorNotice.vue'
+import { api } from '../lib/api'
+import { describeError, type UserMessage } from '../lib/errors'
+import { formatClock } from '../lib/format'
+import type { SystemStatus } from '../lib/types'
+
+const status = ref<SystemStatus | null>(null)
+const error = ref<UserMessage | null>(null)
+const loading = ref(true)
+let timer: ReturnType<typeof setInterval> | undefined
+
+async function load() {
+  try {
+    status.value = await api.systemStatus()
+    error.value = null
+  } catch (e) {
+    error.value = describeError(e)
+  } finally {
+    loading.value = false
+  }
+}
+
+onMounted(() => {
+  void load()
+  timer = setInterval(() => void load(), 5000)
+})
+onBeforeUnmount(() => clearInterval(timer))
+
+function tone(s: string): string {
+  if (s === 'ok') return 'ok'
+  if (s === 'stale') return 'warn'
+  return 'bad'
+}
+const WORD: Record<string, string> = {
+  ok: 'Healthy',
+  stale: 'Heartbeat is late',
+  down: 'Down',
+}
+</script>
+
+<template>
+  <div class="shell">
+    <div class="page-head">
+      <div>
+        <h1>System</h1>
+        <p>Health of each part of the stack. Refreshes every 5 seconds.</p>
+      </div>
+    </div>
+
+    <div v-if="loading" class="empty" role="status">
+      <span class="spinner" aria-hidden="true" />
+      <p>Checking the system…</p>
+    </div>
+    <ErrorNotice v-else-if="error && !status" :error="error" @retry="load" />
+
+    <div v-else-if="status" class="stack">
+      <div v-if="error" class="notice warn" role="status">
+        <strong>Could not refresh.</strong>
+function query(params: Record<string, string | number | undefined>): string {
+  const q = Object.entries(params)
+    .filter(([, v]) => v !== undefined && v !== '')
+    .map(([k, v]) => `${enc(k)}=${enc(String(v))}`)
+    .join('&')
+  return q ? `?${q}` : ''
+}
+
+export const api = {
+  catalog: (signal?: AbortSignal) => request<Catalog>('GET', '/api/catalog', { signal }),
+
+  c
+… [2746 more characters truncated]
+```
+
+**Tool call · Bash**
+
+```json
+{
+  "command": "cd ~/projeler/smart-campaign-composer/web/src && cat >> lib/types.ts <<'EOF'\n\n// Mock provider fault configuration (docs/contracts/provider-api.md §3), edited from the System page.\nexport interface ProviderConfig {\n  latency_min_ms: number\n  latency_max_ms: number\n  spike_rate: number\n  spike_ms: number\n  error_rate: number\n  rate_429: number\n  retry_after_s: number\n  hang_rate: number\n  rate_limit: number\n  seed: number\n}\nEOF\npython3 - <<'EOF'\np='lib/api.ts'\ns=open(p).read()\ns=s.replace(\"\"\"  systemStatus: (signal?: AbortSignal) => request<SystemStatus>('GET', '/api/system/status', { signal }),\n}\"\"\",\"\"\"  systemStatus: (signal?: AbortSignal) => request<SystemStatus>('GET', '/api/system/status', { signal }),\n\n  providerConfig: (signal?: AbortSignal) => request<ProviderConfig>('GET', '/api/system/provider-config', { signal }),\n\n  saveProviderConfig: (patch: Partial<ProviderConfig>) =>\n    request<ProviderConfig>('PUT', '/api/system/provider-config', { body: patch }),\n}\"\"\")\nopen(p,'w').write(s)\nEOF\ngrep -n \"^import type\\|^import {\" lib/api.ts | head -3",
+  "description": "Add provider config type and API client methods"
+}
+```
+
+**Tool result**
+
+```
+2:import { ApiError } from './errors'
+3:import type {
+```
+
+**Tool call · Bash**
+
+```json
+{
+  "command": "sed -n 3,20p lib/api.ts",
+  "description": "Read api.ts type import list"
+}
+```
+
+**Tool result**
+
+```
+import type {
+  ApproveResult,
+  Campaign,
+  CampaignSummary,
+  Catalog,
+  Channel,
+  ContentInput,
+  ContentVersion,
+  ErrorBody,
+  LlmMeta,
+  MessageItem,
+  Page,
+  SystemStatus,
+  ValidateRequest,
+  ValidationReport,
+} from './types'
+
+interface RequestOptions {
+```
+
+**Tool call · Bash**
+
+```json
+{
+  "command": "sed -i '' 's/^  Page,$/  Page,\\n  ProviderConfig,/' lib/api.ts && cat > lib/providerFaults.ts <<'EOF'\n// Presets for the mock provider's fault controls (System page). Rates are fractions 0..1; the form shows %.\nimport type { ProviderConfig } from './types'\n\nexport type FaultPatch = Pick<ProviderConfig, 'latency_min_ms' | 'latency_max_ms' | 'spike_rate' | 'error_rate' | 'rate_429' | 'hang_rate'>\n\nexport const PRESETS: { id: string; label: string; hint: string; patch: FaultPatch }[] = [\n  {\n    id: 'calm',\n    label: 'Calm',\n    hint: 'No errors, no 429s, no hangs',\n    patch: { latency_min_ms: 20, latency_max_ms: 300, spike_rate: 0, error_rate: 0, rate_429: 0, hang_rate: 0 },\n  },\n  {\n    id: 'default',\n    label: 'Default',\n    hint: 'The .env.example values: 2% 5xx, 1% 429, 0.5% hangs',\n    patch: { latency_min_ms: 20, latency_max_ms: 300, spike_rate: 0.01, error_rate: 0.02, rate_429: 0.01, hang_rate: 0.005 },\n  },\n  {\n    id: 'chaos',\n    label: 'Chaos',\n    hint: 'Stress S2: 10% 5xx, 5% 429, 2% hangs, 20–800 ms',\n    patch: { latency_min_ms: 20, latency_max_ms: 800, spike_rate: 0.01, error_rate: 0.1, rate_429: 0.05, hang_rate: 0.02 },\n  },\n]\n\n// toPercent/fromPercent convert between the form (percent, up to two decimals) and the API (fraction).\nexport const toPercent = (f: number) => Math.round(f * 10000) / 100\nexport const fromPercent = (p: number) => Math.round(p * 100) / 10000\nEOF\ncat > lib/providerFaults.test.ts <<'EOF'\nimport { describe, expect, it } from 'vitest'\nimport { fromPercent, PRESETS, toPercent } from './providerFaults'\n\ndescribe('provider fault presets (R-RES-3)', () => {\n  it('every preset is a valid provider config patch', () => {\n    for (const p of PRESETS) {\n      for (const k of ['spike_rate', 'error_rate', 'rate_429', 'hang_rate'] as const) {\n        expect(p.patch[k]).toBeGreaterThanOrEqual(0)\n        expect(p.patch[k]).toBeLessThanOrEqual(1)\n      }\n      expect(p.patch.latency_mi
+… [4627 more characters truncated]
+```
+
+**Tool result**
+
+```
+7:  readonly details: ErrorDetail[]
+9:  constructor(status: number, code: string, message: string, details: ErrorDetail[] = []) {
+14:    this.details = details
+19:    return new ApiError(status, e?.code ?? `http_${status}`, e?.message ?? '', e?.details ?? [])
+26:  title: string
+112:      </div>
+113:    </div>
+114:  </div>
+        <section class="card" aria-labelledby="s-prov">
+          <header>
+            <h2 id="s-prov">Message provider</h2>
+            <span class="pill" :class="tone(status.provider.status)"><span class="dot" aria-hidden="true" />{{ WORD[status.provider.status] ?? status.provider.status }}</span>
+          </header>
+          <p v-if="status.provider.url" class="muted">{{ status.provider.url }}</p>
+        </section>
+        <section class="card" aria-labelledby="s-llm">
+          <header>
+            <h2 id="s-llm">Language model</h2>
+            <span class="pill" :class="status.llm.mock ? 'warn' : 'ok'">{{ status.llm.mock ? 'Mock' : 'Live' }}</span>
+          </header>
+          <dl class="meta">
+            <div><dt>Provider</dt><dd>{{ status.llm.provider }}</dd></div>
+            <div><dt>Model</dt><dd>{{ status.llm.model }}</dd></div>
+          </dl>
+        </section>
+      </div>
+    </div>
+  </div>
+</template>
+```
+
+**Tool call · Bash**
+
+```json
+{
+  "command": "sed -n 24,34p lib/errors.ts; python3 - <<'EOF'\np='views/SystemView.vue'\ns=open(p).read()\ns=s.replace(\"import ErrorNotice from '../components/ErrorNotice.vue'\",\"import ErrorNotice from '../components/ErrorNotice.vue'\\nimport ProviderFaults from '../components/ProviderFaults.vue'\")\nold='''        </section>\n      </div>\n    </div>\n  </div>\n</template>'''\nnew='''        </section>\n      </div>\n      <ProviderFaults />\n    </div>\n  </div>\n</template>'''\nassert old in s; s=s.replace(old,new)\nopen(p,'w').write(s)\nEOF\ncd .. && npx vue-tsc --noEmit 2>&1 | grep -v \"npm notice\" | head; npx vitest run 2>&1 | grep -E \"Tests|Test Files\"",
+  "description": "Mount panel on System page; typecheck and run unit tests"
+}
+```
+
+**Tool result**
+
+```
+  // The API error code (or `network`), for callers that offer a code-specific action.
+  code: string
+  title: string
+  message: string
+  // One human-readable line per detail from a 422.
+  details: string[]
+  // Whether trying the same action again can help.
+  retryable: boolean
+}
+
+function detailLine(d: ErrorDetail): string {
+src/components/ProviderFaults.vue(67,19): error TS2551: Property 'detail' does not exist on type '{ code: string; title: string; message: string; details: string[]; retryable: boolean; }'. Did you mean 'details'?
+ Test Files  11 passed (11)
+      Tests  113 passed (113)
+```
+
+**Tool call · Bash**
+
+```json
+{
+  "command": "python3 - <<'EOF'\np='src/components/ProviderFaults.vue'\ns=open(p).read()\ns=s.replace('''      <p>{{ error.detail }}</p>''','''      <p>{{ error.message }}</p>\n      <p v-for=\"d in error.details\" :key=\"d\">{{ d }}</p>''')\nopen(p,'w').write(s)\nEOF\nnpx vue-tsc --noEmit 2>&1 | grep -v \"npm notice\" | head -3; echo tsc-done; grep -E \"^=== RUN|--- (PASS|FAIL)|^ok|^FAIL\" /private/tmp/claude-501/-Users-owner-projeler-smart-campaign-composer/76094f6f-4357-43bc-9bab-c4747eda27f6/scratchpad/stress-full3.log | tail -4",
+  "description": "Fix error rendering; typecheck; check stress progress"
+}
+```
+
+**Tool result**
+
+```
+tsc-done
+=== RUN   TestStress
+=== RUN   TestStress/S1_baseline
+=== RUN   TestStress/S2_chaos
+```
+
+### Assistant
+
+Throughput grafiği ve hata ayar paneli yazıldı, typecheck ve 113 unit test geçti; S2 (25k kullanıcı) hâlâ koşuyor. Bunları ayrı commit'liyorum.
+
+**Tool call · Bash**
+
+```json
+{
+  "command": "cd ~/projeler/smart-campaign-composer && git add web/src/lib/throughput.ts web/src/lib/throughput.test.ts web/src/views/DashboardView.vue && git commit -q -m \"feat(web): live throughput chart per channel with the 100/s limit line [R-OBS-1]\n\nCloses spec-auditor P1 (KICKOFF §8 P1 chart was missing and unlisted). The last two minutes of snapshot rates as an\nSVG line per channel; reconnect repeats and older snapshots are ignored.\n\nCo-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>\" && golangci-lint run ./internal/api/... | tail -1 && git add internal/api/provider.go internal/api/provider_test.go internal/api/server.go docs/contracts/api.md web/src/lib/types.ts web/src/lib/api.ts web/src/lib/providerFaults.ts web/src/lib/providerFaults.test.ts web/src/components/ProviderFaults.vue web/src/views/SystemView.vue && git commit -q -m \"feat: mock-provider fault controls on the System page through an API proxy [R-RES-3]\n\nKICKOFF §8 P1 (need.md N-WEB-003, option A). GET/PUT /api/system/provider-config forwards to the provider's\n/admin/config (its validation applies; 502 when it does not answer). Presets Calm / Default / Chaos (S2) and\nper-field inputs.\n\nCo-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>\" && git log --oneline -2",
+  "description": "Commit throughput chart and fault controls separately"
+}
+```
+
+**Tool result**
+
+```
+0 issues.
+2050feb feat: mock-provider fault controls on the System page through an API proxy [R-RES-3]
+0c2b52d feat(web): live throughput chart per channel with the 100/s limit line [R-OBS-1]
+```
+
+### Assistant
+
+Updating need.md (N-WEB-003) and the README not-done list (P2s, hours).
+
+**Tool call · Bash**
+
+```json
+{
+  "command": "python3 - <<'EOF'\np='need.md'\ns=open(p).read()\ni=s.index(\"### 🟡 N-WEB-003 \")\nj=s.index(\"- **Status:**\", i); k=s.index(\"\\n\", j)\nb=s[i:k].replace(\"### 🟡 N-WEB-003 \",\"### ✅ N-WEB-003 \",1).replace(\"- **Status:** OPEN\",\"- **Implemented (2026-11-09):** option A as `GET/PUT /api/system/provider-config` (commit \\\"mock-provider fault controls\\\"); System page panel with Calm / Default / Chaos presets. Test: `TestProviderConfig_ProxyReadsAndUpdates_RRES3`.\\n- **Status:** RESOLVED\")\ns=s[:i]+b+s[k:]\nopen(p,'w').write(s)\n\np='README.md'\ns=open(p).read()\nold=s[s.index(\"## Not done / next steps\"):s.index(\"## Time spent\")]\nnew='''## Not done / next steps\n\nOwner actions:\n\n- One real Claude API run (`make smoke-live`, one eval with `PROVIDER=anthropic`) with a key.\n- Push to GitHub; the CI workflow (`.github/workflows/ci.yml`: `make test`, `make lint`, `make e2e`) has not run\n  there yet. The `00-planning` session export.\n\nKnown gaps (P2, from the CP3 spec audit in [`docs/review/traceability.md`](docs/review/traceability.md)):\n\n- A \"retry failed messages\" button.\n- Tests that would make existing evidence stronger: API `/readyz` returning 503 with the database down (proven\n  for the worker in S7 only); a `/metrics` scrape asserting the API's `llm_*` series; one test from\n  `GenerateSegment` to the stored audience compared with hand-written SQL (the parts are tested separately);\n  the red-team NUL-brief case still reports through `t.Skipf` instead of failing.\n- Stress checks: retry spacing from `delivery_attempts` timestamps (\"no hot loop\" is asserted by attempt\n  counts only); worker-metric comparison in S2/S7 (a killed worker loses its counters, so I5 compares DB and\n  provider there); a tighter goroutine bound in S6 (+10 allowed).\n- The real-model eval has three adversarial briefs; more would make S4 stronger.\n- `TestErrorModel_ROBS1` is named after R-OBS-1 but tests the error model.\n- Dashboard updates by pol
+… [1043 more characters truncated]
+```
+
+**Tool result**
+
+```
+ README.md                 | 31 ++++++++++++++++++++++++-------
+ cmd/worker/stress_test.go |  4 ++--
+ need.md                   |  5 +++--
+ 3 files changed, 29 insertions(+), 11 deletions(-)
+```
+
+### Assistant
+
+Waiting for S2 to finish before running anything heavy.
+
+**Tool call · Bash**
+
+```json
+{
+  "command": "sleep 1; grep -E \"^=== RUN|--- (PASS|FAIL)|^ok|^FAIL\" /private/tmp/claude-501/-Users-owner-projeler-smart-campaign-composer/76094f6f-4357-43bc-9bab-c4747eda27f6/scratchpad/stress-full3.log | tail -3",
+  "description": "Check stress status"
+}
+```
+
+**Tool result**
+
+```
+=== RUN   TestStress
+=== RUN   TestStress/S1_baseline
+=== RUN   TestStress/S2_chaos
+```
+
+### Assistant
+
+S2 is still running; I'll continue when it finishes.
+
+### User
+
+<task-notification>
+<task-id>b0e0e3oft</task-id>
+<tool-use-id>toolu_01LGrsv4s521Z4TbNiRY8yJn</tool-use-id>
+<output-file>/private/tmp/claude-501/-Users-owner-projeler-smart-campaign-composer/76094f6f-4357-43bc-9bab-c4747eda27f6/tasks/b0e0e3oft.output</output-file>
+<status>completed</status>
+<summary>Background command "Run full stress suite with S2 at 25k users" completed (exit code 0)</summary>
+</task-notification>
+
+**Tool call · Bash**
+
+```json
+{
+  "command": "tail -2 /private/tmp/claude-501/-Users-owner-projeler-smart-campaign-composer/76094f6f-4357-43bc-9bab-c4747eda27f6/scratchpad/stress-full3.log; grep -E \"^\\| S[0-9]\" docs/stress/REPORT.md docs/stress/REPORT-api.md; sed -n '/## S2 chaos/,/## S7/p' docs/stress/REPORT.md | grep -E \"users|messages sms|time to|sent / avg|I1 |I3 |I5 |I6 |explained\" | cut -c1-260",
+  "description": "Summarize full stress results including S2 at 25k"
+}
+```
+
+**Tool result**
+
+```
+ok  	smartcampaign/cmd/api	90.061s
+exit 0
+docs/stress/REPORT.md:| S1 baseline | PASS | 54s |
+docs/stress/REPORT.md:| S2 chaos | PASS | 8m36s |
+docs/stress/REPORT.md:| S7 dependency restart | PASS | 41s |
+docs/stress/REPORT-api.md:| S3 approve storm | PASS |
+docs/stress/REPORT-api.md:| S5 API load | PASS |
+docs/stress/REPORT-api.md:| S5b segment counts at 100k users | PASS |
+docs/stress/REPORT-api.md:| S6 dashboard fan-out | PASS |
+docs/stress/REPORT-api.md:| S8 provider throughput | PASS |
+| users | 25000 |
+| messages sms/email | 24743 / 24720 |
+| time to terminal | 8m36s |
+| sms sent / avg / best 5 s of DB completions | 24006 / 46.5/s / 62.2/s |
+| email sent / avg / best 5 s of DB completions | 24480 / 47.4/s / 61.4/s |
+| I1 provider duplicate_recipient_deliveries == 0 | pass | duplicates: 0 (sms 24006 accepted, email 24480 accepted) |
+| I2 no delivery to a user without consent (provider delivered list joined with users) | pass | deliveries without consent: 0 |
+| I3 provider-measured max requests/deliveries in any 1 s window <= 100 per channel | pass | max requests 100 (arrivals incl. retries), max deliveries 95, provider-limiter rejections 0 |
+| I5 DB counts, provider counts and worker metrics agree | pass | DB sent sms/email 24006/24480 = provider accepted 24006/24480 (worker metrics not compared: a killed worker loses its counters) |
+| I6 attempts <= policy maximum (5 counted tries + 3 confirmation replays after an unanswered try), no hot loop | pass | max messages.attempts 7, max counted failed tries per message 6, messages that used confirmation replays 1; attempts histogram (attempts:me
+```
+
+### Assistant
+
+All scenarios pass. S2 at the KICKOFF scale: 49,463 messages, provider max 100/s, 0 duplicates, DB = provider exactly; one message used a confirmation replay. Committing.
+
+**Tool call · Bash**
+
+```json
+{
+  "command": "git add cmd/worker/stress_test.go docs/stress/REPORT.md docs/stress/REPORT-api.md && git commit -q -m \"test(stress): S2 at the KICKOFF scale (25 000 users, 49 463 messages) by default; full reports [R-FLOW-4][R-SND-2][R-SND-3]\n\nCloses spec-auditor P1 (S2 ran at 2000 users). S2: provider max 100 per 1 s, 0 duplicates, 0 deliveries without\nconsent, DB sent = provider accepted, one message confirmed by a replay. API suite adds S3(c), S5b, S8.\n\nCo-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>\" && git add README.md need.md && git commit -q -m \"docs: README not-done lists the CP3 P2 gaps and owner actions; time spent in hours; N-WEB-003 resolved [R-DEL-4]\n\nCo-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>\" && git log --oneline -2",
+  "description": "Commit stress reports and docs"
+}
+```
+
+**Tool result**
+
+```
+dfd2099 docs: README not-done lists the CP3 P2 gaps and owner actions; time spent in hours; N-WEB-003 resolved [R-DEL-4]
+adbad34 test(stress): S2 at the KICKOFF scale (25 000 users, 49 463 messages) by default; full reports [R-FLOW-4][R-SND-2][R-SND-3]
+```
+
+### Assistant
+
+Rebuilding the stack to check the new chart and panel in the browser.
+
+**Tool call · Bash**
+
+```json
+{
+  "command": "make up 2>&1 | tail -2",
+  "description": "Rebuild and start the stack",
+  "timeout": 900000
+}
+```
+
+**Tool result**
+
+```
+ Container scc-worker-1 Healthy 
+ Container scc-api-1 Healthy
+```
+
+**Tool call · mcp__plugin_playwright_playwright__browser_navigate**
+
+```json
+{
+  "url": "http://localhost:8080/#/system"
+}
+```
+
+**Tool call · mcp__plugin_playwright_playwright__browser_snapshot**
+
+```json
+{
+  "target": "#s-faults"
+}
+```
+
+**Tool result**
+
+````
+### Ran Playwright code
+```js
+await page.goto('http://localhost:8080/#/system');
+```
+### Page
+- Page URL: http://localhost:8080/#/system
+- Page Title: Smart Campaign Composer
+- Console: 4 errors, 0 warnings
+### Snapshot
+- [Snapshot](.playwright-mcp/page-2026-11-08T23-05-42-424Z.yml)
+````
+
+**Tool result**
+
+```
+### Error
+Error: "#s-faults" does not match any elements.
+```
+
+**Tool call · mcp__plugin_playwright_playwright__browser_console_messages**
+
+```json
+{
+  "level": "error"
+}
+```
+
+**Tool call · mcp__plugin_playwright_playwright__browser_snapshot**
+
+```json
+{
+  "target": "main",
+  "depth": 4
+}
+```
+
+**Tool result**
+
+```
+### Result
+Total messages: 4 (Errors: 4, Warnings: 0)
+
+[ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://localhost:8080/api/system/status:0
+[ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://localhost:8080/api/system/status:0
+[ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://localhost:8080/api/system/status:0
+[ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://localhost:8080/api/system/status:0
+```
+
+**Tool result**
+
+````
+### Page
+- Page URL: http://localhost:8080/#/system
+- Page Title: Smart Campaign Composer
+- Console: 4 errors, 0 warnings
+### Snapshot
+```yaml
+- main [ref=f3e13]:
+  - generic [ref=f3e802]:
+    - generic [ref=f3e804]:
+      - heading "System" [level=1] [ref=f3e805]
+      - paragraph [ref=f3e806]: Health of each part of the stack. Refreshes every 5 seconds.
+    - generic [ref=f3e811]:
+      - region "API" [ref=f3e812]:
+        - generic [ref=f3e813]
+        - paragraph [ref=f3e817]: Version dev
+      - region "Database" [ref=f3e818]:
+        - generic [ref=f3e819]
+        - paragraph [ref=f3e823]: Round trip 0 ms
+      - region "Worker" [ref=f3e824]:
+        - generic [ref=f3e825]
+        - list [ref=f3e859]
+      - region "Message provider" [ref=f3e842]:
+        - generic [ref=f3e843]
+        - paragraph [ref=f3e847]: http://mockprovider:8090
+      - region "Language model" [ref=f3e848]:
+        - generic [ref=f3e849]
+        - generic [ref=f3e852]
+```
+````
+
+### Assistant
+
+That was the old bundle still loaded in the tab (hash navigation doesn't reload). Reloading.
+
+**Tool call · mcp__plugin_playwright_playwright__browser_evaluate**
+
+```json
+{
+  "function": "() => { location.reload(); return 'reloading' }"
+}
+```
+
+**Tool call · mcp__plugin_playwright_playwright__browser_snapshot**
+
+```json
+{
+  "target": "#s-faults"
+}
+```
+
+**Tool result**
+
+````
+### Result
+"reloading"
+### Ran Playwright code
+```js
+await page.evaluate('() => { location.reload(); return \'reloading\' }');
+```
+### Page
+- Page URL: http://localhost:8080/#/system
+- Page Title: Loading http://localhost:8080/
+- Console: 4 errors, 0 warnings
+````
+
+**Tool result**
+
+````
+### Page
+- Page URL: http://localhost:8080/#/system
+- Page Title: Smart Campaign Composer
+### Snapshot
+```yaml
+- heading "Mock provider faults" [level=2] [ref=f4e1]
+```
+````
+
+**Tool call · mcp__plugin_playwright_playwright__browser_snapshot**
+
+```json
+{
+  "target": "section:has(#s-faults)"
+}
+```
+
+**Tool result**
+
+````
+### Page
+- Page URL: http://localhost:8080/#/system
+- Page Title: Smart Campaign Composer
+### Snapshot
+```yaml
+- region [ref=f4e2]:
+  - heading "Mock provider faults" [level=2] [ref=f4e1]
+  - paragraph [ref=f4e4]: Changes apply to the next requests, also during a running campaign.
+  - generic [ref=f4e5]:
+    - button "Calm" [ref=f4e6] [cursor=pointer]
+    - button "Default" [ref=f4e7] [cursor=pointer]
+    - button "Chaos" [ref=f4e8] [cursor=pointer]
+  - generic [ref=f4e9]:
+    - generic [ref=f4e10]:
+      - text: 5xx errors (%)
+      - spinbutton "5xx errors (%)" [ref=f4e11]: "2"
+    - generic [ref=f4e12]:
+      - text: 429 rate limited (%)
+      - spinbutton "429 rate limited (%)" [ref=f4e13]: "1"
+    - generic [ref=f4e14]:
+      - text: Hangs, no answer (%)
+      - spinbutton "Hangs, no answer (%)" [ref=f4e15]: "0.5"
+    - generic [ref=f4e16]:
+      - text: Latency spikes (%)
+      - spinbutton "Latency spikes (%)" [ref=f4e17]: "1"
+    - generic [ref=f4e18]:
+      - text: Latency min (ms)
+      - spinbutton "Latency min (ms)" [ref=f4e19]: "20"
+    - generic [ref=f4e20]:
+      - text: Latency max (ms)
+      - spinbutton "Latency max (ms)" [ref=f4e21]: "300"
+    - generic [ref=f4e22]:
+      - button "Apply" [ref=f4e23] [cursor=pointer]
+      - status
+```
+````
+
+### Assistant
+
+The panel renders with the live values. Testing a preset, an invalid value, and restoring the defaults.
+
+**Tool call · mcp__plugin_playwright_playwright__browser_click**
+
+```json
+{
+  "target": "f4e8",
+  "element": "Chaos preset"
+}
+```
+
+**Tool call · Bash**
+
+```json
+{
+  "command": "sleep 1; curl -s localhost:8090/admin/config",
+  "description": "Confirm provider config changed"
+}
+```
+
+**Tool call · mcp__plugin_playwright_playwright__browser_type**
+
+```json
+{
+  "target": "f4e11",
+  "text": "150",
+  "element": "5xx errors input",
+  "submit": true
+}
+```
+
+**Tool call · mcp__plugin_playwright_playwright__browser_snapshot**
+
+```json
+{
+  "target": "section:has(#s-faults)"
+}
+```
+
+**Tool result**
+
+````
+### Ran Playwright code
+```js
+await page.getByRole('button', { name: 'Chaos' }).click();
+```
+### Page
+- Page URL: http://localhost:8080/#/system
+- Page Title: Smart Campaign Composer
+### Snapshot
+- [Snapshot](.playwright-mcp/page-2026-11-08T23-06-00-824Z.yml)
+````
+
+**Tool result**
+
+```
+{"latency_min_ms":20,"latency_max_ms":800,"spike_rate":0.01,"spike_ms":2000,"error_rate":0.1,"rate_429":0.05,"retry_after_s":1,"hang_rate":0.02,"rate_limit":100,"seed":0}
+```
+
+**Tool result**
+
+````
+### Ran Playwright code
+```js
+await page.getByRole('spinbutton', { name: '5xx errors (%)' }).fill('150');
+await page.getByRole('spinbutton', { name: '5xx errors (%)' }).press('Enter');
+```
+### Page
+- Page URL: http://localhost:8080/#/system
+- Page Title: Smart Campaign Composer
+### Snapshot
+- [Snapshot](.playwright-mcp/page-2026-11-08T23-06-02-485Z.yml)
+````
+
+**Tool result**
+
+````
+### Page
+- Page URL: http://localhost:8080/#/system
+- Page Title: Smart Campaign Composer
+### Snapshot
+```yaml
+- region [ref=f4e2]:
+  - heading "Mock provider faults" [level=2] [ref=f4e1]
+  - paragraph [ref=f4e4]: Changes apply to the next requests, also during a running campaign.
+  - generic [ref=f4e5]:
+    - button "Calm" [ref=f4e6] [cursor=pointer]
+    - button "Default" [ref=f4e7] [cursor=pointer]
+    - button "Chaos" [ref=f4e8] [cursor=pointer]
+  - generic [ref=f4e9]:
+    - generic [ref=f4e10]:
+      - text: 5xx errors (%)
+      - spinbutton "5xx errors (%)" [active] [ref=f4e11]: "150"
+    - generic [ref=f4e12]:
+      - text: 429 rate limited (%)
+      - spinbutton "429 rate limited (%)" [ref=f4e13]: "5"
+    - generic [ref=f4e14]:
+      - text: Hangs, no answer (%)
+      - spinbutton "Hangs, no answer (%)" [ref=f4e15]: "2"
+    - generic [ref=f4e16]:
+      - text: Latency spikes (%)
+      - spinbutton "Latency spikes (%)" [ref=f4e17]: "1"
+    - generic [ref=f4e18]:
+      - text: Latency min (ms)
+      - spinbutton "Latency min (ms)" [ref=f4e19]: "20"
+    - generic [ref=f4e20]:
+      - text: Latency max (ms)
+      - spinbutton "Latency max (ms)" [ref=f4e21]: "800"
+    - generic [ref=f4e22]:
+      - button "Apply" [ref=f4e23] [cursor=pointer]
+      - status [ref=f4e85]: Chaos applied.
+```
+````
+
+### Assistant
+
+The browser's own `max=100` validation blocked the submit, and the server-side 400 path is covered by the Go test. Restoring the defaults.
+
+**Tool call · mcp__plugin_playwright_playwright__browser_click**
+
+```json
+{
+  "target": "f4e7",
+  "element": "Default preset"
+}
+```
+
+**Tool call · Bash**
+
+```json
+{
+  "command": "sleep 1; curl -s localhost:8090/admin/config",
+  "description": "Confirm defaults restored"
+}
+```
+
+**Tool result**
+
+````
+### Ran Playwright code
+```js
+await page.getByRole('button', { name: 'Default' }).click();
+```
+### Page
+- Page URL: http://localhost:8080/#/system
+- Page Title: Smart Campaign Composer
+### Snapshot
+- [Snapshot](.playwright-mcp/page-2026-11-08T23-06-08-317Z.yml)
+````
+
+**Tool result**
+
+```
+{"latency_min_ms":20,"latency_max_ms":300,"spike_rate":0.01,"spike_ms":2000,"error_rate":0.02,"rate_429":0.01,"retry_after_s":1,"hang_rate":0.005,"rate_limit":100,"seed":0}
+```
+
+### Assistant
+
+Panel verified. For the chart, I'm adding an assertion to the e2e test (the chart must appear while the campaign sends) and running `make e2e`.
+
+**Tool call · Bash**
+
+```json
+{
+  "command": "python3 - <<'EOF'\np='web/e2e/composer.spec.ts'\ns=open(p).read()\nold=\"\"\"  await expect(page.getByRole('progressbar', { name: 'Overall delivery progress' })).toBeVisible()\"\"\"\nnew=old+\"\"\"\n  await expect(page.getByRole('img', { name: /^Throughput over the last two minutes/ })).toBeVisible()\"\"\"\nassert old in s; s=s.replace(old,new)\nopen(p,'w').write(s)\nEOF\nrm -rf web/test-results web/playwright-report; make e2e 2>&1 | tail -3",
+  "description": "Assert throughput chart in e2e and run it",
+  "timeout": 900000
+}
+```
+
+**Tool result**
+
+```
+  ✓  1 [chromium] › e2e/composer.spec.ts:30:1 › official brief: audience, streamed content, edit, approve, delivery completes [R-FLOW-1..5] (13.3s)
+
+  1 passed (19.2s)
+```
+
+**Tool call · Bash**
+
+```json
+{
+  "command": "git add web/e2e/composer.spec.ts && git commit -q -m \"test(e2e): the dashboard shows the throughput chart while a campaign sends [R-OBS-1]\n\nCo-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>\" && echo ok",
+  "description": "Commit e2e chart assertion"
+}
+```
+
+**Tool result**
+
+```
+ok
+```
+
+<details><summary>Thinking</summary>
+
+Next I'll extend the fresh-clone check to cover KICKOFF §10.3: a restart, `down -v && up`, and the key-only `.env` variant, using a dummy key and no API calls.
+
+</details>
+
+**Tool call · Write**
+
+```json
+{
+  "file_path": "~/projeler/smart-campaign-composer/scripts/fresh-clone-check.sh",
+  "content": "#!/usr/bin/env bash\n# R-DEL-2 / R-DEL-3 check, the reviewer's path (KICKOFF §10.3):\n#   1. clean clone, no .env → docker compose up → healthy in < 180 s → UI reachable → seed present → mock LLM;\n#   2. restart (down, up) → the seed is still exactly the same size (idempotent migrations and seed);\n#   3. down -v && up → a fresh database is migrated and seeded again;\n#   4. a key-only .env (a dummy key, never used for a call) → the API starts in anthropic mode;\n#   5. with --with-tests: make test inside the clone, timed (target < 5 min).\n# Uses its own compose project and ports, so the dev stack keeps running.\n#\n#   scripts/fresh-clone-check.sh [--with-tests]\nset -euo pipefail\n\nroot=\"$(git rev-parse --show-toplevel)\"\ntmp=\"$(mktemp -d)\"\nexport COMPOSE_PROJECT_NAME=scc-fresh API_PORT=18080 WORKER_PORTS=19091-19092 PROVIDER_PORT=18090 POSTGRES_PORT=55433\nunset LLM_PROVIDER ANTHROPIC_API_KEY\n\ncleanup() {\n  (cd \"$tmp/scc\" 2>/dev/null && docker compose down -v --remove-orphans >/dev/null 2>&1) || true\n  rm -rf \"$tmp\"\n}\ntrap cleanup EXIT\n\ngit clone -q \"$root\" \"$tmp/scc\"\ncd \"$tmp/scc\"\n[ ! -e .env ] || { echo \"fresh clone unexpectedly has .env\"; exit 1; }\n\nup() {\n  local start elapsed\n  start=$(date +%s)\n  docker compose up -d --build --wait --wait-timeout 300 >/dev/null 2>&1 || { docker compose ps; echo \"FAILED: compose up\"; exit 1; }\n  elapsed=$(( $(date +%s) - start ))\n  echo \"$1: compose healthy after ${elapsed}s\"\n  [ \"$elapsed\" -lt 180 ] || { echo \"FAILED: took ${elapsed}s (limit 180s)\"; exit 1; }\n}\n\ncheck() {\n  # The worker publishes a port range (so it can be scaled to two replicas); ask compose which one it got.\n  local worker_port url code users mock\n  worker_port=$(docker compose port worker 9091 | sed 's/.*://')\n  for url in \"http://localhost:18080/readyz\" \"http://localhost:${worker_port}/ready
+… [1560 more characters truncated]
+```
+
+**Tool result**
+
+```
+The file ~/projeler/smart-campaign-composer/scripts/fresh-clone-check.sh has been updated successfully. (file state is current in your context — no need to Read it back)
+```
+
+**Tool call · Bash**
+
+```json
+{
+  "command": "(time make fresh-clone-check) > /private/tmp/claude-501/-Users-owner-projeler-smart-campaign-composer/76094f6f-4357-43bc-9bab-c4747eda27f6/scratchpad/fresh3.log 2>&1; echo \"exit $?\"; grep -vE \"^ok |^\\?|^\\s*$|Container|Network|Volume|Built|Image|^#|level=|npm notice\" /private/tmp/claude-501/-Users-owner-projeler-smart-campaign-composer/76094f6f-4357-43bc-9bab-c4747eda27f6/scratchpad/fresh3.log | tail -40",
+  "description": "Run the extended fresh-clone check with tests",
+  "timeout": 1800000
+}
+```
+
+**Tool result**
+
+```
+exit 0
+  http://localhost:19092/readyz -> 200
+  http://localhost:18090/readyz -> 200
+  http://localhost:18080/ -> 200
+  seeded users: 5000
+  llm mock: True
+3. down -v && up: compose healthy after 11s
+  http://localhost:18080/readyz -> 200
+  http://localhost:19091/readyz -> 200
+  http://localhost:18090/readyz -> 200
+  http://localhost:18080/ -> 200
+  seeded users: 5000
+  llm mock: True
+4. key-only .env (dummy key)
+  http://localhost:18080/readyz -> 200
+  http://localhost:19092/readyz -> 200
+  http://localhost:18090/readyz -> 200
+  http://localhost:18080/ -> 200
+  seeded users: 5000
+  llm mock: False
+> scc-web@0.0.0 test
+> vitest run
+[1m[30m[46m RUN [49m[39m[22m [36mv5.1.0 [39m[90m/src/web[39m
+ [32m✓[39m src/lib/progress.test.ts [2m([22m[2m4 tests[22m[2m)[22m[32m 6[2mms[22m[39m
+ [32m✓[39m src/lib/api.test.ts [2m([22m[2m2 tests[22m[2m)[22m[32m 13[2mms[22m[39m
+ [32m✓[39m src/lib/approveGate.test.ts [2m([22m[2m8 tests[22m[2m)[22m[32m 8[2mms[22m[39m
+ [32m✓[39m src/lib/templateVars.test.ts [2m([22m[2m17 tests[22m[2m)[22m[32m 6[2mms[22m[39m
+ [32m✓[39m src/lib/partialJson.test.ts [2m([22m[2m9 tests[22m[2m)[22m[32m 27[2mms[22m[39m
+ [32m✓[39m src/lib/textCount.test.ts [2m([22m[2m26 tests[22m[2m)[22m[32m 5[2mms[22m[39m
+ [32m✓[39m src/lib/errors.test.ts [2m([22m[2m27 tests[22m[2m)[22m[32m 45[2mms[22m[39m
+ [32m✓[39m src/lib/throughput.test.ts [2m([22m[2m3 tests[22m[2m)[22m[32m 19[2mms[22m[39m
+ [32m✓[39m src/lib/sse.test.ts [2m([22m[2m13 tests[22m[2m)[22m[32m 42[2mms[22m[39m
+ [32m✓[39m src/lib/providerFaults.test.ts [2m([22m[2m2 tests[22m[2m)[22m[32m 2[2mms[22m[39m
+ [32m✓[39m src/lib/router.test.ts [2m([22m[2m2 tests[22m[2m)[22m[32m 2[2mms[22m[39m
+[2m Test Files [22m [1m[32m11 passed[39m[22m[90m (11)[39m
+[2m      Tests [22m [1m[32m113 passed[39m[22m[90m (113)[39m
+[2m   Start at [22m 23:10:04
+[2m   Duration [22m 303ms[2m 
+… [184 more characters truncated]
+```
+
+**Tool call · Bash**
+
+```json
+{
+  "command": "grep -E \"^[0-9]\\. |FAIL|^ok \" /private/tmp/claude-501/-Users-owner-projeler-smart-campaign-composer/76094f6f-4357-43bc-9bab-c4747eda27f6/scratchpad/fresh3.log | head -30; gitleaks dir --config .gitleaks.toml --no-banner --redact scripts/fresh-clone-check.sh 2>&1 | tail -1",
+  "description": "Show step lines and Go results; gitleaks the script"
+}
+```
+
+**Tool result**
+
+```
+1. clean clone, no .env: compose healthy after 13s
+2. restart (volume kept): compose healthy after 10s
+3. down -v && up: compose healthy after 11s
+4. key-only .env (dummy key)
+ok  	smartcampaign/cmd/worker	7.077s
+ok  	smartcampaign/internal/api	2.096s
+ok  	smartcampaign/internal/campaign	5.406s
+ok  	smartcampaign/internal/catalog	1.032s
+ok  	smartcampaign/internal/clock	1.045s
+ok  	smartcampaign/internal/config	1.025s
+ok  	smartcampaign/internal/content	2.304s
+ok  	smartcampaign/internal/delivery	45.025s
+ok  	smartcampaign/internal/llm	1.569s
+ok  	smartcampaign/internal/llm/anthropic	1.143s
+ok  	smartcampaign/internal/llm/claudecode	3.063s
+ok  	smartcampaign/internal/llm/eval	1.613s
+ok  	smartcampaign/internal/llm/factory	1.020s
+ok  	smartcampaign/internal/mockprovider	1.553s
+ok  	smartcampaign/internal/seed	1.574s
+ok  	smartcampaign/internal/segment	2.235s
+ok  	smartcampaign/internal/store	1.169s
+5. make test took 97s (target < 300 s)
+[90m2:10AM[0m [32mINF[0m [1mno leaks found[0m
+```
+
+### Assistant
+
+All four steps pass, and `make test` takes 97 s inside the clone (with the Docker layer cache warm). Committing.
+
+**Tool call · Bash**
+
+```json
+{
+  "command": "git add scripts/fresh-clone-check.sh && git commit -q -m \"test(scripts): fresh-clone check covers restart, down -v && up and a key-only .env; times make test [R-DEL-2][R-DEL-3]\n\nCloses spec-auditor P1. Clean clone, no .env: healthy in 13 s, 5000 users, mock LLM; restart: 5000 users\n(idempotent); down -v && up: re-seeded to 5000; key-only .env with a dummy key: anthropic mode, healthy;\nmake test in the clone: 97 s.\n\nCo-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>\" && echo ok",
+  "description": "Commit extended fresh-clone script"
+}
+```
+
+**Tool result**
+
+```
+ok
+```
+
+### Assistant
+
+Now `docs/review/traceability.md`: the auditor's matrix, updated with the evidence from the fixes.
+
+**Tool call · Bash**
+
+```json
+{
+  "command": "git rev-parse --short HEAD; grep -E \"^\\| S|p95|median|500/s\" docs/stress/REPORT-api.md | head -20 | cut -c1-200",
+  "description": "Get HEAD and API stress figures for the matrix"
+}
+```
+
+**Tool result**
+
+```
+865e9a7
+| Scenario | Result |
+| S3 approve storm | PASS |
+| S5 API load | PASS |
+| S5b segment counts at 100k users | PASS |
+| S6 dashboard fan-out | PASS |
+| S8 provider throughput | PASS |
+| (c) one all-user approve on its own (5 campaigns) | 7542 messages (3530 sms + 4012 email); latency p50 128ms · p95 133ms · p99 133ms · max 135ms |
+| (a) approve latency | p50 31ms · p95 36ms · p99 37ms · max 37ms |
+| (b) approve latency | p50 663ms · p95 1.198s · p99 1.198s · max 1.33s · all 10 done in 1.33s |
+| R-SND-1: approve of a 5000-user campaign returns in < 200 ms (median of 5) | pass | status 202, median 128ms |
+| baseline: segment preview latency | p50 14ms · p95 28ms · p99 29ms · max 30ms |
+| baseline: content validation latency | p50 11ms · p95 25ms · p99 26ms · max 28ms |
+| load: segment preview latency | p50 121ms · p95 141ms · p99 142ms · max 142ms |
+| load: content validation latency | p50 66ms · p95 121ms · p99 129ms · max 132ms |
+| count: age band or premium tier | p50 40ms · p95 42ms · p99 42ms · max 47ms |
+| count: big spenders in three cities | p50 5ms · p95 5ms · p99 5ms · max 6ms |
+| count: everyone | p50 10ms · p95 10ms · p99 10ms · max 11ms |
+| count: lapsed incl. never | p50 8ms · p95 8ms · p99 8ms · max 8ms |
+| count: official brief | p50 5ms · p95 5ms · p99 5ms · max 5ms |
+| R-RES-2: segment preview (incl. count) p95 < 300 ms at 100 000 users | pass | p95 40ms |
+```
+
+**Tool call · Bash**
+
+```json
+{
+  "command": "mkdir -p ~/projeler/smart-campaign-composer/docs/review && cat > ~/projeler/smart-campaign-composer/docs/review/traceability.md <<'EOF'\n# Traceability — CP3 (brought forward), 2026-11-09\n\nAudit: spec-auditor (read-only, transcript `ai-sessions/subagents/07-review-spec-auditor-cp3.md`) at `d5636f2`,\nthen the orchestrator closed the P0/P1 findings; this file is the audit's matrix updated with that evidence.\nStatus: **green** = implemented + a check test that can fail, seen passing · **owner** = needs the owner.\nTotals: 28 green, 1 owner (R-DEL-1). P2 gaps are listed in README → \"Not done / next steps\".\n\n## Commands and results\n\n| Command | Result |\n|---|---|\n| `make test` (containers, no internet) | 17 Go packages `ok`, Vitest `113 passed`; inside a clean clone: 97 s |\n| `make fresh-clone-check` | clean clone, no `.env`: healthy in 13 s, 5000 users, mock LLM · restart: 5000 (idempotent) · `down -v && up`: 5000 · key-only `.env` (dummy key): anthropic mode, healthy · `fresh-clone-check: OK` |\n| `make e2e` | `1 passed` (official brief → audience → streamed content → invalid edit blocked → saved edit → approve → dashboard + throughput chart → finished → reload) |\n| `make stress` | REPORT.md: S1, S2 (25 000 users, 49 463 messages), S7 PASS · REPORT-api.md: S3, S5, S5b, S6, S8 PASS |\n| `go test ./internal/segment -fuzz FuzzParseValidateCompile -fuzztime 2m` | 5.9 M executions, `PASS` |\n| `make eval PROVIDER=claudecode` | 16/16 segments valid first try, 14/14 exact audiences, 16/16 content valid |\n| `make sanitize-check` | gitleaks history + session exports clean, every export listed, no personal terms |\n| `make lint` | golangci-lint `0 issues`, vue-tsc clean |\n\n## Requirements\n\n| ID | Status | Check tests (examples; all pass) | Stress / adversarial evidence |\n|---|---|---|---|\n| R-FLOW-1 | green | TestMockDemo_OfficialBrief_RFLOW1, TestCount_MatchesDirectSQL_RFLOW1, e2e | S5 / S5b (100k users, p95 40 ms); cla
+… [4441 more characters truncated]
+```
+
+**Tool result**
+
+```
+ok
+```
+
+### Assistant
+
+Checking the matrix and README numbers against the committed reports.
+
+**Tool call · Bash**
+
+```json
+{
+  "command": "grep -E \"reconnects|regressions|50 of 50|load: segment|S8|5000/5000\" docs/stress/REPORT-api.md | cut -c1-160; grep -n \"slowest 6.9\\|0.36 s\\|230 reconnects\" README.md",
+  "description": "Cross-check numbers used in docs"
+}
+```
+
+**Tool result**
+
+```
+| S8 provider throughput | PASS |
+| load: segment preview latency | p50 121ms · p95 141ms · p99 142ms · max 142ms |
+| subscribers / reconnects | 50 / 240 (by the 10 flapping subscribers) |
+| every subscriber received `done` | pass | 50 of 50 |
+| terminal counts never go backwards in any subscriber's view | pass | regressions: 0 |
+| every subscriber's last snapshot equals the database's final counts | pass | 50 of 50 match map[email:{4012 4011 1 0} sms:{3530 3529 1 0}] |
+## S8 provider throughput
+145:  campaigns approved at once all succeed (75 420 messages, slowest 6.9 s). S5 — 400 concurrent segment previews
+146:  and content validations: no errors, p95 under 0.36 s with the 20-connection pool saturated. S6 — 50 live
+147:  dashboards with 230 reconnects during a chaotic delivery: every one ends on the exact final counts, and no
+```
+
+**Tool call · Bash**
+
+```json
+{
+  "command": "grep -E \"offered|p99\" docs/stress/REPORT-api.md | grep -i \"latency (conf\\|offered\" ; python3 - <<'EOF'\nimport re\nfor p in ['README.md','docs/review/traceability.md']:\n    s=open(p).read()\n    s=s.replace(\"(75 420 messages, slowest 6.9 s)\",\"(75 420 messages, slowest 1.3 s in the committed run)\")\n    s=s.replace(\"p95 under 0.36 s with the 20-connection pool saturated\",\"p95 0.14 s with the 20-connection pool saturated\")\n    s=s.replace(\"dashboards with 230 reconnects\",\"dashboards with 240 reconnects\")\n    s=s.replace(\"50 subscribers, 230 reconnects\",\"50 subscribers, 240 reconnects\")\n    open(p,'w').write(s)\nEOF\ngrep -n \"S2 chaos with a worker\\|S1 baseline, S2\" README.md",
+  "description": "Align README and matrix with committed report numbers"
+}
+```
+
+**Tool result**
+
+```
+| requests offered / answered 200 | 4999 in 10s / 4999 |
+| throughput (200s per second of offered load) | 500/s |
+| latency (configured 20–300 ms) | p50 159ms · p95 285ms · p99 296ms · max 300ms |
+142:- **Delivery stress (S1 baseline, S2 chaos with a worker killed mid-run, S7 provider and database outages):**
+```
+
+**Tool call · Bash**
+
+```json
+{
+  "command": "sed -i '' 's/\\*\\*S8\\*\\*: 500 rps open loop, 5000\\/5000 answered, p99 296 ms/**S8**: 500 rps open loop, 4999\\/4999 answered, p99 296 ms/' docs/review/traceability.md && python3 - <<'EOF'\np='README.md'\ns=open(p).read()\ns=s.replace(\"- **Delivery stress (S1 baseline, S2 chaos with a worker killed mid-run, S7 provider and database outages):**\",\"- **Delivery stress (S1 baseline, S2 chaos at 25 000 users / 49 463 messages with a worker killed mid-run, S7\\n  provider and database outages):**\")\ns=s.replace(\"- **API stress:** S3\",\"- **API stress:** S3(c) — one 5000-user approve returns in a median 128 ms. S3\")\ns=s.replace(\"dashboards with 240 reconnects during a chaotic delivery: every one ends on the exact final counts, and no\\n  count ever goes backwards.\",\"dashboards with 240 reconnects during a chaotic delivery: every one ends on the exact final counts, and no\\n  count ever goes backwards. S5b — previews at 100 000 users: p95 40 ms. S8 — the mock provider answers 500 rps.\")\ns=s.replace(\"| `make stress` | Delivery scenarios\",\"| `make fresh-clone-check` | The reviewer's path: clean clone, no `.env`, `docker compose up`, seed, restart, `down -v`, key-only `.env`, `make test` | Docker |\\n| `make stress` | Delivery scenarios\")\nopen(p,'w').write(s)\nEOF\ngrep -n \"S5b\\|S3(c)\\|fresh-clone-check\" README.md | head; git add README.md docs/review/traceability.md && git commit -q -m \"docs(review): traceability matrix after the CP3 fixes; README evidence aligned with the committed reports [R-DEL-4]\n\nCo-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>\" && echo committed",
+  "description": "Finalize README evidence and commit traceability"
+}
+```
+
+**Tool result**
+
+```
+129:| `make fresh-clone-check` | The reviewer's path: clean clone, no `.env`, `docker compose up`, seed, restart, `down -v`, key-only `.env`, `make test` | Docker |
+146:- **API stress:** S3(c) — one 5000-user approve returns in a median 128 ms. S3 — 100 racing approves of one campaign: exactly one wins, the rest get 409; ten all-user
+150:  count ever goes backwards. S5b — previews at 100 000 users: p95 40 ms. S8 — the mock provider answers 500 rps.
+committed
+```
+
+### Assistant
+
+Adding N-ORC-013 to DECISIONS D-6 (one line; leaving it out would make DECISIONS incomplete), then the final verification.
+
+**Tool call · Bash**
+
+```json
+{
+  "command": "python3 - <<'EOF'\np='DECISIONS.md'\ns=open(p).read()\nold=\"    <channel>_consent ON CONFLICT DO NOTHING`, and a guarded `content_ready → sending` transition. No dual\\n    write between a DB and a broker. 5000 users enqueue in ~0.16 s.\"\nassert old in s\ns=s.replace(old, old+\"\\n  - Concurrent approves of *different* campaigns enqueue one at a time behind a transaction-scoped advisory\\n    lock [N-ORC-013]: ten bulk inserts in parallel took 14–55 s each on the compose Postgres and timed out;\\n    in sequence all ten finish in seconds (stress S3).\")\ns=s.replace(\"## D-6 · Postgres is the datastore and the queue [L-4, N-PLAN-010]\",\"## D-6 · Postgres is the datastore and the queue [L-4, N-PLAN-010, N-ORC-013]\")\nopen(p,'w').write(s)\nEOF\ngit add DECISIONS.md && git commit -q -m \"docs(decisions): N-ORC-013 (approves enqueue one at a time) in D-6 [R-DEL-5]\n\nCo-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>\" && (time make test) > /private/tmp/claude-501/-Users-owner-projeler-smart-campaign-composer/76094f6f-4357-43bc-9bab-c4747eda27f6/scratchpad/maketest3.log 2>&1; echo \"test exit $?\"; grep -E \"^FAIL|--- FAIL|Tests |total\" /private/tmp/claude-501/-Users-owner-projeler-smart-campaign-composer/76094f6f-4357-43bc-9bab-c4747eda27f6/scratchpad/maketest3.log; grep -c \"^ok\" /private/tmp/claude-501/-Users-owner-projeler-smart-campaign-composer/76094f6f-4357-43bc-9bab-c4747eda27f6/scratchpad/maketest3.log; make lint >/dev/null 2>&1; echo \"lint exit $?\"",
+  "description": "Commit DECISIONS fix; run make test and lint",
+  "timeout": 1800000
+}
+```
+
+**Tool result**
+
+```
+test exit 0
+[2m      Tests [22m [1m[32m113 passed[39m[22m[90m (113)[39m
+make test  0.34s user 0.31s system 0% cpu 1:27.69 total
+17
+lint exit 0
 ```
