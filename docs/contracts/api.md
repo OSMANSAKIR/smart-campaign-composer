@@ -178,7 +178,8 @@ Progress object:
 ```
 
 `errors` counts failed attempts by class: 429 → `rate_limited`, 5xx → `server_error`, timeouts and connection
-errors → `timeout`, other 4xx → `permanent`, 401/403 (channel paused, retried) → `auth_error`.
+errors → `timeout` (including `unreachable`: no connection was made, the channel pauses and the try is not
+counted), other 4xx → `permanent`, 401/403 (channel paused, retried) → `auth_error`.
 
 Every `snapshot` is complete, so a reconnecting client simply replaces its state (need.md N-ORC-006).
 Counts are monotonic in the sense that terminal counts never decrease. A `: ping` comment is sent every 15 s.

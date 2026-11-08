@@ -33,7 +33,6 @@ _Last updated: 2026-11-09 by the orchestrator (owner answers for N-ORC-012, N-DE
 
 **Owner changes in progress:**
 
-- 🔁 N-DEL-007: a refused connection does not count as an attempt and pauses the channel.
 - 🔁 N-LLM-003: real claudecode probe as the fixture; claudecode eval report in docs/eval.
 - 🔁 N-DEL-009: final idempotent replay for delivered-but-failed messages (if time allows).
 
@@ -43,6 +42,7 @@ _Last updated: 2026-11-09 by the orchestrator (owner answers for N-ORC-012, N-DE
 
 **Answered:**
 
+- ✅ N-DEL-007: a refused connection pauses the channel and is not counted (implemented).
 - ✅ N-ORC-012: departure-time limiter (A) accepted; assumption and switch to B documented in DECISIONS.md.
 - ✅ N-ORC-001: Agent-tool subagents instead of workflows (Pro plan).
 - ✅ N-ORC-011: CP1 verifiers per area (red-team on llm, reliability on delivery), spec-auditor at CP3; limit recovery via SendMessage or a fresh builder from the branch log.
@@ -528,7 +528,7 @@ _Last updated: 2026-11-09 by the orchestrator (owner answers for N-ORC-012, N-DE
 - **Owner response:** — (resolved by the orchestrator)
 - **Status:** RESOLVED
 
-### 🔁 N-DEL-007 · Long provider outages exhaust the retry budget · impact: medium
+### ✅ N-DEL-007 · Long provider outages exhaust the retry budget · impact: medium
 - **Date / agent / session:** 2026-11-08 · delivery · builder-delivery (W1 subagent)
 - **Requirement(s):** R-SND-4, R-RES-3
 - **Context:** Connection errors are "ambiguous" tries that count toward max 5 (KICKOFF §7.3). S7's 10 s outage caused 0 unexpected failures, but an outage of ~30 s or more ends messages as `failed`.
@@ -537,7 +537,8 @@ _Last updated: 2026-11-09 by the orchestrator (owner answers for N-ORC-012, N-DE
 - **Cost to change later:** B ~1 h plus tests.
 - **Question for owner:** Should a refused connection stop counting as an attempt and pause the channel instead?
 - **Owner response:** CHANGE → B (2026-11-09): a refused connection does not count as an attempt and pauses the channel; with a test.
-- **Status:** CHANGE REQUESTED
+- **Implemented (2026-11-09):** the HTTP client marks a send error `ErrUnreachable` when no connection was ever assigned to the request (httptrace `GotConn` never fired: refused, DNS failure, dial timeout), so not one byte can have reached the provider. Class `unreachable` pauses the channel for `UnreachablePause` (2 s) and does not count an attempt; a connection dropped after it was made stays `ambiguous` and counts. Tests: `TestHTTPClient_ClassifiesTransportFailures_RSND4`, `TestDispatcher_RetryClasses_RSND4` (8 refused tries, then `sent` with attempts = 1).
+- **Status:** RESOLVED
 
 ### 🟡 N-LLM-001 · Worst case when the audience is unknown, and which fallback counts · impact: low
 - **Date / agent / session:** 2026-11-08 11:00 · llm · builder-llm (W1 subagent)

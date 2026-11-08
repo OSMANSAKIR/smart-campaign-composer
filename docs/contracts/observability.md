@@ -24,8 +24,8 @@ Definitions live in `internal/metrics`; services only use them. Names and labels
 |---|---|---|---|
 | `messages_total` | counter | `channel`, `status` (sent, failed, skipped_no_consent, retry) | worker |
 | `queue_depth` | gauge | `channel`, `status` (queued, retry, sending) | worker (sampled every 2 s) |
-| `retries_total` | counter | `channel`, `class` (throttled, transient, ambiguous) | worker |
-| `provider_responses_total` | counter | `channel`, `code` (HTTP status, or `timeout`, `conn_error`) | worker |
+| `retries_total` | counter | `channel`, `class` (throttled, transient, ambiguous, unreachable) | worker |
+| `provider_responses_total` | counter | `channel`, `code` (HTTP status, or `timeout`, `conn_error`, `unreachable` = no connection made) | worker |
 | `send_latency_seconds` | histogram | `channel` | worker |
 | `rate_limiter_wait_seconds` | histogram | `channel` | worker |
 | `channel_paused` | gauge (0/1) | `channel` | worker |

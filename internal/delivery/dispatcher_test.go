@@ -192,6 +192,14 @@ func TestDispatcher_RetryClasses_RSND4(t *testing.T) {
 			}
 			return SendResult{Status: 200}, nil
 		}, StatusSent, 3, 1},
+		// N-DEL-007: an outage longer than the whole retry budget (5 counted attempts) still ends in `sent`,
+		// because a refused connection pauses the channel and is not counted.
+		{"refused connections pause without using attempts, past the retry budget", func(n int) (SendResult, error) {
+			if n <= 8 {
+				return SendResult{}, errorf("%w: dial tcp: connection refused", ErrUnreachable)
+			}
+			return SendResult{Status: 200}, nil
+		}, StatusSent, 9, 1},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
@@ -201,6 +209,7 @@ func TestDispatcher_RetryClasses_RSND4(t *testing.T) {
 			client := &scriptedClient{fn: func(n int, _ SendRequest) (SendResult, error) { return tc.answer(n) }}
 			d := fastDispatcher(pool, SMS, client)
 			d.ConfigPause = 30 * time.Millisecond
+			d.UnreachablePause = 10 * time.Millisecond
 			startDispatcher(t, d)
 			eventually(t, 10*time.Second, "message terminal", func() bool {
 				return nonTerminal(statusCounts(t, pool, camp, SMS)) == 0

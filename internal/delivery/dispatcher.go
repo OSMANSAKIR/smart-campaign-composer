@@ -56,21 +56,22 @@ type Dispatcher struct {
 	Metrics *metrics.Metrics
 	Log     *slog.Logger
 
-	Limiter        Limiter        // default: departure-paced sliding window of RateLimit per second+WindowGuard
-	RateLimit      int            // default 100
-	WindowGuard    time.Duration  // added to the 1 s window so arrival jitter cannot push the receiver over the limit; default 25 ms
-	Policy         RetryPolicy    // default DefaultRetryPolicy
-	Clock          clock.Clock    // default clock.Real
-	WorkerID       string         // default hostname-pid
-	MaxInFlight    int            // default 32
-	Lease          time.Duration  // default 30 s
-	DrainTimeout   time.Duration  // default 10 s
-	PollInterval   time.Duration  // idle wait between empty claims; default 200 ms
-	ConfigPause    time.Duration  // pause after 401/403; default 30 s
-	HeartbeatEvery time.Duration  // default 2 s
-	StandbyPoll    time.Duration  // how often a standby retries the advisory lock; default 1 s
-	TakeoverWait   time.Duration  // quiet time after winning the lock; 0 = W + lock-loss bound (about 4 s), negative = none (tests)
-	Rand           func() float64 // jitter source; default math/rand/v2
+	Limiter          Limiter        // default: departure-paced sliding window of RateLimit per second+WindowGuard
+	RateLimit        int            // default 100
+	WindowGuard      time.Duration  // added to the 1 s window so arrival jitter cannot push the receiver over the limit; default 25 ms
+	Policy           RetryPolicy    // default DefaultRetryPolicy
+	Clock            clock.Clock    // default clock.Real
+	WorkerID         string         // default hostname-pid
+	MaxInFlight      int            // default 32
+	Lease            time.Duration  // default 30 s
+	DrainTimeout     time.Duration  // default 10 s
+	PollInterval     time.Duration  // idle wait between empty claims; default 200 ms
+	ConfigPause      time.Duration  // pause after 401/403; default 30 s
+	UnreachablePause time.Duration  // pause when no connection to the provider could be made; default 2 s
+	HeartbeatEvery   time.Duration  // default 2 s
+	StandbyPoll      time.Duration  // how often a standby retries the advisory lock; default 1 s
+	TakeoverWait     time.Duration  // quiet time after winning the lock; 0 = W + lock-loss bound (about 4 s), negative = none (tests)
+	Rand             func() float64 // jitter source; default math/rand/v2
 
 	once       sync.Once
 	queue      *Queue
@@ -116,6 +117,7 @@ func (d *Dispatcher) setup() {
 		d.DrainTimeout = defaultDur(d.DrainTimeout, 10*time.Second)
 		d.PollInterval = defaultDur(d.PollInterval, 200*time.Millisecond)
 		d.ConfigPause = defaultDur(d.ConfigPause, 30*time.Second)
+		d.UnreachablePause = defaultDur(d.UnreachablePause, 2*time.Second)
 		d.HeartbeatEvery = defaultDur(d.HeartbeatEvery, 2*time.Second)
 		d.StandbyPoll = defaultDur(d.StandbyPoll, time.Second)
 		switch {
@@ -535,6 +537,15 @@ func (d *Dispatcher) afterSend(ctx context.Context, log *slog.Logger, c Claimed,
 		d.pause(d.ConfigPause, d.Clock.Now())
 		log.Error("provider rejected our credentials; channel paused", "http_status", res.Status, "pause", d.ConfigPause)
 		out.Status, out.AttemptDelta, out.Delay = StatusRetry, -1, d.ConfigPause
+		d.finish(ctx, log, c, out, StatusRetry)
+
+	case ClassUnreachable:
+		// No connection was made, so nothing reached the provider: the try is not an attempt, and the whole
+		// channel waits instead of burning every queued message's budget during an outage (N-DEL-007).
+		d.pause(d.UnreachablePause, d.Clock.Now())
+		log.Warn("provider unreachable; channel paused", "err", out.LastError, "pause", d.UnreachablePause)
+		d.Metrics.Retries.WithLabelValues(ch, string(ClassUnreachable)).Inc()
+		out.Status, out.AttemptDelta, out.Delay = StatusRetry, -1, d.UnreachablePause
 		d.finish(ctx, log, c, out, StatusRetry)
 
 	case ClassThrottled:

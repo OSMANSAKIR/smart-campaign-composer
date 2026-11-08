@@ -3,6 +3,7 @@ package delivery
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -117,8 +118,30 @@ func TestHTTPClient_ClassifiesTransportFailures_RSND4(t *testing.T) {
 	c2 := NewHTTPClient(url, time.Second)
 	defer c2.Close()
 	res, err = c2.Send(context.Background(), SendRequest{Channel: SMS, IdempotencyKey: "k", To: "+905321234567", Text: "x"})
-	if err == nil || IsTimeout(err) || ResponseCode(res.Status, err) != "conn_error" {
-		t.Fatalf("refused: res=%+v err=%v, want conn_error", res, err)
+	if err == nil || !errors.Is(err, ErrUnreachable) || ResponseCode(res.Status, err) != "unreachable" {
+		t.Fatalf("refused: res=%+v err=%v, want unreachable", res, err)
+	}
+	if d := DefaultRetryPolicy.Classify(res.Status, res.Header, err); d.Class != ClassUnreachable || d.CountsAttempt {
+		t.Fatalf("refused: decision %+v, want unreachable without counting an attempt (N-DEL-007)", d)
+	}
+
+	// A connection that was made and then dropped mid-request is not "unreachable": the provider may have
+	// received the request, so it stays ambiguous and counts.
+	drop := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		conn, _, err := http.NewResponseController(w).Hijack()
+		if err == nil {
+			_ = conn.Close()
+		}
+	}))
+	defer drop.Close()
+	c3 := NewHTTPClient(drop.URL, time.Second)
+	defer c3.Close()
+	res, err = c3.Send(context.Background(), SendRequest{Channel: SMS, IdempotencyKey: "k", To: "+905321234567", Text: "x"})
+	if err == nil || errors.Is(err, ErrUnreachable) || ResponseCode(res.Status, err) != "conn_error" {
+		t.Fatalf("dropped after connect: res=%+v err=%v, want conn_error", res, err)
+	}
+	if d := DefaultRetryPolicy.Classify(res.Status, res.Header, err); d.Class != ClassAmbiguous || !d.CountsAttempt {
+		t.Fatalf("dropped after connect: decision %+v, want ambiguous and counted", d)
 	}
 }
 

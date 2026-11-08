@@ -56,7 +56,7 @@ const throughputWindow = 5 * time.Second
 
 // errorBuckets maps delivery_attempts.error_class to the dashboard's error breakdown.
 var errorBuckets = map[string]string{
-	"throttled": "rate_limited", "transient": "server_error", "ambiguous": "timeout",
+	"throttled": "rate_limited", "transient": "server_error", "ambiguous": "timeout", "unreachable": "timeout",
 	"permanent": "permanent", "config": "auth_error", // 401/403 pause the channel and retry; not permanent
 }
 

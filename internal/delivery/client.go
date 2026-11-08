@@ -8,7 +8,9 @@ import (
 	"io"
 	"net"
 	"net/http"
+	"net/http/httptrace"
 	"strings"
+	"sync/atomic"
 	"time"
 )
 
@@ -96,9 +98,20 @@ func (c *HTTPClient) Send(ctx context.Context, r SendRequest) (SendResult, error
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Idempotency-Key", r.IdempotencyKey)
 
+	// GotConn fires once a connection (new or reused) is assigned to this request. If Do fails before that,
+	// the request never left the process, which is what makes a refused connection safe to not count.
+	// WithClientTrace composes with the dispatcher's own trace already in ctx.
+	var gotConn atomic.Bool
+	req = req.WithContext(httptrace.WithClientTrace(req.Context(), &httptrace.ClientTrace{
+		GotConn: func(httptrace.GotConnInfo) { gotConn.Store(true) },
+	}))
+
 	start := time.Now()
 	resp, err := c.hc.Do(req)
 	if err != nil {
+		if !gotConn.Load() { // refused, DNS failure, or a dial that ran into the timeout
+			err = fmt.Errorf("%w: %w", ErrUnreachable, err)
+		}
 		return SendResult{Latency: time.Since(start)}, err
 	}
 	defer resp.Body.Close()

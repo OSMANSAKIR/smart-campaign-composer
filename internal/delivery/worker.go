@@ -20,8 +20,8 @@ import (
 var (
 	messageStatuses = []string{StatusSent, StatusFailed, StatusSkippedNC, StatusRetry}
 	depthStatuses   = []string{StatusQueued, StatusRetry, StatusSending}
-	retryClasses    = []Class{ClassThrottled, ClassTransient, ClassAmbiguous}
-	responseCodes   = []string{"200", "400", "401", "403", "404", "422", "429", "500", "502", "503", "timeout", "conn_error"}
+	retryClasses    = []Class{ClassThrottled, ClassTransient, ClassAmbiguous, ClassUnreachable}
+	responseCodes   = []string{"200", "400", "401", "403", "404", "422", "429", "500", "502", "503", "timeout", "conn_error", "unreachable"}
 )
 
 // InitMetrics creates the worker's labeled series at zero.
