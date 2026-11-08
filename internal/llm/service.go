@@ -121,6 +121,10 @@ func (s *Service) ProposeContent(ctx context.Context, in ContentInput, onDelta f
 		return ContentResult{}, fmt.Errorf("llm: prompts: %w", err)
 	}
 	channels := normalizeChannels(in.Channels)
+	requested := in.Language
+	if !slices.Contains(catalog.Locales, requested) {
+		requested = "tr" // same default as the prompt and content.Validate
+	}
 	cons := content.Constraints{Locale: in.Language, WorstCase: in.WorstCase, WorstCaseByChannel: in.WorstCaseByChannel}
 	var res ContentResult
 	validate := func(raw []byte) []segment.Issue {
@@ -131,6 +135,12 @@ func (s *Service) ProposeContent(ctx context.Context, in ContentInput, onDelta f
 		c := p.Content()
 		report := content.Validate(c, cons)
 		var blocking []segment.Issue
+		// RT-6: the copy must be in the language that was asked for; the model's own "language" field is
+		// otherwise never compared with the request, so wrong-language copy would reach the approver.
+		if p.Language != requested {
+			blocking = append(blocking, segment.Issue{Path: "language", Code: "language_mismatch",
+				Message: "language must be " + requested + " as requested; write the whole copy in that language and set language to " + requested})
+		}
 		for _, e := range report.Errors {
 			if slices.Contains(channels, channelOf(e.Path)) {
 				blocking = append(blocking, segment.Issue(e))
