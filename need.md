@@ -25,7 +25,7 @@ The next agent that owns the area implements the answer and updates the status.
 
 ## Digest (maintained by the orchestrator only)
 
-_Last updated: 2026-11-09 by the orchestrator (owner answers for N-ORC-012, N-DEL-007, N-LLM-003, N-DEL-009, N-PLAN-009 recorded)._
+_Last updated: 2026-11-09 by the orchestrator (N-DEL-007, N-LLM-003, N-DEL-009 implemented; N-ORC-013 added after stress S3)._
 
 **Needs the owner soon (high impact):**
 
