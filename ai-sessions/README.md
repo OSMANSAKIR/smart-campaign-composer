@@ -26,6 +26,29 @@ Each Agent-tool launch by the orchestrator (KICKOFF §12.0). Transcripts: `subag
 | CP1 | llm-red-team (as general-purpose) | opus | worktree | `.claude/agents/llm-red-team.md` + llm/segment/content/campaign | done · 45 cases, 2 major + 7 minor findings as skipped tests · merged cd74fc7 |
 | CP1 fix | builder-delivery fix round | sonnet | worktree | reliability findings 1–8 (rate bound, takeover, transport retry, …) | done · all 8 · stress S1/S2/S7 at margin 0, provider max 100 · merged a21d3ab |
 | CP1 fix | builder-llm fix round | sonnet | worktree | red-team RT-1, RT-3..RT-9 | done · all fixed, 0 red-team skips left · merged 408c8e9 |
+| CP3 (early) | spec-auditor (as general-purpose) | opus | none, read-only | `.claude/agents/spec-auditor.md` + owner's evidence request (test + command + output per requirement) | done · 27 green, 2 gaps (R-DEL-1 repo = owner, R-DEL-6 exports), P1/P2 list · `docs/review/traceability.md` |
+
+## Exports
+
+Sanitized Markdown of every harvested transcript (`scripts/harvest-sessions.sh` → `scripts/transcript2md.py` →
+`scripts/sanitize-sessions.sh`; gitleaks clean). Tool inputs and results are truncated to 2000 characters, images
+and base64 are dropped. `make sanitize-check` fails if a file listed here is missing or an export is unlisted.
+
+| File | Session / agent |
+|---|---|
+| `sessions/01-orchestrator.md` | 01-orchestrator (main session, all stages; includes the compacted history) |
+| `subagents/02-builder-llm.md` | W1 builder-llm |
+| `subagents/03-builder-delivery.md` | W1 builder-delivery |
+| `subagents/04-builder-web.md` | W1 builder-web |
+| `subagents/05-review-reliability-cp1-stopped.md` | CP1 reliability-reviewer, stopped at the usage limit |
+| `subagents/05-review-reliability-cp1.md` | CP1 reliability-reviewer, re-run |
+| `subagents/05-review-llm-red-team-cp1.md` | CP1 llm-red-team |
+| `subagents/06-fix-delivery-rate-bound.md` | CP1 fix round, delivery |
+| `subagents/06-fix-llm-red-team.md` | CP1 fix round, llm |
+| `subagents/07-review-spec-auditor-cp3.md` | CP3 spec-auditor |
+
+`00-planning` ran in the home directory, outside this project's transcript folder; its export is the owner's
+`/export` (KICKOFF §13 step 1).
 
 ## How the agents were connected
 

@@ -16,6 +16,15 @@ while IFS= read -r f; do
   gitleaks dir --config .gitleaks.toml --redact --no-banner --log-level error "$f" || { echo "secret in $f"; fail=1; }
 done < <(git ls-files ai-sessions)
 
+echo "== session exports listed in ai-sessions/README.md exist, and every export is listed"
+listed=$(grep -oE '`(sessions|subagents)/[^`]+\.md`' ai-sessions/README.md | tr -d '`' | sort -u)
+on_disk=$(cd ai-sessions && find sessions subagents -name '*.md' 2>/dev/null | sort -u)
+missing=$(comm -23 <(echo "$listed") <(echo "$on_disk") | sed '/^$/d')
+unlisted=$(comm -13 <(echo "$listed") <(echo "$on_disk") | sed '/^$/d')
+if [ -n "$missing" ]; then echo "listed but missing:"; echo "$missing"; fail=1; fi
+if [ -n "$unlisted" ]; then echo "exported but not listed:"; echo "$unlisted"; fail=1; fi
+[ -n "$listed" ] || { echo "no session exports listed"; fail=1; }
+
 echo "== .env must not be tracked"
 if git ls-files --error-unmatch .env >/dev/null 2>&1; then echo ".env is tracked!"; fail=1; fi
 

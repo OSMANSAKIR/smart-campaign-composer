@@ -1,0 +1,75 @@
+{
+ "session": [
+  {
+   "agent": "claude",
+   "cacheCreationTokens": 3258480,
+   "cacheReadTokens": 214460008,
+   "inputTokens": 2121,
+   "metadata": {
+    "lastActivity": "2026-11-08T22:46:06.989Z"
+   },
+   "modelBreakdowns": [
+    {
+     "cacheCreationTokens": 2410928,
+     "cacheReadTokens": 166426365,
+     "cost": 62.20587400000008,
+     "inputTokens": 1511,
+     "modelName": "claude-opus-5-5",
+     "outputTokens": 650534
+    },
+    {
+     "cacheCreationTokens": 847552,
+     "cacheReadTokens": 48033643,
+     "cost": 7.638554299999997,
+     "inputTokens": 610,
+     "modelName": "claude-sonnet-5-5",
+     "outputTokens": 71509
+    }
+   ],
+   "modelsUsed": [
+    "claude-opus-5-5",
+    "claude-sonnet-5-5"
+   ],
+   "outputTokens": 722043,
+   "period": "76094f6f-4357-43bc-9bab-c4747eda27f6",
+   "totalCost": 69.84442830000008,
+   "totalTokens": 218442652
+  },
+  {
+   "agent": "claude",
+   "cacheCreationTokens": 711373,
+   "cacheReadTokens": 14100834,
+   "inputTokens": 211,
+   "metadata": {
+    "lastActivity": "2026-11-08T22:34:36.554Z"
+   },
+   "modelBreakdowns": [
+    {
+     "cacheCreationTokens": 694144,
+     "cacheReadTokens": 14077641,
+     "cost": 13.7247362,
+     "inputTokens": 209,
+     "modelName": "claude-opus-5-5",
+     "outputTokens": 267761
+    },
+    {
+     "cacheCreationTokens": 17229,
+     "cacheReadTokens": 23193,
+     "cost": 0.07263929999999999,
+     "inputTokens": 2,
+     "modelName": "claude-sonnet-5-5",
+     "outputTokens": 140
+    }
+   ],
+   "modelsUsed": [
+    "claude-sonnet-5-5",
+    "claude-opus-5-5"
+   ],
+   "outputTokens": 267901,
+   "period": "e7c29380-6e95-4038-b7c8-f916ca8dab4d",
+   "totalCost": 13.797375500000001,
+   "totalTokens": 15080319
+  }
+ ],
+ "note": "ccusage session --json, rows active on 2026-11-07 or later (this project's period; ccusage does not name projects in this mode). API-equivalent estimates on a subscription."
+}
