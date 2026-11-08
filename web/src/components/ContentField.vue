@@ -110,7 +110,7 @@ function insert(name: string) {
       <span v-if="worst !== null">
         <b :style="over ? 'color: var(--bad)' : ''">{{ worst }}</b> / {{ limit }} with longest name and city
       </span>
-      <span v-else-if="limit > 0" class="muted">checking length…</span>
+      <span v-else-if="limit > 0 && text" class="muted">checking length…</span>
       <span v-if="sms && smsInfo?.encoding">
         {{ smsInfo.encoding === 'ucs2' ? 'UCS-2 (Turkish letters or emoji)' : 'GSM-7' }},
         <b>{{ smsInfo.segments }}</b> {{ smsInfo.segments === 1 ? 'segment' : 'segments' }}

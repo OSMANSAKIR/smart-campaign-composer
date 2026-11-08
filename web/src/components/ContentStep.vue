@@ -27,8 +27,12 @@ const issuesFor = (path: string) => [
   ...(current.value?.warnings ?? []).filter((i) => i.path === path),
 ]
 
+const hasContent = computed(() => props.form.sms_text || props.form.email_subject || props.form.email_body)
+
 const summary = computed(() => {
   if (props.stream.active) return props.stream.repairing ? 'Fixing the draft…' : 'Claude is writing…'
+  // An empty editor is never sent for checking, so there is nothing to wait for.
+  if (!props.validating && !props.report && !hasContent.value) return ''
   if (props.validating || !props.reportIsCurrent) return 'Checking…'
   const r = props.report
   if (!r) return ''
@@ -42,7 +46,6 @@ const values = computed(() => current.value?.worst_case ?? props.report?.worst_c
 const smsPreview = computed(() => renderPreview(props.form.sms_text, values.value))
 const subjectPreview = computed(() => renderPreview(props.form.email_subject, values.value))
 const bodyPreview = computed(() => renderPreview(props.form.email_body, values.value))
-const hasContent = computed(() => props.form.sms_text || props.form.email_subject || props.form.email_body)
 </script>
 
 <template>
