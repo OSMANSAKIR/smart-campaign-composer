@@ -62,6 +62,9 @@ func TestCreate_BriefLimits_RFLOW1(t *testing.T) {
 		"max":       {strings.Repeat("ş", 4000), ""},
 		"plain":     {"İstanbul'daki kullanıcılara indirim", ""},
 		"multiline": {"line one\nline two", ""},
+		"nul":       {"indirim\x00", "validation_failed"},
+		"bad utf8":  {"indirim \xff", "validation_failed"},
+		"bell":      {"indirim\a", "validation_failed"},
 	} {
 		t.Run(name, func(t *testing.T) {
 			c, err := svc.Create(ctx, tc.brief)

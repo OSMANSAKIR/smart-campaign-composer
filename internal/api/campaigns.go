@@ -89,16 +89,27 @@ func (s *Server) generateSegment(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) putSegment(w http.ResponseWriter, r *http.Request) {
 	var req struct {
-		Rule *segment.Rule `json:"rule"`
+		Rule json.RawMessage `json:"rule"`
 	}
 	if !decode(w, r, &req) {
 		return
 	}
-	if req.Rule == nil {
+	if len(req.Rule) == 0 || string(req.Rule) == "null" {
 		writeError(w, 400, "bad_request", "Field `rule` is required.", []Issue{{Path: "rule", Code: "required", Message: "missing"}})
 		return
 	}
-	c, err := s.campaigns.PutSegment(r.Context(), r.PathValue("id"), *req.Rule)
+	// The same strict decoder as model output: a misspelled or case-folded "groups" must not silently become
+	// an empty rule that targets everyone (red-team RT-2).
+	rule, issues := segment.ParseRule(req.Rule)
+	if len(issues) > 0 {
+		details := make([]Issue, 0, len(issues))
+		for _, i := range issues {
+			details = append(details, Issue{Path: i.Path, Code: i.Code, Message: i.Message})
+		}
+		writeError(w, 422, "validation_failed", "The segment rule is invalid.", details)
+		return
+	}
+	c, err := s.campaigns.PutSegment(r.Context(), r.PathValue("id"), rule)
 	if err != nil {
 		s.fail(w, r, err)
 		return

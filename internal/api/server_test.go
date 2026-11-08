@@ -98,6 +98,9 @@ func TestErrorModel_ROBS1(t *testing.T) {
 		{"content in draft", "POST", base + created.ID + "/content/generate", `{}`, nil, 409, "invalid_state"},
 		{"bad limit", "GET", srv.URL + "/api/campaigns?limit=0", "", nil, 400, "bad_request"},
 		{"bad message filter", "GET", base + created.ID + "/messages?status=lost", "", nil, 400, "bad_request"},
+		{"segment misspelled groups", "PUT", base + created.ID + "/segment", `{"rule":{"group":[]}}`, nil, 422, "validation_failed"},
+		{"segment case-folded", "PUT", base + created.ID + "/segment", `{"rule":{"GROUPS":[]}}`, nil, 422, "validation_failed"},
+		{"segment missing rule", "PUT", base + created.ID + "/segment", `{}`, nil, 400, "bad_request"},
 		{"unknown route", "GET", srv.URL + "/api/nope", "", nil, 404, "not_found"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {

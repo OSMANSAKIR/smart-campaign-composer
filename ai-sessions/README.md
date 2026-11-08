@@ -23,7 +23,9 @@ Each Agent-tool launch by the orchestrator (KICKOFF §12.0). Transcripts: `subag
 | W1 | builder-web | sonnet | worktree | `docs/tasks/web.md` | done 10:23 · P0 complete, 106 Vitest tests · merged f194e8a (typecheck/test/build re-run on main) |
 | CP1 | reliability-reviewer (as general-purpose; project agent types load at session start) | opus | none, read-only | `.claude/agents/reliability-reviewer.md` + delivery diff 46a3fc1..72b9797 | stopped by the orchestrator at the usage limit before reporting; to be re-run |
 | CP1 | reliability-reviewer, re-run (as general-purpose) | opus | none, read-only | `.claude/agents/reliability-reviewer.md` + delivery diff + live 101/s finding | done · 2 blockers (rate bound: cold connections, takeover), 1 major (hidden transport retry), 5 minor → fix round |
-| CP1 | llm-red-team (as general-purpose) | opus | worktree | `.claude/agents/llm-red-team.md` + llm/segment/content/campaign | running (launched 2026-11-08 14:30) |
+| CP1 | llm-red-team (as general-purpose) | opus | worktree | `.claude/agents/llm-red-team.md` + llm/segment/content/campaign | done · 45 cases, 2 major + 7 minor findings as skipped tests · merged cd74fc7 |
+| CP1 fix | builder-delivery fix round | sonnet | worktree | reliability findings 1–8 (rate bound, takeover, transport retry, …) | running |
+| CP1 fix | builder-llm fix round | sonnet | worktree | red-team RT-1, RT-3..RT-9 | running |
 
 ## How the agents were connected
 

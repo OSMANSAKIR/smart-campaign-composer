@@ -11,6 +11,7 @@ import (
 	"slices"
 	"strings"
 	"time"
+	"unicode"
 	"unicode/utf8"
 
 	"github.com/jackc/pgx/v5"
@@ -55,6 +56,10 @@ var consentColumn = map[string]string{"sms": "u.sms_consent", "email": "u.email_
 func (s *Service) Create(ctx context.Context, brief string) (Campaign, error) {
 	brief = strings.TrimSpace(brief)
 	switch n := utf8.RuneCountInString(brief); {
+	case !utf8.ValidString(brief) || strings.ContainsFunc(brief, disallowedInBrief):
+		// Postgres text cannot hold NUL or invalid UTF-8; reject here instead of failing the INSERT (RT-8).
+		return Campaign{}, errorf("validation_failed", "The brief contains invalid or control characters.",
+			Issue{Path: "brief", Code: "control_character", Message: "Remove invisible control characters."})
 	case n == 0:
 		return Campaign{}, errorf("validation_failed", "The brief is empty.",
 			Issue{Path: "brief", Code: "required", Message: "Write a campaign brief."})
@@ -67,6 +72,11 @@ func (s *Service) Create(ctx context.Context, brief string) (Campaign, error) {
 		return Campaign{}, err
 	}
 	return s.Get(ctx, id)
+}
+
+// disallowedInBrief reports control characters other than line breaks and tabs.
+func disallowedInBrief(r rune) bool {
+	return unicode.IsControl(r) && r != '\n' && r != '\r' && r != '\t'
 }
 
 // Get returns the campaign with its latest content and, once approved, a progress snapshot.
