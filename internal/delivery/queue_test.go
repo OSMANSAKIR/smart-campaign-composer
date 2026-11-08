@@ -144,7 +144,7 @@ func TestLeaseExpiry_Reclaimed_RSND3(t *testing.T) {
 		t.Fatalf("claim: %v %d", err, len(rows))
 	}
 	// A live lease is left alone.
-	if requeued, failed, err := q.ReclaimExpired(ctx, 5); err != nil || requeued+failed != 0 {
+	if requeued, failed, err := q.ReclaimExpired(ctx, 5, 0); err != nil || requeued+failed != 0 {
 		t.Fatalf("reclaimed a live lease: %d %d %v", requeued, failed, err)
 	}
 	// The worker "dies": the lease runs out. One message already used its last attempt.
@@ -154,7 +154,7 @@ func TestLeaseExpiry_Reclaimed_RSND3(t *testing.T) {
 	if _, err := pool.Exec(ctx, `UPDATE messages SET attempts = 5 WHERE id = $1`, rows[1].ID); err != nil {
 		t.Fatal(err)
 	}
-	requeued, failed, err := q.ReclaimExpired(ctx, 5)
+	requeued, failed, err := q.ReclaimExpired(ctx, 5, 0)
 	if err != nil || requeued != 1 || failed != 1 {
 		t.Fatalf("reclaim = %d requeued, %d failed (%v), want 1 and 1", requeued, failed, err)
 	}
@@ -165,6 +165,43 @@ func TestLeaseExpiry_Reclaimed_RSND3(t *testing.T) {
 	var lastErr string
 	if err := pool.QueryRow(ctx, `SELECT last_error FROM messages WHERE id = $1`, rows[1].ID).Scan(&lastErr); err != nil || lastErr != "lease_expired" {
 		t.Fatalf("last_error = %q (%v)", lastErr, err)
+	}
+}
+
+// N-DEL-009: a lease that expires is an unanswered try (the send may have reached the provider). Past the
+// attempt budget it uses a confirmation replay instead of failing; only when those are gone does it fail.
+func TestLeaseExpiry_ConfirmationReplays_RSND3(t *testing.T) {
+	pool := storetest.NewDB(t)
+	ctx := context.Background()
+	camp := newCampaign(t, pool)
+	enqueue(t, pool, camp, SMS, newUsers(t, pool, 1))
+	q := &Queue{Pool: pool, Channel: SMS, Lease: time.Minute}
+	expire := func() {
+		t.Helper()
+		if _, err := pool.Exec(ctx, `UPDATE messages SET lease_until = now() - interval '1 second', next_attempt_at = now()`); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if _, err := pool.Exec(ctx, `UPDATE messages SET attempts = 4`); err != nil {
+		t.Fatal(err)
+	}
+	for i := 1; i <= 2; i++ { // claim (attempt 5, then 6), worker dies, lease expires
+		c, err := q.Claim(ctx, 1)
+		if err != nil || len(c) != 1 || c[0].Attempts != 4+i {
+			t.Fatalf("claim %d: %+v %v", i, c, err)
+		}
+		expire()
+		if requeued, failed, err := q.ReclaimExpired(ctx, 5, 2); err != nil || requeued != 1 || failed != 0 {
+			t.Fatalf("reclaim %d: %d requeued, %d failed (%v), want a confirmation replay", i, requeued, failed, err)
+		}
+	}
+	c, _ := q.Claim(ctx, 1) // attempt 7, the second and last replay
+	if len(c) != 1 || c[0].Unanswered != 2 || c[0].ConfirmReplays != 2 {
+		t.Fatalf("claim 3: %+v, want 2 unanswered tries and 2 replays used", c)
+	}
+	expire()
+	if requeued, failed, err := q.ReclaimExpired(ctx, 5, 2); err != nil || requeued != 0 || failed != 1 {
+		t.Fatalf("reclaim 3: %d requeued, %d failed (%v), want failed: replays used up", requeued, failed, err)
 	}
 }
 
@@ -179,7 +216,7 @@ func TestFinish_StaleWriterIsNoOp_RSND3(t *testing.T) {
 	if _, err := pool.Exec(ctx, `UPDATE messages SET lease_until = now() - interval '1 second'`); err != nil {
 		t.Fatal(err)
 	}
-	if _, _, err := q.ReclaimExpired(ctx, 5); err != nil {
+	if _, _, err := q.ReclaimExpired(ctx, 5, 0); err != nil {
 		t.Fatal(err)
 	}
 	second, _ := q.Claim(ctx, 1) // another dispatcher took over: attempt 2

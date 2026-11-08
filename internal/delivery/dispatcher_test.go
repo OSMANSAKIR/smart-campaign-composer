@@ -158,6 +158,71 @@ func TestExhaustedAttempts_Failed_RSND4(t *testing.T) {
 	}
 }
 
+// N-DEL-009: a message whose first try went unanswered (the provider may have recorded it) and whose
+// remaining attempts all failed is replayed with the same key up to MaxConfirmReplays times; the provider's
+// stored 200 then confirms the delivery. Without an unanswered try, or once the replays are used, it fails.
+func TestDispatcher_ConfirmationReplay_RSND3(t *testing.T) {
+	timeout := func() (SendResult, error) { return SendResult{}, context.DeadlineExceeded }
+	tests := []struct {
+		name       string
+		answer     func(n int) (SendResult, error)
+		wantStatus string
+		wantCalls  int
+		wantErr    string // prefix of last_error for failed
+	}{
+		{"unanswered first try, 5xx after, confirmed by the replay", func(n int) (SendResult, error) {
+			switch {
+			case n == 1:
+				return timeout()
+			case n <= 5:
+				return SendResult{Status: 502}, nil
+			}
+			return SendResult{Status: 200, ProviderMessageID: "stored"}, nil
+		}, StatusSent, 6, ""},
+		{"only answered failures: no replay", func(int) (SendResult, error) { return SendResult{Status: 502}, nil }, StatusFailed, 5, "http_502 (gave up after 5 attempts)"},
+		{"replays used up: failed, delivery unconfirmed", func(n int) (SendResult, error) {
+			if n == 1 {
+				return timeout()
+			}
+			return SendResult{Status: 503}, nil
+		}, StatusFailed, 7, "http_503 (gave up after 7 attempts and 2 confirmation replays; delivery unconfirmed)"},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			pool := storetest.NewDB(t)
+			camp := newCampaign(t, pool)
+			enqueue(t, pool, camp, SMS, newUsers(t, pool, 1))
+			client := &scriptedClient{fn: func(n int, _ SendRequest) (SendResult, error) { return tc.answer(n) }}
+			d := fastDispatcher(pool, SMS, client)
+			d.Policy.MaxConfirmReplays = 2
+			startDispatcher(t, d)
+			eventually(t, 10*time.Second, "message terminal", func() bool {
+				return nonTerminal(statusCounts(t, pool, camp, SMS)) == 0
+			})
+			var status string
+			var lastErr *string
+			if err := pool.QueryRow(context.Background(), `SELECT status, last_error FROM messages`).Scan(&status, &lastErr); err != nil {
+				t.Fatal(err)
+			}
+			if status != tc.wantStatus {
+				t.Fatalf("status %s (%v), want %s", status, lastErr, tc.wantStatus)
+			}
+			if tc.wantErr != "" && (lastErr == nil || !strings.HasPrefix(*lastErr, tc.wantErr)) {
+				t.Fatalf("last_error %v, want prefix %q", lastErr, tc.wantErr)
+			}
+			calls := client.snapshot()
+			if len(calls) != tc.wantCalls {
+				t.Fatalf("provider calls = %d, want %d", len(calls), tc.wantCalls)
+			}
+			for _, c := range calls {
+				if c.Req.IdempotencyKey != c.Req.MessageID {
+					t.Fatalf("a replay changed the Idempotency-Key: %+v", c.Req)
+				}
+			}
+		})
+	}
+}
+
 func TestDispatcher_RetryClasses_RSND4(t *testing.T) {
 	tests := []struct {
 		name       string

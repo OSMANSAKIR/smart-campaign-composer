@@ -174,8 +174,9 @@ matter most:
   previous one's last window.
 - **Characters are code points.** A Turkish SMS of 93 characters is valid but costs 2 UCS-2 segments; the UI
   shows encoding and segment count.
-- **Delivered but recorded as failed:** under heavy injected faults, a message whose every provider answer was
-  lost can end `failed` in the database although the provider delivered it (once). See need.md N-DEL-009.
+- **Delivered but recorded as failed (rare):** a message with an unanswered try gets 3 confirmation replays
+  with the same key after its 5 attempts. If every one of those also hits a fault, it can end `failed` although
+  the provider delivered it — once, never twice. See DECISIONS D-10.
 - **Dashboard polling:** one aggregate query per running campaign every 500 ms; LISTEN/NOTIFY would be the
   next step for many concurrent campaigns.
 - No authentication or multi-tenancy; the app is a single-marketer demo.
@@ -184,7 +185,6 @@ matter most:
 
 - Stress scenarios S3 (approve storm), S5 (API load), S6 (dashboard fan-out) — in progress.
 - Mock-provider fault controls in the UI (P1) and a "retry failed messages" button (P2).
-- Final idempotent replay for delivered-but-failed messages (N-DEL-009).
 - CI workflow running `make test`.
 
 ## Time spent

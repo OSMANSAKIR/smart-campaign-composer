@@ -152,7 +152,7 @@ simplest to explain.
   **100** requests in any 1 s window per channel, 0 provider-limiter rejections, 0 duplicates, done in 72 s.
   Stress S1/S2/S7 assert the same bound. Cost: ~4 s of silence after start or takeover; S1 averages ~89/s.
 
-## D-8 · Retry policy [N-DEL-002, N-DEL-003, N-DEL-007 ✅ CHANGE implemented]
+## D-8 · Retry policy [N-DEL-002, N-DEL-003, N-DEL-007 ✅ CHANGE implemented, N-DEL-009]
 
 - **Context.** R-SND-4 leaves the strategy to us; R-RES-3 makes the provider fail, delay and throttle on purpose.
 - **Decision.** A policy table (`internal/delivery/retry.go`):
@@ -164,7 +164,7 @@ simplest to explain.
   | 401 / 403 | config | pause the channel 30 s, message stays queued, alert | no |
   | 429 | throttled | pause the **whole channel** until `Retry-After` (default 1 s, cap 30 s) | no; separate cap of 20 |
   | 408 / 5xx | transient | full-jitter backoff: base 1 s, ×2, cap 60 s | yes |
-  | timeout / connection dropped after it was made | ambiguous | retry with the **same Idempotency-Key** | yes |
+  | timeout / connection dropped after it was made | ambiguous | retry with the **same Idempotency-Key**; when attempts run out, up to 3 confirmation replays (D-10) | yes |
   | no connection could be made (refused, DNS, dial timeout) | unreachable | pause the channel 2 s, message stays queued | **no** |
 
   - 429s answering requests sent before the current pause belong to the same overload event: they may extend
@@ -199,10 +199,13 @@ simplest to explain.
      the retry carries the same key, and the provider returns the stored answer without delivering again.
   5. Proof: the provider's `/stats` reports `duplicate_recipient_deliveries`, asserted to be 0 in tests, stress
      and live runs.
+  6. **Confirmation replays** [N-DEL-009, owner CHANGE]: a try without an answer may have been delivered. When
+     such a message runs out of attempts it gets up to 3 more tries with the same key, so the provider's stored
+     answer confirms a recorded delivery instead of the DB reporting it as `failed`.
 - **Alternatives.** Exactly-once delivery without receiver idempotency (impossible across a network).
-- **Consequences.** Known gap [N-DEL-009]: under chaos faults, a message whose every answer was lost can be
-  delivered at the provider but end `failed` in the DB. It is still delivered once, never twice. The fix (one
-  final idempotent replay) is scheduled if time allows.
+- **Consequences.** A message is delivered at most once. Residual gap: if the remaining attempts *and* all three
+  replays also hit faults, a delivered message can still end `failed` (its `last_error` says "delivery
+  unconfirmed"); stress I5 bounds the provider/DB difference by exactly those messages.
 
 ## D-11 · Model choice [L-7, N-PLAN-001]
 

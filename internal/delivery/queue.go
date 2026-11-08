@@ -31,6 +31,8 @@ type Claimed struct {
 	ContentVersion int
 	Attempts       int // value after the claim: the number of this try
 	Throttled      int
+	Unanswered     int  // earlier tries that got no answer (ambiguous, or lease expired mid-send)
+	ConfirmReplays int  // confirmation replays already used (need.md N-DEL-009)
 	Skipped        bool // consent was revoked after enqueue: already moved to skipped_no_consent
 	Recipient      Recipient
 }
@@ -65,7 +67,7 @@ func (q *Queue) ClaimOn(ctx context.Context, db querier, n int) ([]Claimed, erro
 			FOR UPDATE OF pm SKIP LOCKED)
 		  AND u.id = m.user_id AND c.id = m.campaign_id
 		RETURNING m.id::text, m.campaign_id::text, m.user_id, m.content_version, m.attempts, m.throttled_count,
-		          m.status = 'skipped_no_consent', u.email, u.phone, u.first_name, u.city,
+		          m.unanswered_tries, m.confirm_replays, m.status = 'skipped_no_consent', u.email, u.phone, u.first_name, u.city,
 		          COALESCE(c.language, u.locale)`, consent),
 		string(q.Channel), n, q.Lease.Seconds())
 	if err != nil {
@@ -75,7 +77,7 @@ func (q *Queue) ClaimOn(ctx context.Context, db querier, n int) ([]Claimed, erro
 	var out []Claimed
 	for rows.Next() {
 		var c Claimed
-		if err := rows.Scan(&c.ID, &c.CampaignID, &c.UserID, &c.ContentVersion, &c.Attempts, &c.Throttled, &c.Skipped,
+		if err := rows.Scan(&c.ID, &c.CampaignID, &c.UserID, &c.ContentVersion, &c.Attempts, &c.Throttled, &c.Unanswered, &c.ConfirmReplays, &c.Skipped,
 			&c.Recipient.Email, &c.Recipient.Phone, &c.Recipient.FirstName, &c.Recipient.City, &c.Recipient.Locale); err != nil {
 			return nil, err
 		}
@@ -85,24 +87,28 @@ func (q *Queue) ClaimOn(ctx context.Context, db querier, n int) ([]Claimed, erro
 }
 
 // ReclaimExpired makes messages whose lease ran out claimable again (a worker died mid-send). The lost try
-// already counted as an attempt; a message that used up all attempts this way fails instead of looping
-// forever (a poison message that crashes the worker). The retry keeps the same Idempotency-Key, so a send
-// that did reach the provider is deduplicated there.
-func (q *Queue) ReclaimExpired(ctx context.Context, maxAttempts int) (requeued, failed int, err error) {
-	return q.ReclaimExpiredOn(ctx, q.Pool, maxAttempts)
+// already counted as an attempt and is an unanswered one (it may have reached the provider). A message that
+// used up its attempts this way gets the confirmation replays (need.md N-DEL-009) and then fails instead of
+// looping forever (a poison message that crashes the worker). The retry keeps the same Idempotency-Key, so a
+// send that did reach the provider is deduplicated there.
+func (q *Queue) ReclaimExpired(ctx context.Context, maxAttempts, maxReplays int) (requeued, failed int, err error) {
+	return q.ReclaimExpiredOn(ctx, q.Pool, maxAttempts, maxReplays)
 }
 
 // ReclaimExpiredOn is ReclaimExpired on a specific connection source.
-func (q *Queue) ReclaimExpiredOn(ctx context.Context, db querier, maxAttempts int) (requeued, failed int, err error) {
+func (q *Queue) ReclaimExpiredOn(ctx context.Context, db querier, maxAttempts, maxReplays int) (requeued, failed int, err error) {
+	// Past the attempt budget each further reclaim is a used confirmation replay; once those are gone it fails.
 	rows, err := db.Query(ctx, `
 		UPDATE messages SET
-			status          = CASE WHEN attempts >= $2 THEN 'failed' ELSE 'retry' END,
-			last_error      = CASE WHEN attempts >= $2 THEN 'lease_expired' ELSE last_error END,
-			lease_until     = NULL,
-			next_attempt_at = now(),
-			updated_at      = now()
+			status           = CASE WHEN attempts >= $2 AND confirm_replays >= $3 THEN 'failed' ELSE 'retry' END,
+			last_error       = CASE WHEN attempts >= $2 AND confirm_replays >= $3 THEN 'lease_expired' ELSE last_error END,
+			unanswered_tries = unanswered_tries + 1,
+			confirm_replays  = CASE WHEN attempts >= $2 AND confirm_replays < $3 THEN confirm_replays + 1 ELSE confirm_replays END,
+			lease_until      = NULL,
+			next_attempt_at  = now(),
+			updated_at       = now()
 		WHERE channel = $1 AND status = 'sending' AND lease_until < now()
-		RETURNING status = 'failed'`, string(q.Channel), maxAttempts)
+		RETURNING status = 'failed'`, string(q.Channel), maxAttempts, maxReplays)
 	if err != nil {
 		return 0, 0, err
 	}
@@ -126,6 +132,8 @@ type Outcome struct {
 	Status            string        // sent | retry | failed
 	AttemptDelta      int           // -1 when the try must not count (throttled, config)
 	ThrottleDelta     int           // 1 for a throttled try
+	Unanswered        bool          // the try got no answer (ambiguous): it may have been delivered
+	ConfirmReplay     bool          // this retry is a confirmation replay past the attempt budget
 	Delay             time.Duration // next_attempt_at = now() + Delay (retry only)
 	LastError         string
 	ProviderMessageID string
@@ -144,6 +152,8 @@ func (q *Queue) Finish(ctx context.Context, c Claimed, o Outcome) (bool, error) 
 				status              = $3,
 				attempts            = attempts + $4,
 				throttled_count     = throttled_count + $5,
+				unanswered_tries    = unanswered_tries + CASE WHEN $12 THEN 1 ELSE 0 END,
+				confirm_replays     = confirm_replays + CASE WHEN $13 THEN 1 ELSE 0 END,
 				next_attempt_at     = CASE WHEN $3 = 'retry' THEN now() + make_interval(secs => $6) ELSE next_attempt_at END,
 				lease_until         = NULL,
 				last_error          = NULLIF($7, ''),
@@ -155,7 +165,7 @@ func (q *Queue) Finish(ctx context.Context, c Claimed, o Outcome) (bool, error) 
 		INSERT INTO delivery_attempts (message_id, attempt, http_status, error_class, latency_ms)
 		SELECT id, $2, $9, $10, $11 FROM upd`,
 		c.ID, c.Attempts, o.Status, o.AttemptDelta, o.ThrottleDelta, o.Delay.Seconds(), o.LastError,
-		o.ProviderMessageID, o.HTTPStatus, string(o.Class), int(o.Latency.Milliseconds()))
+		o.ProviderMessageID, o.HTTPStatus, string(o.Class), int(o.Latency.Milliseconds()), o.Unanswered, o.ConfirmReplay)
 	if err != nil {
 		return false, err
 	}

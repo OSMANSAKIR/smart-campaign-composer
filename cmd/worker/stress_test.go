@@ -36,6 +36,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"smartcampaign/internal/config"
+	"smartcampaign/internal/delivery"
 	"smartcampaign/internal/metrics"
 	"smartcampaign/internal/mockprovider"
 	"smartcampaign/internal/store/storetest"
@@ -462,7 +463,7 @@ func (e *env) checkInvariants(r *result, s seeded, completed bool, workers []*wo
 	detail := fmt.Sprintf("DB sent sms/email %d/%d = provider accepted %d/%d", counts["sms"]["sent"], counts["email"]["sent"], stats["sms"].Accepted, stats["email"].Accepted)
 	if gap := stats["sms"].Accepted - counts["sms"]["sent"] + stats["email"].Accepted - counts["email"]["sent"]; gap > 0 && mismatch == "" {
 		detail += fmt.Sprintf(" (%d delivered by the provider but ended failed after only unanswered tries, see note)", gap)
-		r.Notes = append(r.Notes, fmt.Sprintf("I5 explained gap: %d message(s) were recorded by the provider but ended `failed` because every try timed out or hung (KICKOFF §7.3 cannot tell an unanswered delivery from a lost request); the idempotent replays each rolled a fault again. Delivered-but-failed after retry exhaustion or lease expiry needs a schema change to fix (open issue).", gap))
+		r.Notes = append(r.Notes, fmt.Sprintf("I5 explained gap: %d message(s) were recorded by the provider but ended `failed`: an earlier try went unanswered, and the remaining attempts and all confirmation replays (need.md N-DEL-009) rolled a fault again, so the provider's stored answer never came back.", gap))
 	}
 	if metricSent != nil {
 		detail += fmt.Sprintf(" = worker metric %d/%d", int(metricSent["sms"]), int(metricSent["email"]))
@@ -508,8 +509,16 @@ func (e *env) checkInvariants(r *result, s seeded, completed bool, workers []*wo
 	for _, k := range keys {
 		fmt.Fprintf(&hb, "%d:%d ", k, hist[k])
 	}
-	add("I6", "attempts <= policy maximum (5 counted tries), no hot loop", maxAtt <= 5 && counted <= 5,
-		"max messages.attempts %d, max counted failed tries per message %d; attempts histogram (attempts:messages) %s", maxAtt, counted, strings.TrimSpace(hb.String()))
+	// 5 counted tries, plus up to 3 confirmation replays for a message with an unanswered try (need.md N-DEL-009).
+	maxTries := delivery.DefaultRetryPolicy.MaxAttempts + delivery.DefaultRetryPolicy.MaxConfirmReplays
+	var replayed int
+	if err := e.pool.QueryRow(ctx, `SELECT count(*) FROM messages WHERE campaign_id = $1 AND confirm_replays > 0`, s.campaign).Scan(&replayed); err != nil {
+		e.t.Fatal(err)
+	}
+	add("I6", fmt.Sprintf("attempts <= policy maximum (5 counted tries + %d confirmation replays after an unanswered try), no hot loop", delivery.DefaultRetryPolicy.MaxConfirmReplays),
+		maxAtt <= maxTries && counted <= maxTries,
+		"max messages.attempts %d, max counted failed tries per message %d, messages that used confirmation replays %d; attempts histogram (attempts:messages) %s",
+		maxAtt, counted, replayed, strings.TrimSpace(hb.String()))
 
 	panics := ""
 	for _, w := range workers {

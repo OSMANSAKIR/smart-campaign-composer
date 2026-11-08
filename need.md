@@ -31,16 +31,13 @@ _Last updated: 2026-11-09 by the orchestrator (owner answers for N-ORC-012, N-DE
 
 - ❓ N-PLAN-009: repo visibility and reviewer access — the owner will say when, before the push.
 
-**Owner changes in progress:**
-
-- 🔁 N-DEL-009: final idempotent replay for delivered-but-failed messages (if time allows).
-
 **Review when convenient (medium):** N-ORC-013 (approves enqueue one at a time), N-ORC-003 (wire schema typing), N-ORC-004 (contradictions), N-ORC-005 (long names), N-PLAN-001, 002, 004, 005, 010, 011, 014.
 
 **Review when convenient (low):** N-ORC-002, 006, 007, 009, 010, N-PLAN-008, 012.
 
 **Answered:**
 
+- ✅ N-DEL-009: confirmation replays for messages with an unanswered try (implemented).
 - ✅ N-LLM-003: real claudecode capture is the fixture; claudecode eval report committed.
 - ✅ N-DEL-007: a refused connection pauses the channel and is not counted (implemented).
 - ✅ N-ORC-012: departure-time limiter (A) accepted; assumption and switch to B documented in DECISIONS.md.
@@ -618,7 +615,7 @@ _Last updated: 2026-11-09 by the orchestrator (owner answers for N-ORC-012, N-DE
 - **Owner response:**
 - **Status:** OPEN
 
-### 🔁 N-DEL-009 · Stress invariant I5 tolerates "delivered but failed" after unanswered tries · impact: medium
+### ✅ N-DEL-009 · Stress invariant I5 tolerates "delivered but failed" after unanswered tries · impact: medium
 - **Date / agent / session:** 2026-11-08 · delivery · builder-delivery fix round (subagent)
 - **Requirement(s):** R-SND-3 (I5)
 - **Context:** Under chaos faults a provider can record a message whose every answer was lost (hang after record, then retries exhausted), so DB says `failed` while the provider counted it. S2 hit this in 2 of 7 runs.
@@ -627,7 +624,8 @@ _Last updated: 2026-11-09 by the orchestrator (owner answers for N-ORC-012, N-DE
 - **Cost to change later:** B ~1–2 h (migration + dispatcher + test).
 - **Question for owner:** —
 - **Owner response:** CHANGE → B if time allows (2026-11-09).
-- **Status:** CHANGE REQUESTED
+- **Implemented (2026-11-09):** migration `20261109010000_confirm_replays.sql` adds `unanswered_tries` and `confirm_replays`. A try without an answer (ambiguous, or a lease that expired mid-send) increments `unanswered_tries`. When the 5 counted attempts are used up and some try went unanswered, the message gets up to `MaxConfirmReplays` = 3 more tries with the same Idempotency-Key (backoff as before); the provider's stored answer confirms a recorded delivery. Only after those does it fail, with `last_error` saying the delivery is unconfirmed. Messages with only answered failures still fail at 5. Lease expiry follows the same rule (poison messages stay bounded at 8 claims). Tests: `TestDispatcher_ConfirmationReplay_RSND3`, `TestLeaseExpiry_ConfirmationReplays_RSND3`; stress I6 allows 5 + 3 tries. The I5 allowance stays as a bound for the residual case (all replays fault too).
+- **Status:** RESOLVED
 
 ### 🟡 N-ORC-013 · Concurrent approves enqueue one at a time · impact: medium
 - **Date / agent / session:** 2026-11-09 · orchestrator · 01-orchestrator (stress S3)

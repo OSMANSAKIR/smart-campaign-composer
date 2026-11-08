@@ -342,7 +342,7 @@ func (d *Dispatcher) active(ctx context.Context, lock *pgx.Conn) error {
 
 		if time.Since(lastReclaim) >= time.Second {
 			rctx, cancel := context.WithTimeout(ctx, lockOpTimeout)
-			requeued, failed, err := d.queue.ReclaimExpiredOn(rctx, lock, d.Policy.MaxAttempts)
+			requeued, failed, err := d.queue.ReclaimExpiredOn(rctx, lock, d.Policy.MaxAttempts, d.Policy.MaxConfirmReplays)
 			cancel()
 			d.noteReclaimed(requeued, failed)
 			if err != nil && ctx.Err() == nil {
@@ -562,9 +562,27 @@ func (d *Dispatcher) afterSend(ctx context.Context, log *slog.Logger, c Claimed,
 		d.finish(ctx, log, c, out, StatusRetry)
 
 	default: // transient, ambiguous
+		out.Unanswered = dec.Class == ClassAmbiguous
 		if d.Policy.Exhausted(dec, c.Attempts, c.Throttled) {
+			unanswered := c.Unanswered
+			if out.Unanswered {
+				unanswered++
+			}
+			if d.Policy.ConfirmReplay(unanswered, c.ConfirmReplays) {
+				// An earlier try may have been delivered: replay with the same key so the provider's stored
+				// answer can confirm it, instead of reporting a delivered message as failed (N-DEL-009).
+				d.Metrics.Retries.WithLabelValues(ch, string(dec.Class)).Inc()
+				log.Info("attempts used up after an unanswered try; confirmation replay", "replay", c.ConfirmReplays+1)
+				out.Status, out.ConfirmReplay, out.Delay = StatusRetry, true, d.Policy.Backoff(c.Attempts, d.Rand)
+				d.finish(ctx, log, c, out, StatusRetry)
+				return
+			}
 			out.Status = StatusFailed
 			out.LastError = fmt.Sprintf("%s (gave up after %d attempts)", out.LastError, c.Attempts)
+			if unanswered > 0 {
+				out.LastError = fmt.Sprintf("%s (gave up after %d attempts and %d confirmation replays; delivery unconfirmed)",
+					errDescription(res.Status, sendErr), c.Attempts, c.ConfirmReplays)
+			}
 			d.finish(ctx, log, c, out, StatusFailed)
 			return
 		}

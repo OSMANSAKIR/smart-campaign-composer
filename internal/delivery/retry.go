@@ -34,17 +34,21 @@ type Decision struct {
 
 // RetryPolicy holds the retry parameters.
 type RetryPolicy struct {
-	BaseBackoff       time.Duration // 1s
-	MaxBackoff        time.Duration // 60s
-	MaxAttempts       int           // 5 (transient + ambiguous)
-	MaxThrottles      int           // 20
+	BaseBackoff  time.Duration // 1s
+	MaxBackoff   time.Duration // 60s
+	MaxAttempts  int           // 5 (transient + ambiguous)
+	MaxThrottles int           // 20
+	// MaxConfirmReplays: extra tries, same Idempotency-Key, for a message whose attempts ran out after at least
+	// one unanswered try, which may have been delivered (need.md N-DEL-009). The provider's stored answer
+	// confirms a recorded delivery; without one the message fails as before.
+	MaxConfirmReplays int           // 3
 	DefaultRetryAfter time.Duration // 1s
 	MaxRetryAfter     time.Duration // 30s
 }
 
 // DefaultRetryPolicy is the policy from KICKOFF §7.3.
 var DefaultRetryPolicy = RetryPolicy{BaseBackoff: time.Second, MaxBackoff: 60 * time.Second, MaxAttempts: 5,
-	MaxThrottles: 20, DefaultRetryAfter: time.Second, MaxRetryAfter: 30 * time.Second}
+	MaxThrottles: 20, DefaultRetryAfter: time.Second, MaxRetryAfter: 30 * time.Second, MaxConfirmReplays: 3}
 
 // Classify maps a provider result (status 0 + err for timeouts/connection errors) to a decision.
 func (p RetryPolicy) Classify(status int, header http.Header, err error) Decision {
@@ -108,6 +112,12 @@ func (p RetryPolicy) Exhausted(d Decision, attempts, throttles int) bool {
 		return throttles > p.MaxThrottles
 	}
 	return false
+}
+
+// ConfirmReplay reports whether a message whose counted attempts just ran out gets another try with the same
+// key instead of failing: only if some try went unanswered (it may have been delivered) and replays are left.
+func (p RetryPolicy) ConfirmReplay(unanswered, replays int) bool {
+	return unanswered > 0 && replays < p.MaxConfirmReplays
 }
 
 // ErrTimeout marks a provider request that hit the client timeout (no answer arrived).
