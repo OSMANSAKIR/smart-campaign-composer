@@ -150,7 +150,7 @@ simplest to explain.
   live run showed 101 with margin 0 before the fix); B as above.
 - **Consequences.** Measured on compose at 100/s with safety margin 0: 5000 users, 7542 messages, provider max
   **100** requests in any 1 s window per channel, 0 provider-limiter rejections, 0 duplicates, done in 72 s.
-  Stress S1/S2/S7 assert the same bound. Cost: ~4 s of silence after start or takeover; S1 averages ~89/s.
+  Stress S1/S2/S7 assert the same bound. Cost: ~4 s of silence after start or takeover; S1 averages 84–90/s per channel over the whole run.
 
 ## D-8 · Retry policy [N-DEL-002, N-DEL-003, N-DEL-007 ✅ CHANGE implemented, N-DEL-009]
 

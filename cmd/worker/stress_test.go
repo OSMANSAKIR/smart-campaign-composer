@@ -378,7 +378,9 @@ func (e *env) waitTerminal(camp string, timeout time.Duration, hook func(p progr
 	}
 }
 
-// peakPerSecond is the best 5-second average of sent messages per second for one channel.
+// peakPerSecond is the best 5-second average of DB completions (rows turning `sent`) per second for one channel.
+// It is not the send rate: answers to up to MaxInFlight earlier requests can land in the same window, so it can
+// exceed 100/s while the provider-measured arrival rate (I3) never does.
 func peakPerSecond(samples []progress, ch string) float64 {
 	best := 0.0
 	for i := 5; i < len(samples); i++ {
@@ -576,8 +578,8 @@ func TestStress(t *testing.T) {
 		r.Duration = dur
 		c, _ := e.counts(s.campaign)
 		r.Params = append(r.Params, [2]string{"time to terminal", dur.Round(time.Second).String()},
-			[2]string{"sms sent / avg / peak(5 s)", fmt.Sprintf("%d / %s / %s", c["sms"]["sent"], fmtRate(float64(c["sms"]["sent"])/dur.Seconds()), fmtRate(peakPerSecond(samples, "sms")))},
-			[2]string{"email sent / avg / peak(5 s)", fmt.Sprintf("%d / %s / %s", c["email"]["sent"], fmtRate(float64(c["email"]["sent"])/dur.Seconds()), fmtRate(peakPerSecond(samples, "email")))},
+			[2]string{"sms sent / avg / best 5 s of DB completions", fmt.Sprintf("%d / %s / %s", c["sms"]["sent"], fmtRate(float64(c["sms"]["sent"])/dur.Seconds()), fmtRate(peakPerSecond(samples, "sms")))},
+			[2]string{"email sent / avg / best 5 s of DB completions", fmt.Sprintf("%d / %s / %s", c["email"]["sent"], fmtRate(float64(c["email"]["sent"])/dur.Seconds()), fmtRate(peakPerSecond(samples, "email")))},
 			[2]string{"final status sms", fmt.Sprint(c["sms"])}, [2]string{"final status email", fmt.Sprint(c["email"])},
 			[2]string{"expected sms / email (consent + invalid numbers)", fmt.Sprint(s.expect["sms"]) + " / " + fmt.Sprint(s.expect["email"])})
 		e.checkInvariants(r, s, done, []*worker{w}, metricSent, true)
@@ -626,8 +628,8 @@ func TestStress(t *testing.T) {
 		_ = e.pool.QueryRow(context.Background(), `SELECT count(*), count(*) FILTER (WHERE error_class = 'throttled') FROM delivery_attempts`).Scan(&attempts, &throttled)
 		r.Params = append(r.Params, [2]string{"killed worker at", killAt.Round(time.Second).String()},
 			[2]string{"time to terminal", dur.Round(time.Second).String()},
-			[2]string{"sms sent / avg / peak(5 s)", fmt.Sprintf("%d / %s / %s", c["sms"]["sent"], fmtRate(float64(c["sms"]["sent"])/dur.Seconds()), fmtRate(peakPerSecond(samples, "sms")))},
-			[2]string{"email sent / avg / peak(5 s)", fmt.Sprintf("%d / %s / %s", c["email"]["sent"], fmtRate(float64(c["email"]["sent"])/dur.Seconds()), fmtRate(peakPerSecond(samples, "email")))},
+			[2]string{"sms sent / avg / best 5 s of DB completions", fmt.Sprintf("%d / %s / %s", c["sms"]["sent"], fmtRate(float64(c["sms"]["sent"])/dur.Seconds()), fmtRate(peakPerSecond(samples, "sms")))},
+			[2]string{"email sent / avg / best 5 s of DB completions", fmt.Sprintf("%d / %s / %s", c["email"]["sent"], fmtRate(float64(c["email"]["sent"])/dur.Seconds()), fmtRate(peakPerSecond(samples, "email")))},
 			[2]string{"final status sms", fmt.Sprint(c["sms"])}, [2]string{"final status email", fmt.Sprint(c["email"])},
 			[2]string{"delivery_attempts rows / throttled", fmt.Sprintf("%d / %d", attempts, throttled)},
 			[2]string{"provider sms hangs / replayed keys / 429s / 5xx", fmt.Sprintf("%d / %d / %d / %d", stats["sms"].Hangs, stats["sms"].ReplayedKeys, stats["sms"].StatusCounts["429"], stats["sms"].StatusCounts["500"]+stats["sms"].StatusCounts["502"]+stats["sms"].StatusCounts["503"])})
@@ -779,10 +781,11 @@ const reportFooter = `## How to read the numbers
   before it decodes the body or takes its lock; "max requests" is the largest number of requests (retries
   included) that arrived inside any 1 s span, and it must stay at or below 100 (I3). These runs use
   RATE_LIMIT_SAFETY_MARGIN=0: the bound comes from the mechanism, not from a smaller N.
-- **Throughput after the rate-bound fix.** S1 averages about 89 sends/s per channel (96/s with the old limiter): roughly
-  4 s of the run is the quiet time after the lock is won at start-up, and pacing from departures instead of
-  admissions gives up the slack the old limiter borrowed. Sustained 5 s peaks still reach 98-100/s; the 1 s
-  maximum seen by the provider (I3) is what is bounded.
+- **Throughput after the rate-bound fix.** S1 averages 84-90 sends/s per channel over the whole run (96/s with the old
+  limiter): about 4 s of the run is the quiet time after the lock is won at start-up, and pacing from departures
+  instead of admissions gives up the slack the old limiter borrowed. "Best 5 s of DB completions" counts rows turning
+  ` + "`sent`" + `, not requests sent: answers to up to 32 in-flight requests can land in the same window, so it can read above
+  100/s. The rate that is bounded is the provider's own count of arrivals in any 1 s window (I3), which stays at 100.
 - **Throughput under faults.** A 429 pauses the whole channel for its Retry-After (KICKOFF §7.3). One overload event
   produces several 429s from requests that were in flight together, so they are counted as one event; even so, a
   provider that answers 5% of requests with 429 holds each channel well below 100/s (S2 shows the measured rate).

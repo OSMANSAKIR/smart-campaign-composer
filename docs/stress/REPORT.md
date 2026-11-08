@@ -21,8 +21,8 @@ Faults off; 1 worker; the provider enforces its own 100/s limit per channel and 
 | rate limit | 100 per channel (window 1 s + 25 ms guard) |
 | in flight | 32 per channel |
 | time to terminal | 57s |
-| sms sent / avg / peak(5 s) | 4801 / 84.2/s / 107.9/s |
-| email sent / avg / peak(5 s) | 4896 / 85.9/s / 109.4/s |
+| sms sent / avg / best 5 s of DB completions | 4801 / 84.2/s / 107.9/s |
+| email sent / avg / best 5 s of DB completions | 4896 / 85.9/s / 109.4/s |
 | final status sms | map[failed:99 sent:4801 skipped_no_consent:49] |
 | final status email | map[sent:4896 skipped_no_consent:48] |
 | expected sms / email (consent + invalid numbers) | map[failed:99 sent:4801 skipped_no_consent:49] / map[failed:0 sent:4896 skipped_no_consent:48] |
@@ -50,8 +50,8 @@ Provider at 10% 5xx, 5% 429 (Retry-After 1 s), 2% hangs (half after recording th
 | provider timeout / lease | 3 s / 10 s |
 | killed worker at | 23s |
 | time to terminal | 1m4s |
-| sms sent / avg / peak(5 s) | 1921 / 30.0/s / 59.4/s |
-| email sent / avg / peak(5 s) | 1959 / 30.6/s / 59.6/s |
+| sms sent / avg / best 5 s of DB completions | 1921 / 30.0/s / 59.4/s |
+| email sent / avg / best 5 s of DB completions | 1959 / 30.6/s / 59.6/s |
 | final status sms | map[failed:40 sent:1921 skipped_no_consent:19] |
 | final status email | map[sent:1959 skipped_no_consent:19] |
 | delivery_attempts rows / throttled | 4755 / 207 |
@@ -104,10 +104,11 @@ Messages that ended `failed` for a reason other than the seeded invalid numbers:
   before it decodes the body or takes its lock; "max requests" is the largest number of requests (retries
   included) that arrived inside any 1 s span, and it must stay at or below 100 (I3). These runs use
   RATE_LIMIT_SAFETY_MARGIN=0: the bound comes from the mechanism, not from a smaller N.
-- **Throughput after the rate-bound fix.** S1 averages about 89 sends/s per channel (96/s with the old limiter): roughly
-  4 s of the run is the quiet time after the lock is won at start-up, and pacing from departures instead of
-  admissions gives up the slack the old limiter borrowed. Sustained 5 s peaks still reach 98-100/s; the 1 s
-  maximum seen by the provider (I3) is what is bounded.
+- **Throughput after the rate-bound fix.** S1 averages 84-90 sends/s per channel over the whole run (96/s with the old
+  limiter): about 4 s of the run is the quiet time after the lock is won at start-up, and pacing from departures
+  instead of admissions gives up the slack the old limiter borrowed. "Best 5 s of DB completions" counts rows turning
+  `sent`, not requests sent: answers to up to 32 in-flight requests can land in the same window, so it can read above
+  100/s. The rate that is bounded is the provider's own count of arrivals in any 1 s window (I3), which stays at 100.
 - **Throughput under faults.** A 429 pauses the whole channel for its Retry-After (KICKOFF §7.3). One overload event
   produces several 429s from requests that were in flight together, so they are counted as one event; even so, a
   provider that answers 5% of requests with 429 holds each channel well below 100/s (S2 shows the measured rate).
