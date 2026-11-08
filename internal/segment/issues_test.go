@@ -48,9 +48,9 @@ func TestSafeText_RAI1(t *testing.T) {
 	tests := []struct{ name, in, want string }{
 		{"plain", "abc", "abc"},
 		{"nul and control", "a\x00b\nc\td", "abcd"},
-		{"bidi override", "a‮b", "ab"},
-		{"line separator", "a b c", "abc"},
-		{"zero width", "a​b", "ab"},
+		{"bidi override", "a\u202eb", "ab"},
+		{"line separator", "a\u2028b\u2029c", "abc"},
+		{"zero width", "a\u200bb", "ab"},
 		{"invalid utf8", "a\xffb", "ab"},
 		{"cut at 40 runes", strings.Repeat("ş", 41), strings.Repeat("ş", 40) + "…"},
 		{"exactly 40", strings.Repeat("ş", 40), strings.Repeat("ş", 40)},
