@@ -126,7 +126,7 @@ make smoke-live CONFIRM_SPEND=yes
 |---|---|---|
 | `make test` | `go vet`, `go test -race` for every package, Vitest — in containers, on a network **without internet**, no key | Docker |
 | `make e2e` | Playwright: official brief → audience → streamed content → invalid edit blocked → edit saved → approve → dashboard finishes → reload | Docker |
-| `make stress` | Stress scenarios with real worker processes → [`docs/stress/REPORT.md`](docs/stress/REPORT.md) | Docker (Postgres from `make up`), Go |
+| `make stress` | Delivery scenarios with real worker processes → [`docs/stress/REPORT.md`](docs/stress/REPORT.md); API scenarios → [`docs/stress/REPORT-api.md`](docs/stress/REPORT-api.md) | Docker (Postgres from `make up`), Go |
 | `make eval PROVIDER=mock\|claudecode` | 17-brief eval set → `docs/eval/REPORT-*.md` | Go; `claudecode` needs the Claude Code CLI |
 | `make lint` | golangci-lint + vue-tsc | Go, Node |
 | `make sanitize-check` | gitleaks over git history and session exports, personal-term grep | gitleaks |
@@ -139,8 +139,15 @@ What the evidence says today (details in the reports):
 - **Rate limit (R-SND-2):** live compose run at 100/s, all 5000 users, 7542 messages: the provider measured
   at most **100** requests in any 1 s window per channel, 0 rejections by its own limiter, **0 duplicate
   deliveries**, approve in 0.16 s, done in 72 s.
-- **Stress (S1 baseline, S2 chaos with a worker killed mid-run, S7 provider and database outages):** every
-  invariant passes — no duplicates, no delivery without consent, ≤ 100 per window, every message terminal.
+- **Delivery stress (S1 baseline, S2 chaos with a worker killed mid-run, S7 provider and database outages):**
+  every invariant passes — no duplicates, no delivery without consent, ≤ 100 per window, every message terminal.
+- **API stress:** S3 — 100 racing approves of one campaign: exactly one wins, the rest get 409; ten all-user
+  campaigns approved at once all succeed (75 420 messages, slowest 6.9 s). S5 — 400 concurrent segment previews
+  and content validations: no errors, p95 under 0.36 s with the 20-connection pool saturated. S6 — 50 live
+  dashboards with 230 reconnects during a chaotic delivery: every one ends on the exact final counts, and no
+  count ever goes backwards.
+- **Real model (claudecode, Sonnet 5.5):** 17-brief eval — 16/16 segments valid on the first try, 14/14 exact
+  audiences (user-id sets), 16/16 contents valid; [`docs/eval/`](docs/eval/).
 - **Red-team:** 45 hostile briefs and model answers through the mock adapter run in `make test`; no path from
   model text to SQL text.
 
@@ -183,9 +190,10 @@ matter most:
 
 ## Not done / next steps
 
-- Stress scenarios S3 (approve storm), S5 (API load), S6 (dashboard fan-out) — in progress.
-- Mock-provider fault controls in the UI (P1) and a "retry failed messages" button (P2).
-- CI workflow running `make test`.
+- Mock-provider fault controls in the UI (P1; today: `POST :8090/admin/config`) and a "retry failed
+  messages" button (P2).
+- One real Claude API run (`make smoke-live`, one eval with `PROVIDER=anthropic`) — the owner's, with a key.
+- The CI workflow (`.github/workflows/ci.yml`: `make test`, `make lint`, `make e2e`) has not run on GitHub yet.
 
 ## Time spent
 
