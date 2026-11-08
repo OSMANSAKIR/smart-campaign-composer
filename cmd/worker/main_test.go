@@ -25,8 +25,11 @@ func freeAddr(t *testing.T) string {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer l.Close()
-	return l.Addr().String()
+	addr := l.Addr().String()
+	if err := l.Close(); err != nil {
+		t.Fatal(err)
+	}
+	return addr
 }
 
 // TestWorker_Binary_SendsAndStopsOnSIGTERM_RSND3 runs the real worker binary against an in-process mock
