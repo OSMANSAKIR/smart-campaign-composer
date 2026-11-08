@@ -3,6 +3,7 @@ package llm
 import (
 	"context"
 	"fmt"
+	"strings"
 
 	"github.com/jackc/pgx/v5/pgconn"
 )
@@ -26,17 +27,23 @@ func (r *PGRecorder) RecordCall(ctx context.Context, c Call) error {
 		stop = &s
 	}
 	var errText *string
-	if c.Error != "" {
-		errText = &c.Error
+	if e := pgText(c.Error); e != "" {
+		errText = &e
 	}
 	_, err := r.db.Exec(ctx, `INSERT INTO llm_calls (campaign_id, purpose, provider, model, prompt_version,
 		input_tokens, output_tokens, cache_read_tokens, cache_write_tokens, cost_usd, latency_ms, stop_reason, outcome, error)
 		VALUES (NULLIF($1, '')::uuid, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)`,
-		c.CampaignID, string(c.Purpose), c.Provider, c.Model, c.PromptVersion,
+		c.CampaignID, string(c.Purpose), pgText(c.Provider), pgText(c.Model), pgText(c.PromptVersion),
 		c.Usage.InputTokens, c.Usage.OutputTokens, c.Usage.CacheReadTokens, c.Usage.CacheWriteTokens,
 		c.CostUSD, c.Latency.Milliseconds(), stop, c.Outcome, errText)
 	if err != nil {
 		return fmt.Errorf("llm: record call: %w", err)
 	}
 	return nil
+}
+
+// pgText makes s acceptable to a Postgres text column: invalid UTF-8 is dropped and NUL (which Postgres
+// rejects with 22021) is removed. A lost accounting row would also lose the call's tokens and cost (RT-7).
+func pgText(s string) string {
+	return strings.ReplaceAll(strings.ToValidUTF8(s, ""), "\x00", "")
 }

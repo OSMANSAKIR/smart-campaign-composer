@@ -219,7 +219,7 @@ func TestRedTeam_RepairTurnSizeBounded_RAI1(t *testing.T) {
 	repair := p.Requests()[1].Messages[2].Text
 	t.Logf("answer %d bytes → repair turn %d bytes", len(spam), len(repair))
 	if len(repair) > 16<<10 {
-		t.Skipf("FINDING RT-1: a %d-byte answer produced a %d-byte repair turn (≈%d tokens billed per repair); cap the issues sent back",
+		t.Fatalf("RT-1: a %d-byte answer produced a %d-byte repair turn (≈%d tokens billed per repair); cap the issues sent back",
 			len(spam), len(repair), len(repair)/4)
 	}
 }
@@ -236,7 +236,7 @@ func TestRedTeam_RepairTurnDoesNotEchoModelText_RAI1(t *testing.T) {
 	}
 	repair := p.Requests()[1].Messages[2].Text
 	if strings.Contains(repair, payload) {
-		t.Skipf("FINDING RT-5: the repair (user) turn quotes model text %q: %s", payload, repair)
+		t.Fatalf("RT-5: the repair (user) turn quotes model text %q: %s", payload, repair)
 	}
 }
 
@@ -274,7 +274,7 @@ func TestRedTeam_AccountingSurvivesHostileKeys_RAI1(t *testing.T) {
 		t.Fatal(err)
 	}
 	if n != 2 {
-		t.Skipf("FINDING RT-7: %d of 2 llm_calls rows stored; the invalid attempt's row (and its tokens) was dropped", n)
+		t.Fatalf("RT-7: %d of 2 llm_calls rows stored; the invalid attempt's row (and its tokens) was dropped", n)
 	}
 }
 
