@@ -222,7 +222,7 @@ func (e *env) startWorker(extra ...string) *worker {
 	if err := w.cmd.Start(); err != nil {
 		e.t.Fatal(err)
 	}
-	go func() { w.exited <- w.cmd.Wait(); logf.Close() }()
+	go func() { w.exited <- w.cmd.Wait(); _ = logf.Close() }()
 	e.t.Cleanup(func() { _ = w.cmd.Process.Kill() })
 	return w
 }
@@ -458,7 +458,7 @@ func (e *env) checkInvariants(r *result, s seeded, completed bool, workers []*wo
 	if expectExact {
 		for _, ch := range []string{"sms", "email"} {
 			for st, want := range s.expect[ch] {
-				if got := counts[ch][st]; got != want && !(st == "failed" || st == "sent") {
+				if got := counts[ch][st]; got != want && st != "failed" && st != "sent" {
 					mismatch += fmt.Sprintf("%s %s: %d, expected %d; ", ch, st, got, want)
 				}
 			}
@@ -521,7 +521,8 @@ func (e *env) stop(ws ...*worker) {
 	}
 	for _, w := range ws {
 		select {
-		case <-w.exited:
+		case err := <-w.exited:
+			_ = err // SIGTERM exits 0; a kill reports a signal error that is expected here
 		case <-time.After(20 * time.Second):
 			_ = w.cmd.Process.Kill()
 		}

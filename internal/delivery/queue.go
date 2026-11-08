@@ -48,7 +48,7 @@ func (q *Queue) Claim(ctx context.Context, n int) ([]Claimed, error) {
 			SELECT pm.id FROM messages pm JOIN campaigns pc ON pc.id = pm.campaign_id
 			WHERE pm.channel = $1 AND pm.status IN ('queued', 'retry') AND pm.next_attempt_at <= now()
 			  AND pc.status = 'sending'
-			ORDER BY pm.next_attempt_at, pm.created_at
+			ORDER BY pm.next_attempt_at
 			LIMIT $2
 			FOR UPDATE OF pm SKIP LOCKED)
 		  AND u.id = m.user_id AND c.id = m.campaign_id
