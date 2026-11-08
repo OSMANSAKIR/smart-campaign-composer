@@ -79,13 +79,13 @@ func (s *Service) Approve(ctx context.Context, id, key string, channels []string
 				Issue{Path: "content_version", Code: "stale", Message: fmt.Sprintf("latest is %d", latest)})
 		}
 		// Re-validate now instead of trusting the stored report: the audience (and its worst case) can change.
-		wc, err := s.worstCase(ctx, tx, v, c.Language)
+		wc, err := s.worstCase(ctx, tx, v)
 		if err != nil {
 			return err
 		}
 		cv := c.Content
 		report := content.Validate(content.Content{SMSText: cv.SMSText, EmailSubject: cv.EmailSubject, EmailBody: cv.EmailBody},
-			content.Constraints{Locale: c.Language, WorstCase: wc})
+			constraints(c.Language, wc))
 		var invalid []Issue
 		for _, ch := range chans {
 			if !report.ValidFor[ch] {
@@ -99,7 +99,7 @@ func (s *Service) Approve(ctx context.Context, id, key string, channels []string
 			return errorf("content_invalid", "The content is not valid for every selected channel.", invalid...)
 		}
 
-		where, args, err := segment.Compile(*v, 3)
+		where, args, err := segment.Compile(*v, 4) // $1..$3 are campaign, channel, version
 		if err != nil {
 			return err
 		}

@@ -133,7 +133,9 @@ func serve(ctx context.Context, cfg config.Config, log *slog.Logger) error {
 
 	m := metrics.New()
 	apiServer := api.New(api.Deps{
-		Pool: pool, Metrics: m, LLM: llm.NewService(provider, nil), ProviderURL: cfg.ProviderURL,
+		Pool: pool, Metrics: m, ProviderURL: cfg.ProviderURL,
+		LLM: llm.NewService(provider, llm.NewPGRecorder(pool), llm.WithMetrics(m),
+			llm.WithTimeouts(cfg.LLMSegmentTimeout, cfg.LLMContentTimeout), llm.WithLogger(log)),
 		SPA: web.Dist(), Log: log, Version: version,
 		SegmentTimeout: cfg.LLMSegmentTimeout, ContentTimeout: cfg.LLMContentTimeout,
 	})

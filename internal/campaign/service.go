@@ -213,7 +213,7 @@ func (s *Service) ContentInput(ctx context.Context, id string) (llm.ContentInput
 	if !slices.Contains(contentEditable, c.Status) {
 		return llm.ContentInput{}, invalidState(c.Status, "generate content")
 	}
-	wc, err := s.worstCase(ctx, s.Pool, v, c.Language)
+	wc, err := s.worstCase(ctx, s.Pool, v)
 	if err != nil {
 		return llm.ContentInput{}, err
 	}
@@ -223,7 +223,7 @@ func (s *Service) ContentInput(ctx context.Context, id string) (llm.ContentInput
 	}
 	return llm.ContentInput{
 		CampaignID: id, Brief: c.Brief, Language: c.Language, SegmentSummary: c.Segment.Rendered[c.Language],
-		Audience: c.Segment.Audience.Audience, Channels: channels, WorstCase: wc,
+		Audience: c.Segment.Audience.Audience, Channels: channels, WorstCaseByChannel: wc,
 	}, nil
 }
 
@@ -253,11 +253,11 @@ func (s *Service) SaveContent(ctx context.Context, id string, c content.Content,
 	if !slices.Contains(contentEditable, camp.Status) {
 		return ContentVersion{}, invalidState(camp.Status, "edit content")
 	}
-	wc, err := s.worstCase(ctx, s.Pool, v, camp.Language)
+	wc, err := s.worstCase(ctx, s.Pool, v)
 	if err != nil {
 		return ContentVersion{}, err
 	}
-	report := content.Validate(c, content.Constraints{Locale: camp.Language, WorstCase: wc})
+	report := content.Validate(c, constraints(camp.Language, wc))
 	return s.saveVersion(ctx, id, c, "edited", report, baseVersion)
 }
 
@@ -313,11 +313,11 @@ func (s *Service) ValidateContent(ctx context.Context, c content.Content, campai
 	if !slices.Contains(catalog.Locales, language) {
 		return content.Report{}, errorf("bad_request", "Unsupported language.", Issue{Path: "language", Code: "invalid", Message: "Use tr or en."})
 	}
-	wc, err := s.worstCase(ctx, s.Pool, v, language)
+	wc, err := s.worstCase(ctx, s.Pool, v)
 	if err != nil {
 		return content.Report{}, err
 	}
-	return normalizeReport(content.Validate(c, content.Constraints{Locale: language, WorstCase: wc})), nil
+	return normalizeReport(content.Validate(c, constraints(language, wc))), nil
 }
 
 // Messages lists a campaign's messages, ordered by id for a stable cursor.
@@ -436,51 +436,21 @@ func (s *Service) load(ctx context.Context, db DB, id string, needRule bool) (Ca
 	return c, valid, nil
 }
 
-// worstCase finds, per variable, the longest value a consented recipient in the audience will actually see
-// after cleaning and the fallback rule (need.md N-ORC-005). v == nil means all users.
-func (s *Service) worstCase(ctx context.Context, db DB, v *segment.ValidRule, locale string) (content.Vars, error) {
-	where, args := "TRUE", []any{}
-	if v != nil {
-		w, a, err := segment.Compile(*v, 1)
-		if err != nil {
-			return nil, err
+// worstCase returns the per-channel worst-case variable values for the audience (content.WorstCaseVars, the
+// same cleaning and fallback as send time). v == nil means all users.
+func (s *Service) worstCase(ctx context.Context, q segment.Querier, v *segment.ValidRule) (map[string]content.Vars, error) {
+	if v == nil {
+		all, errs, _ := segment.Validate(segment.Rule{})
+		if len(errs) > 0 {
+			return nil, fmt.Errorf("empty rule does not validate: %v", errs)
 		}
-		if strings.TrimSpace(w) != "" {
-			where, args = w, a
-		}
+		v = &all
 	}
-	out := content.Vars{}
-	for _, name := range catalog.Variables {
-		col := map[string]string{"first_name": "u.first_name", "city": "u.city"}[name]
-		if col == "" {
-			return nil, fmt.Errorf("no column for variable %q", name)
-		}
-		// Values a little over the cap are still read: cleaning (control characters, spaces) may shorten them.
-		rows, err := db.Query(ctx, fmt.Sprintf(`SELECT DISTINCT %[1]s, char_length(%[1]s) FROM users u
-			WHERE (%[2]s) AND (u.sms_consent OR u.email_consent) AND char_length(%[1]s) <= %[3]d
-			ORDER BY char_length(%[1]s) DESC LIMIT 20`, col, where, 2*catalog.MaxVariableRunes), args...)
-		if err != nil {
-			return nil, err
-		}
-		best := content.Value(name, locale, nil) // the fallback is always a possible rendering
-		for rows.Next() {
-			var val string
-			var n int
-			if err := rows.Scan(&val, &n); err != nil {
-				rows.Close()
-				return nil, err
-			}
-			if r := content.Value(name, locale, content.Vars{name: val}); utf8.RuneCountInString(r) > utf8.RuneCountInString(best) {
-				best = r
-			}
-		}
-		rows.Close()
-		if err := rows.Err(); err != nil {
-			return nil, err
-		}
-		out[name] = best
-	}
-	return out, nil
+	return content.WorstCaseVars(ctx, q, *v)
+}
+
+func constraints(locale string, wc map[string]content.Vars) content.Constraints {
+	return content.Constraints{Locale: locale, WorstCaseByChannel: wc}
 }
 
 func normalizeReport(r content.Report) content.Report {

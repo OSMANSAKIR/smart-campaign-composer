@@ -40,23 +40,6 @@ func newService(t *testing.T, users int) (*Service, *pgxpool.Pool) {
 	return &Service{Pool: pool, LLM: llm.NewService(mock.NewDemo(), nil), Metrics: metrics.New()}, pool
 }
 
-// needValidators skips tests that depend on the llm builder's segment and content validators until they are
-// merged (W1). Remove at merge.
-func needValidators(t *testing.T) {
-	t.Helper()
-	var r segment.Rule
-	if err := json.Unmarshal([]byte(goldenRule), &r); err != nil {
-		t.Fatal(err)
-	}
-	_, errs, _ := segment.Validate(r)
-	rep := content.Validate(content.Content{SMSText: "x", EmailSubject: "x", EmailBody: "x"}, content.Constraints{Locale: "tr"})
-	for _, e := range append(errs, contentIssues(rep.Errors)...) {
-		if e.Code == "not_implemented" {
-			t.Skip("segment/content validators arrive with the llm builder's branch")
-		}
-	}
-}
-
 func codeOf(err error) string {
 	var ce *Error
 	if errors.As(err, &ce) {
@@ -202,7 +185,6 @@ var validContent = content.Content{
 }
 
 func TestApprove_EnqueuesConsentedOnly_RAUD2(t *testing.T) {
-	needValidators(t)
 	svc, pool := newService(t, 2000)
 	ctx := context.Background()
 	camp := readyCampaign(t, svc, validContent)
@@ -236,7 +218,6 @@ func TestApprove_EnqueuesConsentedOnly_RAUD2(t *testing.T) {
 }
 
 func TestApprove_IdempotentReplay_RSND3(t *testing.T) {
-	needValidators(t)
 	svc, pool := newService(t, 2000)
 	ctx := context.Background()
 	camp := readyCampaign(t, svc, validContent)
@@ -264,7 +245,6 @@ func TestApprove_IdempotentReplay_RSND3(t *testing.T) {
 }
 
 func TestApprove_ConcurrentOneWins_RFLOW3(t *testing.T) {
-	needValidators(t)
 	svc, pool := newService(t, 2000)
 	ctx := context.Background()
 	camp := readyCampaign(t, svc, validContent)
@@ -302,7 +282,6 @@ func TestApprove_ConcurrentOneWins_RFLOW3(t *testing.T) {
 }
 
 func TestApprove_Gating_RFLOW3(t *testing.T) {
-	needValidators(t)
 	svc, _ := newService(t, 2000)
 	ctx := context.Background()
 
