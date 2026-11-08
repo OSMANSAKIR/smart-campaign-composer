@@ -15,6 +15,7 @@ import {
   overallFraction,
 } from '../lib/progress'
 import { links } from '../lib/router'
+import { appendSample, linePoints, LIMIT_PER_S, type Sample } from '../lib/throughput'
 import { connectProgress, type ConnectionState } from '../lib/sse'
 import type { Campaign, Channel, ChannelProgress } from '../lib/types'
 
@@ -26,6 +27,7 @@ const conn = ref<ConnectionState>('connecting')
 const error = ref<UserMessage | null>(null)
 const loading = ref(true)
 const finalStatus = ref<string | null>(null)
+const history = ref<Sample[]>([]) // throughput chart; starts when this page opens
 let stop: (() => void) | null = null
 
 const CHANNEL_NAME: Record<Channel, string> = { sms: 'SMS', email: 'Email' }
@@ -52,7 +54,10 @@ async function load() {
     stop?.()
     stop = connectProgress(props.campaignId, {
       // Every snapshot is complete: replace, never merge (so a reconnect cannot show stale numbers).
-      onSnapshot: (p) => (state.value = applySnapshot(state.value, p)),
+      onSnapshot: (p) => {
+        state.value = applySnapshot(state.value, p)
+        history.value = appendSample(history.value, p)
+      },
       onEvent: (e) => (state.value = applyEvent(state.value, e)),
       onDone: (s) => {
         finalStatus.value = s
@@ -82,6 +87,18 @@ const connLabel = computed(() => {
       return 'Connecting…'
   }
 })
+// Chart box in SVG units; the y axis leaves headroom above the 100/s limit line.
+const CHART_W = 600
+const CHART_H = 140
+const Y_MAX = 120
+const limitY = CHART_H - (LIMIT_PER_S / Y_MAX) * CHART_H
+const chartLabel = computed(() => {
+  const last = history.value[history.value.length - 1]
+  return last
+    ? `Throughput over the last two minutes. Now: SMS ${last.sms} per second, email ${last.email} per second; limit ${LIMIT_PER_S} per second per channel.`
+    : 'Throughput chart, waiting for data.'
+})
+
 const connTone = computed(() => (conn.value === 'live' ? 'ok' : conn.value === 'reconnecting' ? 'warn' : ''))
 const notSent = computed(
   () => campaign.value && ['draft', 'segmented', 'content_ready'].includes(campaign.value.status),
@@ -181,6 +198,22 @@ const notSent = computed(
         </section>
       </div>
 
+      <section v-if="history.length > 1" class="card" aria-labelledby="tp-h">
+        <header>
+          <h2 id="tp-h">Throughput</h2>
+          <span class="muted legend">
+            <span class="key sms" aria-hidden="true" />SMS <span class="key email" aria-hidden="true" />Email
+            <span class="key limit" aria-hidden="true" />limit {{ LIMIT_PER_S }}/s
+          </span>
+        </header>
+        <svg class="chart" :viewBox="`0 0 ${CHART_W} ${CHART_H}`" preserveAspectRatio="none" role="img" :aria-label="chartLabel">
+          <line class="limit" x1="0" :y1="limitY" :x2="CHART_W" :y2="limitY" />
+          <polyline class="sms" :points="linePoints(history, 'sms', CHART_W, CHART_H, Y_MAX)" />
+          <polyline class="email" :points="linePoints(history, 'email', CHART_W, CHART_H, Y_MAX)" />
+        </svg>
+        <p class="muted small">Messages per second per channel (5 s average), last two minutes since this page opened.</p>
+      </section>
+
       <div class="two">
         <section class="card" aria-labelledby="err-h">
           <header><h2 id="err-h">Errors from the provider</h2></header>
@@ -214,3 +247,17 @@ const notSent = computed(
     </div>
   </div>
 </template>
+
+<style scoped>
+.chart { width: 100%; height: 140px; display: block; background: var(--paper); border-radius: 6px; }
+.chart polyline { fill: none; stroke-width: 2; vector-effect: non-scaling-stroke; }
+.chart .sms { stroke: var(--accent); }
+.chart .email { stroke: var(--ok); }
+.chart .limit { stroke: var(--bad); stroke-dasharray: 6 4; stroke-width: 1; vector-effect: non-scaling-stroke; }
+.legend { display: inline-flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.key { display: inline-block; width: 14px; height: 3px; margin-left: 8px; vertical-align: middle; }
+.key.sms { background: var(--accent); }
+.key.email { background: var(--ok); }
+.key.limit { background: var(--bad); }
+.small { font-size: 0.85em; margin-top: 6px; }
+</style>
