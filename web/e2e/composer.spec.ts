@@ -82,6 +82,7 @@ test('official brief: audience, streamed content, edit, approve, delivery comple
   // 6. Dashboard (R-FLOW-4, R-FLOW-5, R-OBS-1): live progress until a terminal state.
   await expect(page).toHaveURL(new RegExp(`#/c/${campaignId}/live$`))
   await expect(page.getByRole('progressbar', { name: 'Overall delivery progress' })).toBeVisible()
+  await expect(page.getByRole('img', { name: /^Throughput over the last two minutes/ })).toBeVisible()
   await expect(page.getByText('Finished', { exact: true })).toBeVisible({ timeout: 90_000 })
   await expect(page.getByText('100% · finished')).toBeVisible()
 
