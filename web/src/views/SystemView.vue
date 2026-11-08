@@ -61,11 +61,6 @@ const WORD: Record<string, string> = {
         <p>Showing the last known status. {{ error.message }}</p>
       </div>
 
-      <div v-if="status.llm.mock" class="notice warn">
-        <strong>Mock LLM — set ANTHROPIC_API_KEY for real generation</strong>
-        <p>Audiences and copy come from a deterministic stand-in, not from Claude.</p>
-      </div>
-
       <div class="status-grid">
         <section class="card" aria-labelledby="s-api">
           <header>

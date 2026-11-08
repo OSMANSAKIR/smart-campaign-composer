@@ -4,7 +4,7 @@ import ErrorNotice from '../components/ErrorNotice.vue'
 import StatusPill from '../components/StatusPill.vue'
 import { api } from '../lib/api'
 import { describeError, type UserMessage } from '../lib/errors'
-import { formatTime } from '../lib/format'
+import { formatInt, formatTime } from '../lib/format'
 import { links } from '../lib/router'
 import type { CampaignSummary } from '../lib/types'
 
@@ -61,14 +61,15 @@ onMounted(() => load())
       <table class="list">
         <caption class="sr-only">Campaigns, newest first</caption>
         <thead>
-          <tr><th scope="col">Brief</th><th scope="col">Status</th><th scope="col">Created</th></tr>
+          <tr><th scope="col">Brief</th><th scope="col">Status</th><th scope="col">Audience</th><th scope="col">Created</th></tr>
         </thead>
         <tbody>
           <tr v-for="c in items" :key="c.id">
             <td>
-              <a :href="href(c)" class="brief-cell">{{ c.brief || c.id }}</a>
+              <a :href="href(c)" class="brief-cell">{{ c.brief }}</a>
             </td>
             <td><StatusPill :status="c.status" /></td>
+            <td class="num">{{ c.audience_total === null ? '—' : formatInt(c.audience_total) }}</td>
             <td class="muted num">{{ formatTime(c.created_at) }}</td>
           </tr>
         </tbody>

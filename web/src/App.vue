@@ -27,7 +27,7 @@ const viewKey = computed(() => `${navNonce.value}`)
 </script>
 
 <template>
-  <a class="sr-only" href="#main" @click.prevent="($refs.main as HTMLElement | undefined)?.focus()">Skip to content</a>
+  <a class="skip" href="#main" @click.prevent="($refs.main as HTMLElement | undefined)?.focus()">Skip to content</a>
   <header class="topbar">
     <div class="shell">
       <a class="brand" :href="links.list()">Smart Campaign Composer</a>

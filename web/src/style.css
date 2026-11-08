@@ -189,3 +189,6 @@ dialog .actions { display: flex; justify-content: flex-end; gap: 10px; }
 .big-counts b { font-size: 1.15rem; }
 
 .status-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 16px; }
+
+.skip { position: absolute; left: -9999px; top: 8px; background: #fff; color: var(--ink); padding: 8px 12px; border-radius: 6px; z-index: 10; }
+.skip:focus { left: 8px; }

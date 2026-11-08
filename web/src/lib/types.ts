@@ -135,15 +135,17 @@ export interface Campaign {
   progress?: Progress
 }
 
-// The contract says "summary" without listing fields; everything but the id is treated as optional.
+// Campaign list item (api.md, orchestrator update de22d3a).
 export interface CampaignSummary {
   id: string
-  brief?: string
-  status?: CampaignStatus
-  language?: Language
-  created_at?: string
-  completed_at?: string | null
-  channels?: Channel[]
+  brief: string
+  status: CampaignStatus
+  language: Language
+  channels: Channel[]
+  audience_total: number | null
+  created_at: string
+  approved_at: string | null
+  completed_at: string | null
 }
 
 export interface Page<T> {
