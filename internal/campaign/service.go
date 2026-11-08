@@ -1,0 +1,554 @@
+package campaign
+
+import (
+	"context"
+	"encoding/base64"
+	"encoding/json"
+	"errors"
+	"fmt"
+	"log/slog"
+	"regexp"
+	"slices"
+	"strings"
+	"time"
+	"unicode/utf8"
+
+	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
+	"github.com/jackc/pgx/v5/pgxpool"
+
+	"smartcampaign/internal/catalog"
+	"smartcampaign/internal/content"
+	"smartcampaign/internal/llm"
+	"smartcampaign/internal/metrics"
+	"smartcampaign/internal/segment"
+)
+
+// DB is satisfied by *pgxpool.Pool and pgx.Tx.
+type DB interface {
+	Exec(ctx context.Context, sql string, args ...any) (pgconn.CommandTag, error)
+	Query(ctx context.Context, sql string, args ...any) (pgx.Rows, error)
+	QueryRow(ctx context.Context, sql string, args ...any) pgx.Row
+}
+
+// Service implements the campaign use cases behind the HTTP API.
+type Service struct {
+	Pool    *pgxpool.Pool
+	LLM     *llm.Service
+	Metrics *metrics.Metrics
+	Log     *slog.Logger
+}
+
+// ErrNotFound is returned for unknown or malformed campaign ids.
+var ErrNotFound = errorf("not_found", "Campaign not found.")
+
+// Statuses in which the segment may be (re)generated or edited.
+var segmentEditable = []string{StatusDraft, StatusSegmented, StatusContentReady}
+
+// Statuses in which content may be generated or saved.
+var contentEditable = []string{StatusSegmented, StatusContentReady}
+
+// consentColumn whitelists the per-channel consent column; channel names never reach SQL as text.
+var consentColumn = map[string]string{"sms": "u.sms_consent", "email": "u.email_consent"}
+
+// Create stores a new draft campaign.
+func (s *Service) Create(ctx context.Context, brief string) (Campaign, error) {
+	brief = strings.TrimSpace(brief)
+	switch n := utf8.RuneCountInString(brief); {
+	case n == 0:
+		return Campaign{}, errorf("validation_failed", "The brief is empty.",
+			Issue{Path: "brief", Code: "required", Message: "Write a campaign brief."})
+	case n > catalog.MaxBriefRunes:
+		return Campaign{}, errorf("validation_failed", "The brief is too long.",
+			Issue{Path: "brief", Code: "too_long", Message: fmt.Sprintf("%d characters; the limit is %d.", n, catalog.MaxBriefRunes)})
+	}
+	var id string
+	if err := s.Pool.QueryRow(ctx, `INSERT INTO campaigns (brief) VALUES ($1) RETURNING id::text`, brief).Scan(&id); err != nil {
+		return Campaign{}, err
+	}
+	return s.Get(ctx, id)
+}
+
+// Get returns the campaign with its latest content and, once approved, a progress snapshot.
+func (s *Service) Get(ctx context.Context, id string) (Campaign, error) {
+	c, _, err := s.load(ctx, s.Pool, id, false)
+	if err != nil {
+		return Campaign{}, err
+	}
+	if c.ApprovedAt != nil {
+		p, err := s.Progress(ctx, id)
+		if err != nil {
+			return Campaign{}, err
+		}
+		c.Progress = &p
+	}
+	return c, nil
+}
+
+// List returns campaigns newest first. The cursor is opaque to clients.
+func (s *Service) List(ctx context.Context, limit int, cursor string) ([]Summary, string, error) {
+	args := []any{limit + 1}
+	where := ""
+	if cursor != "" {
+		at, id, ok := decodeCursor(cursor)
+		if !ok {
+			return nil, "", errorf("bad_request", "Invalid cursor.", Issue{Path: "cursor", Code: "invalid", Message: "Use next_cursor from a previous page."})
+		}
+		where = `WHERE (created_at, id) < ($2, $3)`
+		args = append(args, at, id)
+	}
+	rows, err := s.Pool.Query(ctx, `SELECT id::text, brief, status, coalesce(language, 'tr'), channels,
+			(audience->>'total')::int, created_at, approved_at, completed_at
+		FROM campaigns `+where+` ORDER BY created_at DESC, id DESC LIMIT $1`, args...)
+	if err != nil {
+		return nil, "", err
+	}
+	items, err := pgx.CollectRows(rows, func(r pgx.CollectableRow) (Summary, error) {
+		var x Summary
+		err := r.Scan(&x.ID, &x.Brief, &x.Status, &x.Language, &x.Channels, &x.AudienceTotal, &x.CreatedAt, &x.ApprovedAt, &x.CompletedAt)
+		return x, err
+	})
+	if err != nil {
+		return nil, "", err
+	}
+	next := ""
+	if len(items) > limit {
+		items = items[:limit]
+		last := items[len(items)-1]
+		next = encodeCursor(last.CreatedAt, last.ID)
+	}
+	return items, next, nil
+}
+
+// GenerateSegment asks the model for a segment, validates and counts it, and stores it (status → segmented).
+func (s *Service) GenerateSegment(ctx context.Context, id string) (Campaign, llm.Meta, error) {
+	c, _, err := s.load(ctx, s.Pool, id, false)
+	if err != nil {
+		return Campaign{}, llm.Meta{}, err
+	}
+	if !slices.Contains(segmentEditable, c.Status) {
+		return Campaign{}, llm.Meta{}, invalidState(c.Status, "generate a segment")
+	}
+	res, err := s.LLM.ProposeSegment(ctx, id, c.Brief)
+	if err != nil {
+		return Campaign{}, llm.Meta{}, fromLLM(err)
+	}
+	p := res.Proposal
+	meta := SegmentMeta{
+		Source: "llm", UnsupportedCriteria: p.UnsupportedCriteria, Assumptions: p.Assumptions,
+		Explanation: p.Explanation, ChannelsRequested: p.ChannelsRequested, Language: p.Language, Warnings: res.Warnings,
+	}
+	language := p.Language
+	if !slices.Contains(catalog.Locales, language) {
+		language = c.Language
+	}
+	if err := s.storeSegment(ctx, id, res.Rule, meta, language); err != nil {
+		return Campaign{}, llm.Meta{}, err
+	}
+	out, err := s.Get(ctx, id)
+	return out, res.Meta, err
+}
+
+// PutSegment replaces the segment with a user-edited rule, checked by the same validator as model output.
+func (s *Service) PutSegment(ctx context.Context, id string, rule segment.Rule) (Campaign, error) {
+	c, _, err := s.load(ctx, s.Pool, id, false)
+	if err != nil {
+		return Campaign{}, err
+	}
+	if !slices.Contains(segmentEditable, c.Status) {
+		return Campaign{}, invalidState(c.Status, "edit the segment")
+	}
+	v, errs, warns := segment.Validate(rule)
+	if len(errs) > 0 {
+		return Campaign{}, errorf("validation_failed", "The segment rule is invalid.", errs...)
+	}
+	meta := SegmentMeta{Source: "edited", ChannelsRequested: "both", Language: c.Language, Warnings: warns}
+	if c.Segment != nil { // keep what the model said about the brief; only the rule changed
+		prev := c.Segment.SegmentMeta
+		meta.UnsupportedCriteria, meta.Assumptions, meta.Explanation = prev.UnsupportedCriteria, prev.Assumptions, prev.Explanation
+		meta.ChannelsRequested = prev.ChannelsRequested
+	}
+	if err := s.storeSegment(ctx, id, v, meta, c.Language); err != nil {
+		return Campaign{}, err
+	}
+	return s.Get(ctx, id)
+}
+
+func (s *Service) storeSegment(ctx context.Context, id string, v segment.ValidRule, meta SegmentMeta, language string) error {
+	aud, err := segment.Count(ctx, s.Pool, v)
+	if err != nil {
+		return fmt.Errorf("count audience: %w", err)
+	}
+	meta.Rendered = map[string][]string{}
+	for _, loc := range catalog.Locales {
+		meta.Rendered[loc] = orEmpty(segment.Render(v, loc))
+	}
+	meta.UnsupportedCriteria, meta.Assumptions = orEmpty(meta.UnsupportedCriteria), orEmpty(meta.Assumptions)
+	meta.Warnings = orEmpty(meta.Warnings)
+	if aud.Total == 0 { // need.md N-ORC-004: allowed, but approve will refuse it
+		meta.Warnings = append(meta.Warnings, Issue{Path: "segment", Code: "empty_audience",
+			Message: "No user matches this segment; approve stays disabled."})
+	}
+	count := AudienceCount{Audience: aud, CountedAt: time.Now().UTC()}
+	tag, err := s.Pool.Exec(ctx, `UPDATE campaigns SET segment_rule = $2, segment_version = segment_version + 1,
+			segment_meta = $3, audience = $4, language = $5, status = 'segmented', updated_at = now()
+		WHERE id = $1 AND status = ANY($6)`,
+		id, mustJSON(v.Rule()), mustJSON(meta), mustJSON(count), language, segmentEditable)
+	if err != nil {
+		return err
+	}
+	if tag.RowsAffected() == 0 { // approved (or changed) while the model was thinking
+		return errorf("invalid_state", "The campaign changed while the segment was being generated.")
+	}
+	return nil
+}
+
+// ContentInput checks that content can be generated now and assembles what the content prompt needs. The
+// API calls it before opening the event stream, so 404/409 stay plain JSON errors.
+func (s *Service) ContentInput(ctx context.Context, id string) (llm.ContentInput, error) {
+	c, v, err := s.load(ctx, s.Pool, id, true)
+	if err != nil {
+		return llm.ContentInput{}, err
+	}
+	if !slices.Contains(contentEditable, c.Status) {
+		return llm.ContentInput{}, invalidState(c.Status, "generate content")
+	}
+	wc, err := s.worstCase(ctx, s.Pool, v, c.Language)
+	if err != nil {
+		return llm.ContentInput{}, err
+	}
+	channels := catalog.Channels
+	if ch := c.Segment.ChannelsRequested; ch == "sms" || ch == "email" {
+		channels = []string{ch}
+	}
+	return llm.ContentInput{
+		CampaignID: id, Brief: c.Brief, Language: c.Language, SegmentSummary: c.Segment.Rendered[c.Language],
+		Audience: c.Segment.Audience.Audience, Channels: channels, WorstCase: wc,
+	}, nil
+}
+
+// GenerateContent runs the streamed content generation and saves the result as a new `llm` version.
+func (s *Service) GenerateContent(ctx context.Context, id string, in llm.ContentInput, onDelta func(llm.Delta), onRepair func(llm.RepairNotice)) (ContentVersion, llm.Meta, error) {
+	res, err := s.LLM.ProposeContent(ctx, in, onDelta, onRepair)
+	if err != nil {
+		return ContentVersion{}, llm.Meta{}, fromLLM(err)
+	}
+	// The generation may outlive the client; saving must not depend on the request context.
+	saveCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
+	defer cancel()
+	cv, err := s.saveVersion(saveCtx, id, res.Content, "llm", res.Report, -1)
+	return cv, res.Meta, err
+}
+
+// SaveContent stores a user-edited version, even when invalid (the report says why). baseVersion must be the
+// latest version (0 when there is none).
+func (s *Service) SaveContent(ctx context.Context, id string, c content.Content, baseVersion int) (ContentVersion, error) {
+	if baseVersion < 0 {
+		return ContentVersion{}, errorf("bad_request", "base_version must be 0 or greater.")
+	}
+	camp, v, err := s.load(ctx, s.Pool, id, true)
+	if err != nil {
+		return ContentVersion{}, err
+	}
+	if !slices.Contains(contentEditable, camp.Status) {
+		return ContentVersion{}, invalidState(camp.Status, "edit content")
+	}
+	wc, err := s.worstCase(ctx, s.Pool, v, camp.Language)
+	if err != nil {
+		return ContentVersion{}, err
+	}
+	report := content.Validate(c, content.Constraints{Locale: camp.Language, WorstCase: wc})
+	return s.saveVersion(ctx, id, c, "edited", report, baseVersion)
+}
+
+// saveVersion appends a content version; baseVersion < 0 skips the staleness check (model output).
+func (s *Service) saveVersion(ctx context.Context, id string, c content.Content, source string, report content.Report, baseVersion int) (ContentVersion, error) {
+	var cv ContentVersion
+	err := pgx.BeginFunc(ctx, s.Pool, func(tx pgx.Tx) error {
+		var status string
+		if err := tx.QueryRow(ctx, `SELECT status FROM campaigns WHERE id = $1 FOR UPDATE`, id).Scan(&status); err != nil {
+			return notFound(err)
+		}
+		if !slices.Contains(contentEditable, status) {
+			return invalidState(status, "save content")
+		}
+		var latest int
+		if err := tx.QueryRow(ctx, `SELECT coalesce(max(version), 0) FROM campaign_content WHERE campaign_id = $1`, id).Scan(&latest); err != nil {
+			return err
+		}
+		if baseVersion >= 0 && baseVersion != latest {
+			return errorf("stale_content_version", fmt.Sprintf("Version %d is not the latest (%d); reload and edit again.", baseVersion, latest),
+				Issue{Path: "base_version", Code: "stale", Message: fmt.Sprintf("latest is %d", latest)})
+		}
+		cv = ContentVersion{Version: latest + 1, Source: source, SMSText: c.SMSText, EmailSubject: c.EmailSubject,
+			EmailBody: c.EmailBody, Validation: normalizeReport(report)}
+		if err := tx.QueryRow(ctx, `INSERT INTO campaign_content (campaign_id, version, sms_text, email_subject, email_body, source, validation)
+			VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING created_at`,
+			id, cv.Version, c.SMSText, c.EmailSubject, c.EmailBody, source, mustJSON(cv.Validation)).Scan(&cv.CreatedAt); err != nil {
+			return err
+		}
+		_, err := tx.Exec(ctx, `UPDATE campaigns SET status = 'content_ready', updated_at = now() WHERE id = $1`, id)
+		return err
+	})
+	return cv, err
+}
+
+// ValidateContent is the stateless validator behind POST /api/content/validate. The worst case comes from the
+// campaign's audience when campaignID is set, else from all consented users.
+func (s *Service) ValidateContent(ctx context.Context, c content.Content, campaignID, language string) (content.Report, error) {
+	var v *segment.ValidRule
+	if campaignID != "" {
+		camp, rule, err := s.load(ctx, s.Pool, campaignID, true)
+		if err != nil {
+			return content.Report{}, err
+		}
+		v = rule
+		if language == "" {
+			language = camp.Language
+		}
+	}
+	if language == "" {
+		language = "tr"
+	}
+	if !slices.Contains(catalog.Locales, language) {
+		return content.Report{}, errorf("bad_request", "Unsupported language.", Issue{Path: "language", Code: "invalid", Message: "Use tr or en."})
+	}
+	wc, err := s.worstCase(ctx, s.Pool, v, language)
+	if err != nil {
+		return content.Report{}, err
+	}
+	return normalizeReport(content.Validate(c, content.Constraints{Locale: language, WorstCase: wc})), nil
+}
+
+// Messages lists a campaign's messages, ordered by id for a stable cursor.
+func (s *Service) Messages(ctx context.Context, id, status, channel string, limit int, cursor string) ([]Message, string, error) {
+	if !isUUID(id) {
+		return nil, "", ErrNotFound
+	}
+	var exists bool
+	if err := s.Pool.QueryRow(ctx, `SELECT EXISTS (SELECT 1 FROM campaigns WHERE id = $1)`, id).Scan(&exists); err != nil {
+		return nil, "", err
+	}
+	if !exists {
+		return nil, "", ErrNotFound
+	}
+	if status != "" && !slices.Contains(MessageStatuses, status) {
+		return nil, "", errorf("bad_request", "Unknown message status.", Issue{Path: "status", Code: "invalid", Message: strings.Join(MessageStatuses, ", ")})
+	}
+	if channel != "" && !slices.Contains(catalog.Channels, channel) {
+		return nil, "", errorf("bad_request", "Unknown channel.", Issue{Path: "channel", Code: "invalid", Message: "Use sms or email."})
+	}
+	if cursor != "" {
+		if !isUUID(cursor) {
+			return nil, "", errorf("bad_request", "Invalid cursor.", Issue{Path: "cursor", Code: "invalid", Message: "Use next_cursor from a previous page."})
+		}
+	}
+	rows, err := s.Pool.Query(ctx, `SELECT id::text, user_id, channel, status, attempts, last_error, sent_at, updated_at
+		FROM messages
+		WHERE campaign_id = $1 AND ($2 = '' OR status = $2) AND ($3 = '' OR channel = $3) AND ($4 = '' OR id > $4::uuid)
+		ORDER BY id LIMIT $5`, id, status, channel, cursor, limit+1)
+	if err != nil {
+		return nil, "", err
+	}
+	items, err := pgx.CollectRows(rows, func(r pgx.CollectableRow) (Message, error) {
+		var m Message
+		err := r.Scan(&m.ID, &m.UserID, &m.Channel, &m.Status, &m.Attempts, &m.LastError, &m.SentAt, &m.UpdatedAt)
+		return m, err
+	})
+	if err != nil {
+		return nil, "", err
+	}
+	next := ""
+	if len(items) > limit {
+		items = items[:limit]
+		next = items[len(items)-1].ID
+	}
+	return items, next, nil
+}
+
+// MessageStatuses are the message states of docs/contracts/api.md §3.
+var MessageStatuses = []string{"queued", "sending", "sent", "retry", "failed", "skipped_no_consent"}
+
+// load reads a campaign and its latest content version. With needRule it also re-validates the stored rule:
+// a ValidRule only ever comes out of segment.Validate, even for rules we stored ourselves.
+func (s *Service) load(ctx context.Context, db DB, id string, needRule bool) (Campaign, *segment.ValidRule, error) {
+	if !isUUID(id) {
+		return Campaign{}, nil, ErrNotFound
+	}
+	var (
+		c                      Campaign
+		ruleRaw, metaRaw, audR []byte
+		segVersion             int
+	)
+	err := db.QueryRow(ctx, `SELECT id::text, brief, status, coalesce(language, 'tr'), segment_rule, segment_version,
+			segment_meta, audience, channels, approved_content_version, created_at, approved_at, completed_at
+		FROM campaigns WHERE id = $1`, id).Scan(&c.ID, &c.Brief, &c.Status, &c.Language, &ruleRaw, &segVersion,
+		&metaRaw, &audR, &c.Channels, &c.ApprovedContentVersion, &c.CreatedAt, &c.ApprovedAt, &c.CompletedAt)
+	if err != nil {
+		return Campaign{}, nil, notFound(err)
+	}
+	if c.Channels == nil {
+		c.Channels = []string{}
+	}
+	var valid *segment.ValidRule
+	if ruleRaw != nil {
+		seg := &Segment{Version: segVersion}
+		if err := json.Unmarshal(ruleRaw, &seg.Rule); err != nil {
+			return Campaign{}, nil, fmt.Errorf("stored segment_rule: %w", err)
+		}
+		if metaRaw != nil {
+			if err := json.Unmarshal(metaRaw, &seg.SegmentMeta); err != nil {
+				return Campaign{}, nil, fmt.Errorf("stored segment_meta: %w", err)
+			}
+		}
+		if audR != nil {
+			seg.Audience = &AudienceCount{}
+			if err := json.Unmarshal(audR, seg.Audience); err != nil {
+				return Campaign{}, nil, fmt.Errorf("stored audience: %w", err)
+			}
+		}
+		c.Segment = seg
+		if needRule {
+			v, errs, _ := segment.Validate(seg.Rule)
+			if len(errs) > 0 {
+				return Campaign{}, nil, fmt.Errorf("stored segment no longer validates: %v", errs)
+			}
+			valid = &v
+		}
+	} else if needRule && slices.Contains(contentEditable, c.Status) {
+		return Campaign{}, nil, fmt.Errorf("campaign %s is %s without a segment", id, c.Status)
+	}
+	var cv ContentVersion
+	var valRaw []byte
+	err = db.QueryRow(ctx, `SELECT version, source, sms_text, email_subject, email_body, validation, created_at
+		FROM campaign_content WHERE campaign_id = $1 ORDER BY version DESC LIMIT 1`, id).
+		Scan(&cv.Version, &cv.Source, &cv.SMSText, &cv.EmailSubject, &cv.EmailBody, &valRaw, &cv.CreatedAt)
+	switch {
+	case errors.Is(err, pgx.ErrNoRows):
+	case err != nil:
+		return Campaign{}, nil, err
+	default:
+		if err := json.Unmarshal(valRaw, &cv.Validation); err != nil {
+			return Campaign{}, nil, fmt.Errorf("stored validation: %w", err)
+		}
+		c.Content = &cv
+	}
+	return c, valid, nil
+}
+
+// worstCase finds, per variable, the longest value a consented recipient in the audience will actually see
+// after cleaning and the fallback rule (need.md N-ORC-005). v == nil means all users.
+func (s *Service) worstCase(ctx context.Context, db DB, v *segment.ValidRule, locale string) (content.Vars, error) {
+	where, args := "TRUE", []any{}
+	if v != nil {
+		w, a, err := segment.Compile(*v, 1)
+		if err != nil {
+			return nil, err
+		}
+		if strings.TrimSpace(w) != "" {
+			where, args = w, a
+		}
+	}
+	out := content.Vars{}
+	for _, name := range catalog.Variables {
+		col := map[string]string{"first_name": "u.first_name", "city": "u.city"}[name]
+		if col == "" {
+			return nil, fmt.Errorf("no column for variable %q", name)
+		}
+		// Values a little over the cap are still read: cleaning (control characters, spaces) may shorten them.
+		rows, err := db.Query(ctx, fmt.Sprintf(`SELECT DISTINCT %[1]s, char_length(%[1]s) FROM users u
+			WHERE (%[2]s) AND (u.sms_consent OR u.email_consent) AND char_length(%[1]s) <= %[3]d
+			ORDER BY char_length(%[1]s) DESC LIMIT 20`, col, where, 2*catalog.MaxVariableRunes), args...)
+		if err != nil {
+			return nil, err
+		}
+		best := content.Value(name, locale, nil) // the fallback is always a possible rendering
+		for rows.Next() {
+			var val string
+			var n int
+			if err := rows.Scan(&val, &n); err != nil {
+				rows.Close()
+				return nil, err
+			}
+			if r := content.Value(name, locale, content.Vars{name: val}); utf8.RuneCountInString(r) > utf8.RuneCountInString(best) {
+				best = r
+			}
+		}
+		rows.Close()
+		if err := rows.Err(); err != nil {
+			return nil, err
+		}
+		out[name] = best
+	}
+	return out, nil
+}
+
+func normalizeReport(r content.Report) content.Report {
+	if r.ValidFor == nil {
+		r.ValidFor = map[string]bool{}
+	}
+	if r.Fields == nil {
+		r.Fields = map[string]any{}
+	}
+	if r.WorstCase == nil {
+		r.WorstCase = map[string]string{}
+	}
+	r.Variables, r.Errors, r.Warnings = orEmpty(r.Variables), orEmpty(r.Errors), orEmpty(r.Warnings)
+	return r
+}
+
+func orEmpty[T any](s []T) []T {
+	if s == nil {
+		return []T{}
+	}
+	return s
+}
+
+func notFound(err error) error {
+	if errors.Is(err, pgx.ErrNoRows) {
+		return ErrNotFound
+	}
+	return err
+}
+
+func invalidState(status, action string) *Error {
+	return errorf("invalid_state", fmt.Sprintf("Cannot %s while the campaign is %s.", action, status),
+		Issue{Path: "status", Code: status, Message: "current status"})
+}
+
+// fromLLM turns terminal LLM failures into API errors; everything else stays an internal error.
+func fromLLM(err error) error {
+	var le *llm.Error
+	switch {
+	case errors.As(err, &le):
+		return &Error{Code: le.Code, Message: le.Message, Details: orEmpty(le.Details)}
+	case errors.Is(err, context.DeadlineExceeded):
+		return errorf("llm_failed", "The model did not answer in time.")
+	}
+	return err
+}
+
+var uuidRE = regexp.MustCompile(`^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$`)
+
+// isUUID rejects malformed ids before they reach Postgres (which would answer 22P02 instead of "not found").
+func isUUID(s string) bool { return uuidRE.MatchString(s) }
+
+func encodeCursor(at time.Time, id string) string {
+	return base64.RawURLEncoding.EncodeToString([]byte(at.UTC().Format(time.RFC3339Nano) + "|" + id))
+}
+
+func decodeCursor(s string) (time.Time, string, bool) {
+	b, err := base64.RawURLEncoding.DecodeString(s)
+	if err != nil {
+		return time.Time{}, "", false
+	}
+	ts, id, ok := strings.Cut(string(b), "|")
+	if !ok {
+		return time.Time{}, "", false
+	}
+	at, err := time.Parse(time.RFC3339Nano, ts)
+	if err != nil || !isUUID(id) {
+		return time.Time{}, "", false
+	}
+	return at, id, true
+}

@@ -1,8 +1,5 @@
 // Package api is the HTTP layer: routing, the error model, health endpoints, SSE and the embedded SPA
 // (docs/contracts/api.md). Owned by the orchestrator.
-//
-// Phase 0: health, readiness, metrics, catalog, system status and the SPA; every other contract endpoint
-// answers 501 with the standard error model until W1 fills it in.
 package api
 
 import (
@@ -14,11 +11,14 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 
+	"smartcampaign/internal/campaign"
 	"smartcampaign/internal/catalog"
+	"smartcampaign/internal/clock"
 	"smartcampaign/internal/llm"
 	"smartcampaign/internal/metrics"
 	"smartcampaign/internal/store"
@@ -33,17 +33,42 @@ type Deps struct {
 	SPA         fs.FS // nil when the binary was built without the spa tag
 	Log         *slog.Logger
 	Version     string
+
+	SegmentTimeout time.Duration // LLM_SEGMENT_TIMEOUT; 30 s when zero
+	ContentTimeout time.Duration // LLM_CONTENT_TIMEOUT; 60 s when zero
 }
 
 // Server serves the API.
 type Server struct {
-	d      Deps
-	client *http.Client
+	d         Deps
+	client    *http.Client
+	campaigns *campaign.Service
+	hub       *campaign.Hub
+	closing   chan struct{}
+	closeOnce sync.Once
 }
+
+// progressInterval is how often the hub re-reads a watched campaign (need.md N-ORC-006).
+const progressInterval = 500 * time.Millisecond
 
 // New returns a server.
 func New(d Deps) *Server {
-	return &Server{d: d, client: &http.Client{Timeout: time.Second}}
+	if d.SegmentTimeout <= 0 {
+		d.SegmentTimeout = 30 * time.Second
+	}
+	if d.ContentTimeout <= 0 {
+		d.ContentTimeout = 60 * time.Second
+	}
+	svc := &campaign.Service{Pool: d.Pool, LLM: d.LLM, Metrics: d.Metrics, Log: d.Log}
+	return &Server{d: d, client: &http.Client{Timeout: time.Second}, campaigns: svc,
+		hub: campaign.NewHub(svc, clock.Real{}, progressInterval), closing: make(chan struct{})}
+}
+
+// Close ends open event streams and stops the progress pollers; register it with http.Server.RegisterOnShutdown,
+// because Shutdown alone waits for streams that never go idle.
+func (s *Server) Close() {
+	s.closeOnce.Do(func() { close(s.closing) })
+	s.hub.Close()
 }
 
 // Handler builds the route table.
@@ -60,15 +85,17 @@ func (s *Server) Handler() http.Handler {
 	})
 	mux.HandleFunc("GET /api/system/status", s.systemStatus)
 
-	for _, route := range []string{
-		"POST /api/campaigns", "GET /api/campaigns", "GET /api/campaigns/{id}",
-		"POST /api/campaigns/{id}/segment/generate", "PUT /api/campaigns/{id}/segment",
-		"POST /api/campaigns/{id}/content/generate", "PUT /api/campaigns/{id}/content",
-		"POST /api/content/validate", "POST /api/campaigns/{id}/approve",
-		"GET /api/campaigns/{id}/messages", "GET /api/campaigns/{id}/events",
-	} {
-		mux.HandleFunc(route, notImplemented)
-	}
+	mux.HandleFunc("POST /api/campaigns", s.createCampaign)
+	mux.HandleFunc("GET /api/campaigns", s.listCampaigns)
+	mux.HandleFunc("GET /api/campaigns/{id}", s.getCampaign)
+	mux.HandleFunc("POST /api/campaigns/{id}/segment/generate", s.generateSegment)
+	mux.HandleFunc("PUT /api/campaigns/{id}/segment", s.putSegment)
+	mux.HandleFunc("POST /api/campaigns/{id}/content/generate", s.generateContent)
+	mux.HandleFunc("PUT /api/campaigns/{id}/content", s.putContent)
+	mux.HandleFunc("POST /api/content/validate", s.validateContent)
+	mux.HandleFunc("POST /api/campaigns/{id}/approve", s.approve)
+	mux.HandleFunc("GET /api/campaigns/{id}/messages", s.listMessages)
+	mux.HandleFunc("GET /api/campaigns/{id}/events", s.events)
 	mux.HandleFunc("/api/", func(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusNotFound, "not_found", "Unknown API route.", nil)
 	})
@@ -210,10 +237,6 @@ type Issue struct {
 	Path    string `json:"path"`
 	Code    string `json:"code"`
 	Message string `json:"message"`
-}
-
-func notImplemented(w http.ResponseWriter, r *http.Request) {
-	writeError(w, http.StatusNotImplemented, "not_implemented", "This endpoint is part of the contract but not built yet.", nil)
 }
 
 func writeError(w http.ResponseWriter, status int, code, message string, details []Issue) {

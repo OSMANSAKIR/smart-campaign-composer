@@ -132,14 +132,14 @@ func serve(ctx context.Context, cfg config.Config, log *slog.Logger) error {
 	defer pool.Close()
 
 	m := metrics.New()
-	srv := &http.Server{
-		Addr: cfg.APIAddr,
-		Handler: api.New(api.Deps{
-			Pool: pool, Metrics: m, LLM: llm.NewService(provider, nil), ProviderURL: cfg.ProviderURL,
-			SPA: web.Dist(), Log: log, Version: version,
-		}).Handler(),
-		ReadHeaderTimeout: 10 * time.Second,
-	}
+	apiServer := api.New(api.Deps{
+		Pool: pool, Metrics: m, LLM: llm.NewService(provider, nil), ProviderURL: cfg.ProviderURL,
+		SPA: web.Dist(), Log: log, Version: version,
+		SegmentTimeout: cfg.LLMSegmentTimeout, ContentTimeout: cfg.LLMContentTimeout,
+	})
+	// No WriteTimeout: SSE streams are long-lived; each LLM call has its own timeout instead.
+	srv := &http.Server{Addr: cfg.APIAddr, Handler: apiServer.Handler(), ReadHeaderTimeout: 10 * time.Second}
+	srv.RegisterOnShutdown(apiServer.Close)
 	log.Info("listening", "addr", cfg.APIAddr, "llm_provider", provider.Name(), "llm_model", provider.Model())
 
 	errc := make(chan error, 1)

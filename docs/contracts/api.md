@@ -93,6 +93,9 @@ Every non-2xx JSON response:
   "created_at": "…", "approved_at": null, "completed_at": null }
 ```
 
+**Campaign summary** (list item): `{ "id", "brief", "status", "language", "channels": [], "audience_total": 231 | null,
+"created_at", "approved_at", "completed_at" }`.
+
 ## 3. State machines
 
 Every transition is a guarded `UPDATE … WHERE status = $expected`; 0 rows → 409 `invalid_state`.
@@ -113,7 +116,7 @@ Terminal: `sent`, `failed`, `skipped_no_consent`.
 |---|---|---|---|
 | `GET /api/catalog` | — | 200 catalog | Fields, types, ops, enum values, labels, limits, variables, content limits |
 | `POST /api/campaigns` | `{ "brief": "…" }` (1..4000 runes) | 201 campaign | status `draft` |
-| `GET /api/campaigns` | `?limit=20&cursor=` | 200 `{ items: [summary], next_cursor }` | Newest first |
+| `GET /api/campaigns` | `?limit=20&cursor=` (limit 1..100) | 200 `{ items: [summary], next_cursor }` | Newest first; `next_cursor` is `null` on the last page |
 | `GET /api/campaigns/{id}` | — | 200 campaign (+ `progress` snapshot when sending or done) | |
 | `POST /api/campaigns/{id}/segment/generate` | — | 200 `{ campaign, llm }` | Allowed in `draft`, `segmented`, `content_ready` |
 | `PUT /api/campaigns/{id}/segment` | `{ "rule": { "groups": [...] } }` | 200 `{ campaign }` | Manual edit; same validator |
@@ -121,7 +124,7 @@ Terminal: `sent`, `failed`, `skipped_no_consent`.
 | `PUT /api/campaigns/{id}/content` | `{ sms_text, email_subject, email_body, base_version }` | 200 `{ content }` | Saves a new `edited` version even if invalid; `base_version` must be the latest (0 when none) |
 | `POST /api/content/validate` | `{ sms_text, email_subject, email_body, campaign_id? , language? }` | 200 report | Stateless; worst case from the campaign's audience, else from all users |
 | `POST /api/campaigns/{id}/approve` | header `Idempotency-Key`; `{ "channels": ["sms","email"], "content_version": 2 }` | 202 `{ campaign, enqueued: { sms, email } }` | §6 |
-| `GET /api/campaigns/{id}/messages` | `?status=&channel=&limit=50&cursor=` | 200 `{ items, next_cursor }` | Items: `id, user_id, channel, status, attempts, last_error, sent_at, updated_at` |
+| `GET /api/campaigns/{id}/messages` | `?status=&channel=&limit=50&cursor=` (limit 1..500) | 200 `{ items, next_cursor }` | Items: `id, user_id, channel, status, attempts, last_error, sent_at, updated_at` |
 | `GET /api/campaigns/{id}/events` | — | 200 `text/event-stream` (§7) | Live progress |
 | `GET /api/system/status` | — | 200 status | §8 |
 | `GET /healthz`, `GET /readyz`, `GET /metrics` | — | | See `observability.md` |

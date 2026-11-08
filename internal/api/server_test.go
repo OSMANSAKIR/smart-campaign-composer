@@ -1,7 +1,9 @@
 package api
 
 import (
+	"context"
 	"encoding/json"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -37,23 +39,110 @@ func TestHealthAndReadiness_ROBS3(t *testing.T) {
 	}
 }
 
-func TestNotBuiltEndpoints_UseErrorModel(t *testing.T) {
-	srv := newTestServer(t)
-	resp, err := http.Post(srv.URL+"/api/campaigns", "application/json", strings.NewReader(`{"brief":"x"}`))
+type apiError struct {
+	Error struct {
+		Code    string  `json:"code"`
+		Message string  `json:"message"`
+		Details []Issue `json:"details"`
+	} `json:"error"`
+}
+
+// do sends one request and returns the status, headers and the whole body (the body is closed here).
+func do(t *testing.T, method, url, body string, header map[string]string) (int, http.Header, []byte) {
+	t.Helper()
+	req, err := http.NewRequest(method, url, strings.NewReader(body))
+	if err != nil {
+		t.Fatal(err)
+	}
+	req.Header.Set("Content-Type", "application/json")
+	for k, v := range header {
+		req.Header.Set(k, v)
+	}
+	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer resp.Body.Close()
-	var body struct {
-		Error struct {
-			Code    string  `json:"code"`
-			Details []Issue `json:"details"`
-		} `json:"error"`
-	}
-	if err := json.NewDecoder(resp.Body).Decode(&body); err != nil {
+	b, err := io.ReadAll(resp.Body)
+	if err != nil {
 		t.Fatal(err)
 	}
-	if resp.StatusCode != http.StatusNotImplemented || body.Error.Code != "not_implemented" || body.Error.Details == nil {
-		t.Fatalf("status %d body %+v", resp.StatusCode, body)
+	return resp.StatusCode, resp.Header, b
+}
+
+func TestErrorModel_ROBS1(t *testing.T) {
+	srv := newTestServer(t)
+	status, _, b := do(t, "POST", srv.URL+"/api/campaigns", `{"brief":"İstanbul'daki kullanıcılara indirim"}`, nil)
+	var created struct {
+		ID     string `json:"id"`
+		Status string `json:"status"`
+	}
+	if err := json.Unmarshal(b, &created); err != nil || status != http.StatusCreated || created.Status != "draft" {
+		t.Fatalf("create: %d %s", status, b)
+	}
+	base := srv.URL + "/api/campaigns/"
+	for _, tc := range []struct {
+		name, method, url, body string
+		header                  map[string]string
+		status                  int
+		code                    string
+	}{
+		{"missing brief", "POST", srv.URL + "/api/campaigns", `{}`, nil, 400, "bad_request"},
+		{"bad json", "POST", srv.URL + "/api/campaigns", `{`, nil, 400, "bad_request"},
+		{"empty brief", "POST", srv.URL + "/api/campaigns", `{"brief":" "}`, nil, 422, "validation_failed"},
+		{"unknown id", "GET", base + "00000000-0000-0000-0000-000000000000", "", nil, 404, "not_found"},
+		{"malformed id", "GET", base + "nope", "", nil, 404, "not_found"},
+		{"approve without key", "POST", base + created.ID + "/approve", `{"channels":["sms"],"content_version":1}`, nil, 400, "idempotency_key_required"},
+		{"approve draft", "POST", base + created.ID + "/approve", `{"channels":["sms"],"content_version":1}`,
+			map[string]string{"Idempotency-Key": "k"}, 409, "invalid_state"},
+		{"content in draft", "POST", base + created.ID + "/content/generate", `{}`, nil, 409, "invalid_state"},
+		{"bad limit", "GET", srv.URL + "/api/campaigns?limit=0", "", nil, 400, "bad_request"},
+		{"bad message filter", "GET", base + created.ID + "/messages?status=lost", "", nil, 400, "bad_request"},
+		{"unknown route", "GET", srv.URL + "/api/nope", "", nil, 404, "not_found"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			status, _, b := do(t, tc.method, tc.url, tc.body, tc.header)
+			var e apiError
+			if err := json.Unmarshal(b, &e); err != nil {
+				t.Fatalf("not the error model: %s", b)
+			}
+			if status != tc.status || e.Error.Code != tc.code || e.Error.Message == "" || e.Error.Details == nil {
+				t.Fatalf("got %d %s", status, b)
+			}
+		})
+	}
+	status, _, b = do(t, "GET", srv.URL+"/api/campaigns?limit=5", "", nil)
+	if status != 200 || !strings.Contains(string(b), created.ID) {
+		t.Fatalf("list: %d %s", status, b)
+	}
+}
+
+func TestEvents_SnapshotThenDone_RFLOW5(t *testing.T) {
+	pool := storetest.NewDB(t)
+	srv := httptest.NewServer(New(Deps{Pool: pool, Metrics: metrics.New(), LLM: llm.NewService(mock.NewDemo(), nil),
+		ProviderURL: "http://127.0.0.1:1", Version: "test"}).Handler())
+	t.Cleanup(srv.Close)
+	var id string
+	if err := pool.QueryRow(context.Background(), `INSERT INTO campaigns (brief, status, approved_at, completed_at)
+		VALUES ('b', 'completed', now(), now()) RETURNING id::text`).Scan(&id); err != nil {
+		t.Fatal(err)
+	}
+	status, h, b := do(t, "GET", srv.URL+"/api/campaigns/"+id+"/events", "", nil)
+	if ct := h.Get("Content-Type"); status != 200 || ct != "text/event-stream" {
+		t.Fatalf("%d %s", status, ct)
+	}
+	frames := strings.Split(strings.TrimSpace(string(b)), "\n\n")
+	if len(frames) != 2 || !strings.HasPrefix(frames[0], "event: snapshot\ndata: {") ||
+		frames[1] != `event: done`+"\n"+`data: {"status":"completed"}` {
+		t.Fatalf("stream:\n%s", b)
+	}
+	var snap struct {
+		CampaignID string                    `json:"campaign_id"`
+		Channels   map[string]map[string]any `json:"channels"`
+		Errors     map[string]int            `json:"errors"`
+	}
+	if err := json.Unmarshal([]byte(strings.TrimPrefix(frames[0], "event: snapshot\ndata: ")), &snap); err != nil ||
+		snap.CampaignID != id || len(snap.Channels) != 2 || len(snap.Errors) != 4 {
+		t.Fatalf("snapshot %s (%v)", frames[0], err)
 	}
 }
