@@ -749,7 +749,22 @@ func writeReport() {
 	}
 }
 
-const reportFooter = `## Not covered here
+const reportFooter = `## How to read the numbers
+
+- **Rate limit.** The worker's limiter allows 100 sends per sliding window of 1 s + 25 ms (the guard absorbs arrival
+  jitter between the worker and the provider). The provider counts arrivals itself; "max requests" is the largest
+  number of requests (retries included) that arrived inside any 1 s span, and it must stay at or below 100 (I3).
+- **Throughput under faults.** A 429 pauses the whole channel for its Retry-After (KICKOFF §7.3). One overload event
+  produces several 429s from requests that were in flight together, so they are counted as one event; even so, a
+  provider that answers 5% of requests with 429 holds each channel well below 100/s (S2 shows the measured rate).
+  Little's law also sets the in-flight bound: 100 sends/s at a 400 ms mean latency needs about 40 concurrent
+  requests, so S2 raises MAX_IN_FLIGHT_PER_CHANNEL from the default 32 to 64.
+- **Provider outage.** Connection errors count as ambiguous tries (max 5, full-jitter backoff up to 8 s between the
+  fifth and the fourth). A 10 s outage fits inside that budget; a much longer one would end messages as failed.
+- **Crash recovery.** S2 kills a worker with SIGKILL while it holds leases; the survivor reclaims them after
+  LEASE_DURATION and the provider's Idempotency-Key store absorbs the re-sends (see "replayed keys").
+
+## Not covered here
 
 S3 (approve storm), S4 (LLM adversarial), S5 (API load) and S6 (SSE fan-out) need the API and are run by the orchestrator;
 S7 here replaces a Postgres container restart by refusing connections to the test database, because a worktree
