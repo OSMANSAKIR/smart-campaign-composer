@@ -27,7 +27,9 @@ func randomRule(rng *rand.Rand) string {
 			lo := 18 + rng.IntN(40)
 			return fmt.Sprintf(`{"field":"age","op":"between","value":[%d,%d]}`, lo, lo+5+rng.IntN(30))
 		},
-		func() string { return fmt.Sprintf(`{"field":"loyalty_tier","op":"eq","value":%q}`, tiers[rng.IntN(len(tiers))]) },
+		func() string {
+			return fmt.Sprintf(`{"field":"loyalty_tier","op":"eq","value":%q}`, tiers[rng.IntN(len(tiers))])
+		},
 		func() string { return fmt.Sprintf(`{"field":"purchase_count","op":"gte","value":%d}`, rng.IntN(10)) },
 		func() string {
 			return fmt.Sprintf(`{"field":"last_purchase_at","op":"not_within_last_days","value":%d}`, 7+rng.IntN(180))
