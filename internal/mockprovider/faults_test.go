@@ -453,9 +453,14 @@ func TestMockProvider_AdminConfigValidation_RRES3(t *testing.T) {
 		t.Fatalf("valid patch: %d", code)
 	}
 	h.configure(`{"rate_limit":50}`)
-	resp2, _ := h.cl.Get(h.srv.URL + "/admin/config")
+	resp2, err := h.cl.Get(h.srv.URL + "/admin/config")
+	if err != nil {
+		t.Fatal(err)
+	}
 	defer resp2.Body.Close()
-	_ = json.NewDecoder(resp2.Body).Decode(&cfg)
+	if err := json.NewDecoder(resp2.Body).Decode(&cfg); err != nil {
+		t.Fatal(err)
+	}
 	if cfg.ErrorRate != 0.25 || cfg.RetryAfterS != 4 || cfg.RateLimit != 50 || cfg.Seed != 7 {
 		t.Fatalf("merged config = %+v", cfg)
 	}
