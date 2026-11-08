@@ -33,7 +33,6 @@ _Last updated: 2026-11-09 by the orchestrator (owner answers for N-ORC-012, N-DE
 
 **Owner changes in progress:**
 
-- 🔁 N-LLM-003: real claudecode probe as the fixture; claudecode eval report in docs/eval.
 - 🔁 N-DEL-009: final idempotent replay for delivered-but-failed messages (if time allows).
 
 **Review when convenient (medium):** N-ORC-013 (approves enqueue one at a time), N-ORC-003 (wire schema typing), N-ORC-004 (contradictions), N-ORC-005 (long names), N-PLAN-001, 002, 004, 005, 010, 011, 014.
@@ -42,6 +41,7 @@ _Last updated: 2026-11-09 by the orchestrator (owner answers for N-ORC-012, N-DE
 
 **Answered:**
 
+- ✅ N-LLM-003: real claudecode capture is the fixture; claudecode eval report committed.
 - ✅ N-DEL-007: a refused connection pauses the channel and is not counted (implemented).
 - ✅ N-ORC-012: departure-time limiter (A) accepted; assumption and switch to B documented in DECISIONS.md.
 - ✅ N-ORC-001: Agent-tool subagents instead of workflows (Pro plan).
@@ -562,7 +562,7 @@ _Last updated: 2026-11-09 by the orchestrator (owner answers for N-ORC-012, N-DE
 - **Owner response:**
 - **Status:** OPEN
 
-### 🔁 N-LLM-003 · claudecode fixture reconstructed, not freshly probed · impact: medium
+### ✅ N-LLM-003 · claudecode fixture reconstructed, not freshly probed · impact: medium
 - **Date / agent / session:** 2026-11-08 11:40 · llm · builder-llm (W1 subagent)
 - **Requirement(s):** R-AI-1, R-DEL-6
 - **Context:** KICKOFF §6.9 asks for a sanitized probe fixture; a subagent running `claude -p` would spend the owner's subscription unattended.
@@ -571,7 +571,8 @@ _Last updated: 2026-11-09 by the orchestrator (owner answers for N-ORC-012, N-DE
 - **Cost to change later:** ~10 min.
 - **Question for owner:** Will you run one claudecode probe so the fixture can be replaced by a real capture?
 - **Owner response:** CHANGE (2026-11-09): the orchestrator may run the claudecode probe and `make eval PROVIDER=claudecode` (subscription, not the paid API). Make the real capture the fixture; put the eval report in docs/eval.
-- **Status:** CHANGE REQUESTED
+- **Implemented (2026-11-09):** the orchestrator ran `make eval PROVIDER=claudecode` (17 briefs, real Sonnet through the subscription) with the CLI's stdout teed to a scratch file. The official-brief segment capture, sanitized (ids replaced, init reduced to non-personal keys, rate-limit details dropped), replaced the reconstructed fixture; the tests now assert its real values. Differences from the reconstruction: the result line says `stop_reason: tool_use` (StructuredOutput tool) with `num_turns: 2`, and there are `system/status`, `assistant`, `user` and `rate_limit_event` lines; the parser already ignored them. Eval report: `docs/eval/REPORT-claudecode-sonnet-2026-11-09.md` (16/16 valid first try, 14/14 exact audiences, p50 11.6 s, $0.35 API-equivalent).
+- **Status:** RESOLVED
 
 ### 🟡 N-LLM-004 · Repairs only for requested channels; body limit on raw text; allowed control characters · impact: low
 - **Date / agent / session:** 2026-11-08 11:10 · llm · builder-llm (W1 subagent)

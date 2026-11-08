@@ -19,7 +19,9 @@ import (
 	"smartcampaign/internal/llm"
 )
 
-// The fixture is reconstructed from the KICKOFF §6.9 probe notes and sanitized (its first line says so).
+// The fixture is a real, sanitized capture of `claude -p` for the official brief (its first line says how it was
+// made; need.md N-LLM-003). The CLI reports stop_reason tool_use for its StructuredOutput tool; Parse maps a
+// successful result to end_turn.
 
 func TestParse_ProbeFixture_RAI1(t *testing.T) {
 	f, err := os.Open("testdata/probe_segment.jsonl")
@@ -32,11 +34,21 @@ func TestParse_ProbeFixture_RAI1(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if resp.StopReason != llm.StopEndTurn || resp.Model != "claude-sonnet-5-5" || resp.CostUSD != 0.004998 {
-		t.Fatalf("resp = %+v", resp)
+	if resp.StopReason != llm.StopEndTurn || resp.Model != "claude-sonnet-5-5" || resp.CostUSD != 0.026199999999999998 {
+		t.Fatalf("resp: stop %q, model %q, cost %v", resp.StopReason, resp.Model, resp.CostUSD)
 	}
-	if resp.Usage != (llm.Usage{InputTokens: 412, OutputTokens: 187, CacheReadTokens: 3021}) {
+	if resp.Usage != (llm.Usage{InputTokens: 2, OutputTokens: 482, CacheWriteTokens: 5344}) {
 		t.Fatalf("usage = %+v", resp.Usage)
+	}
+	var p struct {
+		Segment struct {
+			Groups []struct {
+				Conditions []struct{ Field string } `json:"conditions"`
+			} `json:"groups"`
+		} `json:"segment"`
+	}
+	if err := json.Unmarshal(resp.JSON, &p); err != nil || len(p.Segment.Groups) != 3 || p.Segment.Groups[0].Conditions[0].Field != "city" {
+		t.Fatalf("structured output is not the official brief's rule: %v %s", err, resp.JSON)
 	}
 	var streamed, final any
 	if err := json.Unmarshal([]byte(strings.Join(deltas, "")), &streamed); err != nil {
@@ -186,7 +198,7 @@ func TestGenerate_FixtureThroughService_RAI1(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !res.Rule.Valid() || res.Meta.Provider != "claudecode" || res.Meta.Model != "claude-sonnet-5-5" || res.Meta.CostUSD != 0.004998 {
+	if !res.Rule.Valid() || res.Meta.Provider != "claudecode" || res.Meta.Model != "claude-sonnet-5-5" || res.Meta.CostUSD != 0.026199999999999998 {
 		t.Fatalf("meta = %+v", res.Meta)
 	}
 }
