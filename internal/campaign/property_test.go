@@ -2,12 +2,15 @@ package campaign
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"math/rand/v2"
 	"strings"
 	"testing"
+	"unicode/utf8"
 
 	"smartcampaign/internal/content"
+	"smartcampaign/internal/delivery"
 	"smartcampaign/internal/segment"
 )
 
@@ -107,5 +110,73 @@ func TestApprove_ConsentProperty_RAUD2(t *testing.T) {
 	t.Logf("%d approved, %d rejected as empty audience", approved, empty)
 	if approved < 15 {
 		t.Fatalf("only %d rounds reached approve; the property was barely exercised", approved)
+	}
+}
+
+// TestApprove_SMSFitsForEveryRecipient_RCNT1: an SMS validated at exactly 160 code points worst case, rendered
+// the way the worker renders it, fits for every consented recipient of the seeded audience (which includes
+// 40-rune names, empty names and hostile names). One more character is rejected before approve.
+func TestApprove_SMSFitsForEveryRecipient_RCNT1(t *testing.T) {
+	svc, pool := newService(t, 5000)
+	ctx := context.Background()
+	c, err := svc.Create(ctx, "everyone")
+	if err != nil {
+		t.Fatal(err)
+	}
+	all, _ := segment.ParseRule([]byte(`{"groups":[]}`))
+	if c, err = svc.PutSegment(ctx, c.ID, all); err != nil {
+		t.Fatal(err)
+	}
+	worst := func(sms string) (int, bool) {
+		rep, err := svc.ValidateContent(ctx, content.Content{SMSText: sms, EmailSubject: "s", EmailBody: "b"}, c.ID, "")
+		if err != nil {
+			t.Fatal(err)
+		}
+		f, ok := rep.Fields[content.PathSMS].(content.SMSField)
+		if !ok {
+			b, _ := json.Marshal(rep.Fields[content.PathSMS])
+			t.Fatalf("sms field report: %s", b)
+		}
+		return f.WorstCaseRunes, rep.ValidFor["sms"]
+	}
+	base := "Merhaba {{first_name}}, {{city}} mağazamızda indirim: "
+	w, _ := worst(base)
+	sms := base + strings.Repeat("ş", 160-w)
+	if w, ok := worst(sms); w != 160 || !ok {
+		t.Fatalf("worst case %d valid %v, want exactly 160 and valid", w, ok)
+	}
+	if w, ok := worst(sms + "ş"); w != 161 || ok {
+		t.Fatalf("one more character: worst case %d valid %v, want 161 and invalid", w, ok)
+	}
+	v, err := svc.SaveContent(ctx, c.ID, content.Content{SMSText: sms, EmailSubject: "s", EmailBody: "b"}, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := svc.Approve(ctx, c.ID, "every-user", []string{"sms"}, v.Version); err != nil {
+		t.Fatal(err)
+	}
+	rows, err := pool.Query(ctx, `SELECT u.phone, u.first_name, u.city, COALESCE(c.language, u.locale)
+		FROM messages m JOIN users u ON u.id = m.user_id JOIN campaigns c ON c.id = m.campaign_id WHERE m.campaign_id = $1`, c.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer rows.Close()
+	n, longest := 0, 0
+	for rows.Next() {
+		var r delivery.Recipient
+		if err := rows.Scan(&r.Phone, &r.FirstName, &r.City, &r.Locale); err != nil {
+			t.Fatal(err)
+		}
+		out, tooLong := delivery.RenderMessage(delivery.SMS, delivery.Template{SMSText: sms}, r)
+		if l := utf8.RuneCountInString(out.Text); tooLong || l > 160 {
+			t.Fatalf("recipient %q / %q renders %d code points", r.FirstName, r.City, l)
+		} else {
+			longest = max(longest, l)
+		}
+		n++
+	}
+	t.Logf("%d recipients rendered, longest %d code points", n, longest)
+	if n < 3000 {
+		t.Fatalf("only %d recipients", n)
 	}
 }
