@@ -12,7 +12,7 @@ import (
 func FuzzRender(f *testing.F) {
 	f.Add("Merhaba {{first_name}}!", "Ayşe", "İzmir")
 	f.Add("{{ city }} {{first_name}} {{coupon}} {x}", "{{city}}", "<script>")
-	f.Add("{{{first_name}}}", "‮ilA\x00", "")
+	f.Add("{{{first_name}}}", "\u202eilA\x00", "")
 	f.Fuzz(func(t *testing.T, tmpl, first, city string) {
 		vars := Vars{"first_name": first, "city": city}
 		for _, loc := range []string{"tr", "en"} {
