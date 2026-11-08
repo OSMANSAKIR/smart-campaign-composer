@@ -141,8 +141,10 @@ func (s *Service) ProposeContent(ctx context.Context, in ContentInput, onDelta f
 			blocking = append(blocking, segment.Issue{Path: "language", Code: "language_mismatch",
 				Message: "language must be " + requested + " as requested; write the whole copy in that language and set language to " + requested})
 		}
+		nul := content.NULFields(c)
 		for _, e := range report.Errors {
-			if slices.Contains(channels, channelOf(e.Path)) {
+			// RT-8c: NUL blocks even in a field of a channel that was not requested; it could never be stored.
+			if slices.Contains(channels, channelOf(e.Path)) || slices.Contains(nul, e.Path) && e.Code == "control_character" {
 				blocking = append(blocking, segment.Issue(e))
 			}
 		}

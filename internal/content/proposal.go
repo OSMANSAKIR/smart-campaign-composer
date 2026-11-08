@@ -80,6 +80,9 @@ func ParseProposal(raw []byte) (Proposal, []Issue) {
 	if !slices.Contains(catalog.Locales, p.Language) {
 		return Proposal{}, []Issue{{Path: "language", Code: "invalid_enum_value", Message: "language must be one of: tr, en"}}
 	}
+	if issues := segment.ControlIssue("notes", p.Notes); len(issues) > 0 { // RT-8a
+		return Proposal{}, []Issue{Issue(issues[0])}
+	}
 	return p, nil
 }
 
