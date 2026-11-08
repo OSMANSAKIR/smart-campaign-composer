@@ -1,0 +1,343 @@
+{
+  "$defs": {
+    "bool_check": {
+      "additionalProperties": false,
+      "properties": {
+        "field": {
+          "enum": [
+            "cart_abandoned"
+          ],
+          "type": "string"
+        },
+        "op": {
+          "enum": [
+            "is_true",
+            "is_false"
+          ],
+          "type": "string"
+        },
+        "value": {
+          "type": "null"
+        }
+      },
+      "required": [
+        "field",
+        "op",
+        "value"
+      ],
+      "type": "object"
+    },
+    "date_absolute": {
+      "additionalProperties": false,
+      "properties": {
+        "field": {
+          "enum": [
+            "signup_at",
+            "last_login_at",
+            "last_purchase_at",
+            "last_cart_add_at"
+          ],
+          "type": "string"
+        },
+        "op": {
+          "enum": [
+            "before",
+            "after"
+          ],
+          "type": "string"
+        },
+        "value": {
+          "format": "date",
+          "type": "string"
+        }
+      },
+      "required": [
+        "field",
+        "op",
+        "value"
+      ],
+      "type": "object"
+    },
+    "date_null": {
+      "additionalProperties": false,
+      "properties": {
+        "field": {
+          "enum": [
+            "signup_at",
+            "last_login_at",
+            "last_purchase_at",
+            "last_cart_add_at"
+          ],
+          "type": "string"
+        },
+        "op": {
+          "enum": [
+            "is_null",
+            "is_not_null"
+          ],
+          "type": "string"
+        },
+        "value": {
+          "type": "null"
+        }
+      },
+      "required": [
+        "field",
+        "op",
+        "value"
+      ],
+      "type": "object"
+    },
+    "date_relative": {
+      "additionalProperties": false,
+      "properties": {
+        "field": {
+          "enum": [
+            "signup_at",
+            "last_login_at",
+            "last_purchase_at",
+            "last_cart_add_at"
+          ],
+          "type": "string"
+        },
+        "op": {
+          "enum": [
+            "within_last_days",
+            "not_within_last_days"
+          ],
+          "type": "string"
+        },
+        "value": {
+          "type": "integer"
+        }
+      },
+      "required": [
+        "field",
+        "op",
+        "value"
+      ],
+      "type": "object"
+    },
+    "enum_compare": {
+      "additionalProperties": false,
+      "properties": {
+        "field": {
+          "enum": [
+            "city",
+            "locale",
+            "loyalty_tier",
+            "favorite_category"
+          ],
+          "type": "string"
+        },
+        "op": {
+          "enum": [
+            "eq",
+            "neq"
+          ],
+          "type": "string"
+        },
+        "value": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "field",
+        "op",
+        "value"
+      ],
+      "type": "object"
+    },
+    "enum_list": {
+      "additionalProperties": false,
+      "properties": {
+        "field": {
+          "enum": [
+            "city",
+            "locale",
+            "loyalty_tier",
+            "favorite_category"
+          ],
+          "type": "string"
+        },
+        "op": {
+          "enum": [
+            "in",
+            "not_in"
+          ],
+          "type": "string"
+        },
+        "value": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "field",
+        "op",
+        "value"
+      ],
+      "type": "object"
+    },
+    "number_between": {
+      "additionalProperties": false,
+      "properties": {
+        "field": {
+          "enum": [
+            "age",
+            "purchase_count",
+            "total_spent"
+          ],
+          "type": "string"
+        },
+        "op": {
+          "enum": [
+            "between"
+          ],
+          "type": "string"
+        },
+        "value": {
+          "items": {
+            "type": "number"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "field",
+        "op",
+        "value"
+      ],
+      "type": "object"
+    },
+    "number_compare": {
+      "additionalProperties": false,
+      "properties": {
+        "field": {
+          "enum": [
+            "age",
+            "purchase_count",
+            "total_spent"
+          ],
+          "type": "string"
+        },
+        "op": {
+          "enum": [
+            "eq",
+            "neq",
+            "gt",
+            "gte",
+            "lt",
+            "lte"
+          ],
+          "type": "string"
+        },
+        "value": {
+          "type": "number"
+        }
+      },
+      "required": [
+        "field",
+        "op",
+        "value"
+      ],
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "properties": {
+    "assumptions": {
+      "items": {
+        "type": "string"
+      },
+      "type": "array"
+    },
+    "channels_requested": {
+      "enum": [
+        "sms",
+        "email",
+        "both"
+      ],
+      "type": "string"
+    },
+    "explanation": {
+      "type": "string"
+    },
+    "language": {
+      "enum": [
+        "tr",
+        "en"
+      ],
+      "type": "string"
+    },
+    "segment": {
+      "additionalProperties": false,
+      "properties": {
+        "groups": {
+          "items": {
+            "additionalProperties": false,
+            "properties": {
+              "conditions": {
+                "items": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/$defs/number_compare"
+                    },
+                    {
+                      "$ref": "#/$defs/number_between"
+                    },
+                    {
+                      "$ref": "#/$defs/enum_compare"
+                    },
+                    {
+                      "$ref": "#/$defs/enum_list"
+                    },
+                    {
+                      "$ref": "#/$defs/bool_check"
+                    },
+                    {
+                      "$ref": "#/$defs/date_relative"
+                    },
+                    {
+                      "$ref": "#/$defs/date_absolute"
+                    },
+                    {
+                      "$ref": "#/$defs/date_null"
+                    }
+                  ]
+                },
+                "type": "array"
+              }
+            },
+            "required": [
+              "conditions"
+            ],
+            "type": "object"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "groups"
+      ],
+      "type": "object"
+    },
+    "unsupported_criteria": {
+      "items": {
+        "type": "string"
+      },
+      "type": "array"
+    }
+  },
+  "required": [
+    "assumptions",
+    "channels_requested",
+    "explanation",
+    "language",
+    "segment",
+    "unsupported_criteria"
+  ],
+  "type": "object"
+}

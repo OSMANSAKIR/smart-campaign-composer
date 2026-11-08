@@ -1,0 +1,50 @@
+{
+  "additionalProperties": false,
+  "properties": {
+    "email": {
+      "additionalProperties": false,
+      "properties": {
+        "body": {
+          "type": "string"
+        },
+        "subject": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "body",
+        "subject"
+      ],
+      "type": "object"
+    },
+    "language": {
+      "enum": [
+        "tr",
+        "en"
+      ],
+      "type": "string"
+    },
+    "notes": {
+      "type": "string"
+    },
+    "sms": {
+      "additionalProperties": false,
+      "properties": {
+        "text": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "text"
+      ],
+      "type": "object"
+    }
+  },
+  "required": [
+    "email",
+    "language",
+    "notes",
+    "sms"
+  ],
+  "type": "object"
+}
