@@ -110,6 +110,17 @@ services:
     build: { context: ., target: webtest }
     network_mode: none
 
+  # ---------- `make e2e` (profile e2e): Playwright on the default network against the running stack ----------
+  e2e:
+    profiles: [e2e]
+    build: { context: ., target: e2e }
+    volumes:
+      - ./web/playwright-report:/src/web/playwright-report
+      - ./web/test-results:/src/web/test-results
+    depends_on:
+      api: { condition: service_healthy }
+      worker: { condition: service_healthy }
+
 networks:
   testnet:
     internal: true # tests must pass without internet (R-AI-2)
