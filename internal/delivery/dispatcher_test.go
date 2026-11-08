@@ -528,7 +528,10 @@ func TestAdvisoryLock_LostConnectionIsReacquired_RSND2(t *testing.T) {
 // blockingLimiter never admits a send until its context ends, like a limiter with a long queue.
 type blockingLimiter struct{}
 
-func (blockingLimiter) Wait(ctx context.Context) error { <-ctx.Done(); return ctx.Err() }
+func (blockingLimiter) Acquire(ctx context.Context) (Ticket, error) {
+	<-ctx.Done()
+	return nil, ctx.Err()
+}
 
 func TestShutdown_ReleasesLeases(t *testing.T) {
 	pool := storetest.NewDB(t)

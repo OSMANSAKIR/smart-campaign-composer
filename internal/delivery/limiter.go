@@ -8,69 +8,128 @@ import (
 	"smartcampaign/internal/clock"
 )
 
-// Limiter blocks until one more send is allowed. The sliding-window log guarantees at most N sends in any
-// 1-second window, which a token bucket with burst does not (KICKOFF §7.2).
+// Limiter admits sends. It is two-phase (N-ORC-012): Acquire blocks until a send may start and hands back a
+// Ticket; the caller reports when the request actually left the process with Ticket.Departed. The limiter
+// paces later sends from those reported departure times, not from the times it admitted them, because the
+// provider counts what arrives, and DNS, dial and scheduler delays between "admitted" and "on the wire" let
+// a reservation-based limiter put 127-141 requests into one provider-side second (V-013).
 type Limiter interface {
-	Wait(ctx context.Context) error
+	Acquire(ctx context.Context) (Ticket, error)
 }
 
-// SlidingWindowLimiter keeps the send times of the last N sends in a ring buffer. A new send may happen at
-// the earliest `window` after the send N places back, so no half-open interval [t, t+window) ever contains
-// more than N sends.
+// Ticket is one admitted send. Departed must be called exactly once, with the time the request was fully
+// written to the connection (httptrace.ClientTrace.WroteRequest), or with the current time when it never
+// left (released, paused, dial failed, cancelled). Later calls are ignored.
+type Ticket interface {
+	Departed(t time.Time)
+}
+
+// SlidingWindowLimiter allows at most N sends in any window, measured on departure.
 //
-// Wait reserves a slot under the lock and then sleeps until the slot's time. Reserving (instead of looping on
-// "is there room yet?") queues waiters in order, avoids a thundering herd when the window opens, and keeps
-// the guarantee exact even with many concurrent callers. A caller cancelled while waiting still consumes its
-// slot; that is conservative (never over the limit) and rare.
+// Admission order is the order of Acquire calls: call number s (a "slot") may start at the earliest
+// `window` after the latest departure of any slot i <= s-N. Why that bounds the provider's view: take any
+// N+1 requests and sort them by slot, s_0 < ... < s_N. Then s_0 <= s_N-N, so s_N started no earlier than
+// departure(s_0) + window, and it departed after it started. Their departures are at least `window` apart;
+// on the receiving side that gap shrinks only by the one-way network delay and the provider's decode time,
+// which the window guard (1 s + RATE_LIMIT_WINDOW_GUARD_MS) is there to cover. So no N+1 requests ever fall
+// into one second at the provider.
+//
+// A slot waits for every earlier slot up to s-N to report its departure; a stalled dial therefore holds the
+// channel back, which is the safe direction. The limiter keeps only a ring of N prefix maxima, so memory
+// does not grow with the number of sends.
 type SlidingWindowLimiter struct {
 	n      int
 	window time.Duration
 	clk    clock.Clock
 
-	mu   sync.Mutex
-	ring []time.Time // reserved send times; ring[head] is the oldest of the last n once the ring is full
-	head int
-	size int
+	mu       sync.Mutex
+	next     int               // sequence number of the next Acquire
+	frontier int               // every slot < frontier has reported its departure
+	runMax   time.Time         // latest departure among slots < frontier
+	pm       []time.Time       // pm[j%n] = latest departure among slots <= j, valid for j in [frontier-n, frontier)
+	pending  map[int]time.Time // departures of slots >= frontier that reported before their predecessors
+	changed  chan struct{}     // closed and replaced whenever frontier advances
 }
 
 // NewSlidingWindowLimiter returns a limiter allowing n sends per window. n < 1 is treated as 1.
 func NewSlidingWindowLimiter(n int, window time.Duration, clk clock.Clock) *SlidingWindowLimiter {
 	n = max(n, 1)
-	return &SlidingWindowLimiter{n: n, window: window, clk: clk, ring: make([]time.Time, n)}
+	return &SlidingWindowLimiter{
+		n: n, window: window, clk: clk,
+		pm: make([]time.Time, n), pending: map[int]time.Time{}, changed: make(chan struct{}),
+	}
 }
 
-// Wait blocks until the caller may send, or ctx ends.
-func (l *SlidingWindowLimiter) Wait(ctx context.Context) error {
+// Acquire blocks until the caller may start a send, or ctx ends. A caller whose ctx ends has still used its
+// slot: it is reported as departed now, which keeps the slot sequence moving and only ever delays others.
+func (l *SlidingWindowLimiter) Acquire(ctx context.Context) (Ticket, error) {
 	if err := ctx.Err(); err != nil {
-		return err
+		return nil, err
 	}
-	at := l.reserve()
-	d := at.Sub(l.clk.Now())
-	if d <= 0 {
-		return nil
+	l.mu.Lock()
+	s := l.next
+	l.next++
+	tk := &ticket{l: l, seq: s}
+	if s < l.n { // the first N slots have no predecessor to wait for
+		l.mu.Unlock()
+		return tk, nil
 	}
-	select {
-	case <-l.clk.After(d):
-		return nil
-	case <-ctx.Done():
-		return ctx.Err()
+	need := s - l.n
+	for l.frontier <= need {
+		ch := l.changed
+		l.mu.Unlock()
+		select {
+		case <-ch:
+		case <-ctx.Done():
+			tk.Departed(l.clk.Now())
+			return nil, ctx.Err()
+		}
+		l.mu.Lock()
 	}
+	// Read the prefix maximum now: slot `need` is overwritten in the ring only after this slot has departed.
+	startAt := l.pm[need%l.n].Add(l.window)
+	l.mu.Unlock()
+
+	if d := startAt.Sub(l.clk.Now()); d > 0 {
+		select {
+		case <-l.clk.After(d):
+		case <-ctx.Done():
+			tk.Departed(l.clk.Now())
+			return nil, ctx.Err()
+		}
+	}
+	return tk, nil
 }
 
-func (l *SlidingWindowLimiter) reserve() time.Time {
+// depart records slot seq's departure and advances the contiguous frontier as far as it can.
+func (l *SlidingWindowLimiter) depart(seq int, t time.Time) {
 	l.mu.Lock()
 	defer l.mu.Unlock()
-	at := l.clk.Now()
-	if l.size < l.n {
-		l.ring[(l.head+l.size)%l.n] = at
-		l.size++
-		return at
+	l.pending[seq] = t
+	advanced := false
+	for {
+		dt, ok := l.pending[l.frontier]
+		if !ok {
+			break
+		}
+		delete(l.pending, l.frontier)
+		if dt.After(l.runMax) {
+			l.runMax = dt
+		}
+		l.pm[l.frontier%l.n] = l.runMax
+		l.frontier++
+		advanced = true
 	}
-	// The oldest of the last n sends decides: the next one is allowed `window` after it.
-	if earliest := l.ring[l.head].Add(l.window); earliest.After(at) {
-		at = earliest
+	if advanced {
+		close(l.changed)
+		l.changed = make(chan struct{})
 	}
-	l.ring[l.head] = at
-	l.head = (l.head + 1) % l.n
-	return at
 }
+
+type ticket struct {
+	l    *SlidingWindowLimiter
+	seq  int
+	once sync.Once
+}
+
+func (t *ticket) Departed(at time.Time) { t.once.Do(func() { t.l.depart(t.seq, at) }) }

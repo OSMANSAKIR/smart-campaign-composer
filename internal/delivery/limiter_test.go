@@ -65,11 +65,13 @@ func TestLimiter_NeverMoreThanNInAnyWindow_RSND2(t *testing.T) {
 					if i < len(tc.gaps) && tc.gaps[i] > 0 {
 						<-clk.After(tc.gaps[i])
 					}
-					if err := l.Wait(context.Background()); err != nil {
-						t.Errorf("Wait: %v", err)
+					tk, err := l.Acquire(context.Background())
+					if err != nil {
+						t.Errorf("Acquire: %v", err)
 						return
 					}
 					times = append(times, clk.Now())
+					tk.Departed(clk.Now()) // instant departure: the pure sliding-window behaviour
 				}
 			}()
 			drive(clk, done)
@@ -101,7 +103,8 @@ func TestLimiter_ConcurrentCallersShareOneWindow_RSND2(t *testing.T) {
 	var wg sync.WaitGroup
 	for range callers {
 		wg.Go(func() {
-			if err := l.Wait(context.Background()); err == nil {
+			if tk, err := l.Acquire(context.Background()); err == nil {
+				tk.Departed(clk.Now())
 				finished.Add(1)
 			}
 		})
@@ -113,8 +116,9 @@ func TestLimiter_ConcurrentCallersShareOneWindow_RSND2(t *testing.T) {
 		t.Fatalf("finished %d of %d", finished.Load(), callers)
 	}
 	// 53 sends at 10 per window need exactly 5 full windows after the first burst.
-	// The driver may overshoot by a few steps after the last send, so allow a margin above the lower bound.
-	if got := clk.Now().Sub(t0); got < 5*time.Second || got > 5*time.Second+200*time.Millisecond {
+	// Departures are reported when the goroutine runs, a few driver steps after admission, and each wave
+	// inherits that lag, so allow a margin above the lower bound.
+	if got := clk.Now().Sub(t0); got < 5*time.Second || got > 5*time.Second+500*time.Millisecond {
 		t.Fatalf("elapsed %v, want 5s", got)
 	}
 }
@@ -122,20 +126,22 @@ func TestLimiter_ConcurrentCallersShareOneWindow_RSND2(t *testing.T) {
 func TestLimiter_CancelledWaitReturns_RSND2(t *testing.T) {
 	clk := clock.NewFake(t0)
 	l := NewSlidingWindowLimiter(1, time.Second, clk)
-	if err := l.Wait(context.Background()); err != nil {
+	tk, err := l.Acquire(context.Background())
+	if err != nil {
 		t.Fatal(err)
 	}
+	tk.Departed(clk.Now())
 	ctx, cancel := context.WithCancel(context.Background())
 	errc := make(chan error, 1)
-	go func() { errc <- l.Wait(ctx) }()
+	go func() { _, err := l.Acquire(ctx); errc <- err }()
 	for clk.Waiters() == 0 {
 		runtime.Gosched()
 	}
 	cancel()
 	if err := <-errc; err == nil {
-		t.Fatal("Wait returned nil after cancel")
+		t.Fatal("Acquire returned nil after cancel")
 	}
-	if err := l.Wait(ctx); err == nil {
-		t.Fatal("Wait on a cancelled context returned nil")
+	if _, err := l.Acquire(ctx); err == nil {
+		t.Fatal("Acquire on a cancelled context returned nil")
 	}
 }

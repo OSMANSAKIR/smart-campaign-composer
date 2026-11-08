@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log/slog"
 	"math/rand/v2"
+	"net/http/httptrace"
 	"os"
 	"strconv"
 	"sync"
@@ -43,7 +44,7 @@ type Dispatcher struct {
 	Metrics *metrics.Metrics
 	Log     *slog.Logger
 
-	Limiter        Limiter        // default: sliding window of RateLimit per second+WindowGuard
+	Limiter        Limiter        // default: departure-paced sliding window of RateLimit per second+WindowGuard
 	RateLimit      int            // default 100
 	WindowGuard    time.Duration  // added to the 1 s window so arrival jitter cannot push the receiver over the limit; default 25 ms
 	Policy         RetryPolicy    // default DefaultRetryPolicy
@@ -394,24 +395,33 @@ func (d *Dispatcher) handle(runCtx, bg context.Context, c Claimed) {
 		return
 	}
 
-	// Every send, retries included, passes the same limiter (R-SND-2).
+	// Every send, retries included, passes the same limiter (R-SND-2). The ticket must be settled exactly
+	// once: with the time the request was written (httptrace), or now when it never left.
 	waitStart := time.Now()
-	if err := d.Limiter.Wait(runCtx); err != nil {
+	tk, err := d.Limiter.Acquire(runCtx)
+	if err != nil {
 		d.release(bg, log, c, 0) // shutting down: hand the unsent message back
 		return
 	}
 	d.Metrics.LimiterWait.WithLabelValues(ch).Observe(time.Since(waitStart).Seconds())
 	if until := d.PausedUntil(); !until.IsZero() {
 		// Another send was throttled while we waited: do not add to the pressure, come back after the pause.
+		tk.Departed(d.Clock.Now())
 		d.release(bg, log, c, until.Sub(d.Clock.Now()))
 		return
 	}
 
+	// WroteRequest fires when the request has been handed to the kernel, which is the closest point to "on the
+	// wire" the client can observe. The limiter paces later sends from it (N-ORC-012).
+	sendCtx := httptrace.WithClientTrace(bg, &httptrace.ClientTrace{
+		WroteRequest: func(httptrace.WroteRequestInfo) { tk.Departed(d.Clock.Now()) },
+	})
 	sentAt := d.Clock.Now()
-	res, sendErr := d.Client.Send(bg, SendRequest{
+	res, sendErr := d.Client.Send(sendCtx, SendRequest{
 		Channel: d.Channel, IdempotencyKey: c.ID, To: msg.To, Text: msg.Text, Subject: msg.Subject, HTML: msg.HTML,
 		CampaignID: c.CampaignID, UserID: c.UserID, MessageID: c.ID,
 	})
+	tk.Departed(d.Clock.Now()) // no-op if the trace already reported; covers failures before the write
 	d.Metrics.SendLatency.WithLabelValues(ch).Observe(res.Latency.Seconds())
 	d.Metrics.ProviderReplies.WithLabelValues(ch, ResponseCode(res.Status, sendErr)).Inc()
 	d.afterSend(bg, log, c, res, sendErr, sentAt)
