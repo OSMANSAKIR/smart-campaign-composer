@@ -18,7 +18,9 @@ Each Agent-tool launch by the orchestrator (KICKOFF §12.0). Transcripts: `subag
 
 | Stage | Agent | Model | Isolation | Prompt | Result |
 |---|---|---|---|---|---|
-| — | — | — | — | — | — |
+| W1 | builder-llm | opus | worktree | `docs/tasks/llm.md` | running (launched 2026-11-08 10:12) |
+| W1 | builder-delivery | sonnet | worktree | `docs/tasks/delivery.md` | running (launched 2026-11-08 10:12) |
+| W1 | builder-web | sonnet | worktree | `docs/tasks/web.md` | running (launched 2026-11-08 10:12) |
 
 ## How the agents were connected
 

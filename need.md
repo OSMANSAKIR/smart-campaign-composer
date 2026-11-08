@@ -25,7 +25,7 @@ The next agent that owns the area implements the answer and updates the status.
 
 ## Digest (maintained by the orchestrator only)
 
-_Last updated: 2026-11-08 03:35 by the orchestrator (Phase 0 done; W1 awaiting owner approval)._
+_Last updated: 2026-11-08 10:10 by the orchestrator (W1 launched: llm, delivery, web builders)._
 
 **Needs the owner soon (high impact):**
 
@@ -38,6 +38,7 @@ _Last updated: 2026-11-08 03:35 by the orchestrator (Phase 0 done; W1 awaiting o
 **Answered:**
 
 - ✅ N-ORC-001: Agent-tool subagents instead of workflows (Pro plan).
+- ✅ N-ORC-011: CP1 verifiers per area (red-team on llm, reliability on delivery), spec-auditor at CP3; limit recovery via SendMessage or a fresh builder from the branch log.
 - ✅ N-ORC-008: refusal fallback beta off until smoke-live verifies it.
 - ✅ N-PLAN-003: the owner will get an API key.
 - ✅ N-PLAN-006: no extension; one build day, then verification.
@@ -398,3 +399,14 @@ _Last updated: 2026-11-08 03:35 by the orchestrator (Phase 0 done; W1 awaiting o
 - **Question for owner:** OK?
 - **Owner response:**
 - **Status:** OPEN
+
+### ✅ N-ORC-011 · W1 verification split and recovery when a builder hits the usage limit · impact: medium
+- **Date / agent / session:** 2026-11-08 10:10 · orchestrator · 01-orchestrator
+- **Requirement(s):** R-DEL-6 (AI process), all P0 IDs indirectly
+- **Context:** The owner approved W1 (three background builders in worktrees: llm/opus, delivery/sonnet, web/sonnet). Pro usage limits can stop a builder mid-task.
+- **Options:** A) One verifier per area at CP1 plus spec-auditor at CP1. B) Targeted verifiers at CP1, spec-auditor once everything is integrated.
+- **Decision taken:** B, per the owner. CP1: `llm-red-team` on the llm branch, `reliability-reviewer` on the delivery branch; web is verified by the orchestrator's diff review + `npm test`/`typecheck`/`build` at merge. `spec-auditor` runs at CP3 (Monday) after full integration. If a builder stops on the usage limit, the orchestrator resumes the same agent with `SendMessage` after the reset; if that fails, it starts a fresh builder with the task file plus `git log` of that branch so it continues from the last commit. Cost reports quote `ccusage` measurements, not estimates.
+- **Cost to change later:** low.
+- **Question for owner:** —
+- **Owner response:** ACCEPT (chat, 2026-11-08 10:09)
+- **Status:** ACCEPTED
