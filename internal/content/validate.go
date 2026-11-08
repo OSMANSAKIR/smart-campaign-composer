@@ -142,8 +142,24 @@ func Validate(c Content, cons Constraints) Report {
 		}
 		r.WorstCase[name] = a
 	}
+	// RT-8c: NUL cannot be stored (Postgres rejects it in text and jsonb), whichever channel's field holds
+	// it, so it invalidates the whole copy. The per-field control_character error is already in Errors.
+	if len(NULFields(c)) > 0 {
+		r.ValidFor["sms"], r.ValidFor["email"] = false, false
+	}
 	r.Valid = len(r.Errors) == 0
 	return r
+}
+
+// NULFields lists the content fields (report paths) that contain a NUL character.
+func NULFields(c Content) []string {
+	var out []string
+	for _, f := range []struct{ path, text string }{{PathSMS, c.SMSText}, {PathSubject, c.EmailSubject}, {PathBody, c.EmailBody}} {
+		if strings.ContainsRune(f.text, 0) {
+			out = append(out, f.path)
+		}
+	}
+	return out
 }
 
 // worstCase returns the worst-case values for a channel, falling back to the shared map. A variable with no

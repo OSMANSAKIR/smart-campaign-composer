@@ -79,7 +79,7 @@ func strictDecodeAt(raw []byte, s spec, out any, root string) []Issue {
 		return []Issue{{Path: root, Code: "invalid_json", Message: "unexpected data after the JSON value"}}
 	}
 	if issues := walk(tree, s, root); len(issues) > 0 {
-		return issues
+		return CapIssues(issues, MaxIssues) // RT-1: a 64 KB answer must not become thousands of issues
 	}
 	// The tree matched the spec, so this cannot fail on shape; DisallowUnknownFields is a second guard.
 	typed := json.NewDecoder(bytes.NewReader(raw))
@@ -126,8 +126,10 @@ func walk(v any, s spec, path string) []Issue {
 		slices.Sort(keys)
 		for _, k := range keys {
 			if _, known := s.props[k]; !known {
-				issues = append(issues, Issue{Path: join(path, k), Code: "unknown_property",
-					Message: fmt.Sprintf("unknown property %q; allowed: %s", k, propNames(s))})
+				// RT-5: the key is model-chosen; quote at most 40 sanitized runes of it.
+				safe := SafeText(k, MaxQuotedRunes)
+				issues = append(issues, Issue{Path: join(path, safe), Code: "unknown_property",
+					Message: fmt.Sprintf("unknown property %q; allowed: %s", safe, propNames(s))})
 			}
 		}
 		for _, k := range propNamesSorted(s) {

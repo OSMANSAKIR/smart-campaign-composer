@@ -9,6 +9,7 @@ import (
 	"slices"
 
 	"smartcampaign/internal/catalog"
+	"smartcampaign/internal/segment"
 )
 
 // Proposal is the model's content answer (content.wire.schema.json).
@@ -68,7 +69,7 @@ func ParseProposal(raw []byte) (Proposal, []Issue) {
 			}
 			return 0
 		})
-		return Proposal{}, issues
+		return Proposal{}, capIssues(issues)
 	}
 	var p Proposal
 	strict := json.NewDecoder(bytes.NewReader(raw))
@@ -79,11 +80,25 @@ func ParseProposal(raw []byte) (Proposal, []Issue) {
 	if !slices.Contains(catalog.Locales, p.Language) {
 		return Proposal{}, []Issue{{Path: "language", Code: "invalid_enum_value", Message: "language must be one of: tr, en"}}
 	}
+	if issues := segment.ControlIssue("notes", p.Notes); len(issues) > 0 { // RT-8a
+		return Proposal{}, []Issue{Issue(issues[0])}
+	}
 	return p, nil
 }
 
+// capIssues keeps the first segment.MaxIssues issues plus one too_many_errors issue (RT-1).
+func capIssues(issues []Issue) []Issue {
+	if len(issues) <= segment.MaxIssues {
+		return issues
+	}
+	is := segment.TooManyIssue(len(issues) - segment.MaxIssues)
+	return append(issues[:segment.MaxIssues:segment.MaxIssues], Issue{Code: is.Code, Message: is.Message})
+}
+
 func checkObject(prefix string, obj map[string]json.RawMessage, props map[string]string) []Issue {
+	// Keys are model-chosen: quote at most 40 sanitized runes of them (RT-5).
 	path := func(k string) string {
+		k = segment.SafeText(k, segment.MaxQuotedRunes)
 		if prefix == "" {
 			return k
 		}
@@ -93,7 +108,7 @@ func checkObject(prefix string, obj map[string]json.RawMessage, props map[string
 	for k, v := range obj {
 		want, known := props[k]
 		if !known {
-			out = append(out, Issue{Path: path(k), Code: "unknown_property", Message: fmt.Sprintf("unknown property %q", k)})
+			out = append(out, Issue{Path: path(k), Code: "unknown_property", Message: fmt.Sprintf("unknown property %q", segment.SafeText(k, segment.MaxQuotedRunes))})
 			continue
 		}
 		if got := rawKind(v); got != want {

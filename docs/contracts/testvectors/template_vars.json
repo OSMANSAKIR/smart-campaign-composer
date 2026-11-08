@@ -1,5 +1,5 @@
 {
-  "description": "Shared personalization vectors (R-CNT-3). `parse` is run by Go (internal/content) and Vitest (web); `render` by Go. Grammar: a variable is `{{`, optional whitespace, a name without braces or whitespace, optional whitespace, `}}`. Allowed names: first_name, city. A well-formed variable with another name is `unknown_variable`. After removing well-formed variables, any remaining `{` or `}` is `malformed_variable` (braces are reserved for variables). `variables` lists allowed names in order of first appearance, without duplicates. Rendering is a single pass: substituted values are never re-scanned. Values are trimmed and stripped of control characters (Unicode Cc); a value that is then empty or longer than max_value_runes is replaced by the locale's fallback (need.md N-ORC-005). Format characters such as U+202E are kept.",
+  "description": "Shared personalization vectors (R-CNT-3). `parse` is run by Go (internal/content) and Vitest (web); `render` by Go. Grammar: a variable is `{{`, optional whitespace, a name without braces or whitespace, optional whitespace, `}}`. Allowed names: first_name, city. A well-formed variable with another name is `unknown_variable`. After removing well-formed variables, any remaining `{` or `}` is `malformed_variable` (braces are reserved for variables). `variables` lists allowed names in order of first appearance, without duplicates. Rendering is a single pass: substituted values are never re-scanned. Values are trimmed and stripped of control characters (Unicode Cc), of the line/paragraph separators U+2028 and U+2029 (they would break the single-line subject) and of the bidirectional controls U+202A-U+202E and U+2066-U+2069 (they could reorder the text around the value); a value that is then empty or longer than max_value_runes is replaced by the locale's fallback (need.md N-ORC-005). Other format characters (for example zero-width space) are kept.",
   "allowed": ["first_name", "city"],
   "max_value_runes": 20,
   "fallbacks": {
@@ -34,7 +34,9 @@
     { "name": "name_exactly_20_runes_kept", "template": "Hi {{first_name}}", "locale": "en", "vars": { "first_name": "Abcdefghijklmnopqrşt", "city": "Bursa" }, "expected": "Hi Abcdefghijklmnopqrşt" },
     { "name": "name_21_runes_fallback", "template": "Hi {{first_name}}", "locale": "en", "vars": { "first_name": "Abcdefghijklmnopqrstu", "city": "Bursa" }, "expected": "Hi Valued customer" },
     { "name": "control_characters_stripped", "template": "Hi {{first_name}}", "locale": "en", "vars": { "first_name": "Ay\u0000şe\u0007", "city": "Bursa" }, "expected": "Hi Ayşe" },
-    { "name": "rtl_override_kept_literally", "template": "Hi {{first_name}}", "locale": "en", "vars": { "first_name": "‮ilA", "city": "Bursa" }, "expected": "Hi ‮ilA" },
+    { "name": "rtl_override_stripped", "template": "Hi {{first_name}}", "locale": "en", "vars": { "first_name": "\u202eilA", "city": "Bursa" }, "expected": "Hi ilA" },
+    { "name": "bidi_embedding_and_isolate_controls_stripped", "template": "Hi {{first_name}}", "locale": "en", "vars": { "first_name": "\u202aA\u202bl\u202ci\u202d\u2066A\u2067l\u2068i\u2069", "city": "Bursa" }, "expected": "Hi AliAli" },
+    { "name": "line_and_paragraph_separators_stripped", "template": "Hi {{first_name}}", "locale": "en", "vars": { "first_name": "Ali\u2028Bcc\u2029X", "city": "Bursa" }, "expected": "Hi AliBccX" },
     { "name": "missing_var_uses_fallback", "template": "{{city}}", "locale": "tr", "vars": { "first_name": "Ali" }, "expected": "Türkiye" }
   ]
 }

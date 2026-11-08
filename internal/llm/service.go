@@ -121,6 +121,10 @@ func (s *Service) ProposeContent(ctx context.Context, in ContentInput, onDelta f
 		return ContentResult{}, fmt.Errorf("llm: prompts: %w", err)
 	}
 	channels := normalizeChannels(in.Channels)
+	requested := in.Language
+	if !slices.Contains(catalog.Locales, requested) {
+		requested = "tr" // same default as the prompt and content.Validate
+	}
 	cons := content.Constraints{Locale: in.Language, WorstCase: in.WorstCase, WorstCaseByChannel: in.WorstCaseByChannel}
 	var res ContentResult
 	validate := func(raw []byte) []segment.Issue {
@@ -131,8 +135,16 @@ func (s *Service) ProposeContent(ctx context.Context, in ContentInput, onDelta f
 		c := p.Content()
 		report := content.Validate(c, cons)
 		var blocking []segment.Issue
+		// RT-6: the copy must be in the language that was asked for; the model's own "language" field is
+		// otherwise never compared with the request, so wrong-language copy would reach the approver.
+		if p.Language != requested {
+			blocking = append(blocking, segment.Issue{Path: "language", Code: "language_mismatch",
+				Message: "language must be " + requested + " as requested; write the whole copy in that language and set language to " + requested})
+		}
+		nul := content.NULFields(c)
 		for _, e := range report.Errors {
-			if slices.Contains(channels, channelOf(e.Path)) {
+			// RT-8c: NUL blocks even in a field of a channel that was not requested; it could never be stored.
+			if slices.Contains(channels, channelOf(e.Path)) || slices.Contains(nul, e.Path) && e.Code == "control_character" {
 				blocking = append(blocking, segment.Issue(e))
 			}
 		}
@@ -228,6 +240,9 @@ func (s *Service) run(ctx context.Context, j job) (Meta, error) {
 		default:
 			issues = j.validate(resp.JSON)
 		}
+		// RT-1: whatever the validators produced, at most MaxIssues go to the repair turn, the client
+		// (Error.Details), the log and the llm_calls row.
+		issues = segment.CapIssues(issues, segment.MaxIssues)
 
 		if len(issues) == 0 {
 			call.Outcome = "valid"
@@ -371,10 +386,12 @@ func toSegmentIssues(in []content.Issue) []segment.Issue {
 	return out
 }
 
-// repairMessage sends the structured errors back. The messages are the validators' own text (they never
-// echo model values), so a hostile value cannot use the repair turn to inject instructions.
+// repairMessage sends the structured errors back, at most segment.MaxIssues of them. Messages are the
+// validators' own text; the few that name model-chosen text (an unknown key or variable) quote at most 40
+// sanitized runes (segment.SafeText), so a hostile value cannot use the repair turn, a user turn, to replay
+// a long instruction.
 func repairMessage(issues []segment.Issue) string {
-	b, _ := json.Marshal(issues)
+	b, _ := json.Marshal(segment.CapIssues(issues, segment.MaxIssues))
 	return "Your previous answer failed validation. The errors, as JSON [{path, code, message}]:\n" + string(b) +
 		"\nReturn the complete corrected JSON object. Fix exactly these problems, keep the brief's intent, and follow every rule from the instructions."
 }
@@ -396,7 +413,10 @@ func issueCodes(issues []segment.Issue) string {
 	return strings.Join(codes, ",")
 }
 
+// truncateErr makes s storable in llm_calls.error: valid UTF-8 without NUL (Postgres text rejects NUL, and an
+// issue path can carry a model-chosen key), at most 500 bytes (RT-7).
 func truncateErr(s string) string {
+	s = pgText(s)
 	if len(s) <= 500 {
 		return s
 	}

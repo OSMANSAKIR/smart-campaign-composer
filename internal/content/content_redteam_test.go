@@ -68,7 +68,9 @@ func TestRedTeam_HostileNamesRender_RCNT3(t *testing.T) {
 		{"template name", "{{city}}", "{{city}}"},
 		{"script name", "<script>alert(1)</script>", "Değerli müşterimiz"}, // 25 runes → fallback
 		{"short script name", "<script>", "<script>"},
-		{"rtl override (kept by contract)", "\u202eilA", "\u202eilA"},
+		{"rtl override (stripped, RT-9)", "\u202eilA", "ilA"},
+		{"all bidi controls", "\u202aA\u202bl\u202ci\u202d\u2066A\u2067l\u2068i\u2069", "AliAli"},
+		{"line separators", "Ali\u2028Bcc\u2029X", "AliBccX"},
 		{"40-rune name", "Hüseyin Muhammed Abdurrahman Abdülkerim", "Değerli müşterimiz"},
 		{"20-rune name", name20, name20},
 		{"21 runes with a control char", "Abdurrahman\u0007 Kerimcan", name20},
@@ -169,7 +171,7 @@ func TestRedTeam_SubjectStaysSingleLineAfterPersonalization_RCNT2(t *testing.T) 
 	}
 	got := Render("{{first_name}}, fırsat", "tr", Vars{"first_name": "Ali\u2028Bcc"})
 	if strings.ContainsAny(got, "\u2028\u2029\u0085") {
-		t.Skipf("FINDING RT-4: rendered subject %q contains a line separator the validator forbids in the template", got)
+		t.Fatalf("RT-4: rendered subject %q contains a line separator the validator forbids in the template", got)
 	}
 }
 
@@ -220,6 +222,6 @@ func TestRedTeam_UnknownVariableIssuesUnbounded_RCNT3(t *testing.T) {
 	enc, _ := json.Marshal(r.Errors)
 	t.Logf("SMS of %d bytes → %d errors, %d bytes of JSON", len(sms), len(r.Errors), len(enc))
 	if len(r.Errors) > 50 {
-		t.Skipf("FINDING RT-1: %d unknown_variable issues (%d bytes) from one field; ParseVariables should cap them", len(r.Errors), len(enc))
+		t.Fatalf("RT-1: %d unknown_variable issues (%d bytes) from one field; ParseVariables should cap them", len(r.Errors), len(enc))
 	}
 }

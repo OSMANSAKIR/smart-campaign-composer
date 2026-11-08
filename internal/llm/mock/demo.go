@@ -60,8 +60,12 @@ func (d *Demo) Generate(ctx context.Context, req llm.Request, onDelta func(llm.D
 	var out any
 	if req.Task == llm.PurposeContent {
 		lang := "tr"
-		if m := languageRE.FindStringSubmatch(first); m != nil {
-			lang = m[1]
+		// Only the header after the brief counts: the brief is user text and may contain a "Language: en"
+		// line of its own (RT-6). The brief is escaped, so the first "</brief>" is the real one.
+		if _, after, ok := strings.Cut(first, "</brief>"); ok {
+			if m := languageRE.FindStringSubmatch(after); m != nil {
+				lang = m[1]
+			}
 		}
 		out = DemoContent(brief, lang)
 	} else {
