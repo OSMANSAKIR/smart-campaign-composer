@@ -204,6 +204,7 @@ export interface CampaignSummary {
   audience_total: number | null
   created_at: string
   approved_at: string | null
+  scheduled_at: string | null
   completed_at: string | null
 }
 

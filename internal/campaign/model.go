@@ -37,6 +37,7 @@ type Summary struct {
 	AudienceTotal *int       `json:"audience_total"`
 	CreatedAt     time.Time  `json:"created_at"`
 	ApprovedAt    *time.Time `json:"approved_at"`
+	ScheduledAt   *time.Time `json:"scheduled_at"` // set when approved with send_at (§9.6)
 	CompletedAt   *time.Time `json:"completed_at"`
 }
 

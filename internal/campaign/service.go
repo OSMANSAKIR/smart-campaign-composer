@@ -108,14 +108,18 @@ func (s *Service) List(ctx context.Context, limit int, cursor string) ([]Summary
 		args = append(args, at, id)
 	}
 	rows, err := s.Pool.Query(ctx, `SELECT id::text, brief, status, coalesce(language, 'tr'), channels,
-			(audience->>'total')::int, created_at, approved_at, completed_at
+			(audience->>'total')::int, created_at, approved_at, scheduled_at, completed_at
 		FROM campaigns `+where+` ORDER BY created_at DESC, id DESC LIMIT $1`, args...)
 	if err != nil {
 		return nil, "", err
 	}
 	items, err := pgx.CollectRows(rows, func(r pgx.CollectableRow) (Summary, error) {
 		var x Summary
-		err := r.Scan(&x.ID, &x.Brief, &x.Status, &x.Language, &x.Channels, &x.AudienceTotal, &x.CreatedAt, &x.ApprovedAt, &x.CompletedAt)
+		err := r.Scan(&x.ID, &x.Brief, &x.Status, &x.Language, &x.Channels, &x.AudienceTotal, &x.CreatedAt, &x.ApprovedAt, &x.ScheduledAt, &x.CompletedAt)
+		if x.ScheduledAt != nil { // RFC 3339 UTC on the wire, like the campaign body
+			u := x.ScheduledAt.UTC()
+			x.ScheduledAt = &u
+		}
 		return x, err
 	})
 	if err != nil {

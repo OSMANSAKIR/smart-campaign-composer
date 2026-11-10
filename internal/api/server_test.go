@@ -217,3 +217,41 @@ func TestSystemStatus_StaleAndDeadWorkers_ROBS3(t *testing.T) {
 		}
 	}
 }
+
+// TestList_CarriesScheduledAt_B1: a scheduled campaign's list item has its send time (UTC), the others null.
+func TestList_CarriesScheduledAt_B1(t *testing.T) {
+	pool := storetest.NewDB(t)
+	srv := httptest.NewServer(New(Deps{Pool: pool, Metrics: metrics.New(), LLM: llm.NewService(mock.NewDemo(), nil),
+		ProviderURL: "http://127.0.0.1:1", Version: "test"}).Handler())
+	t.Cleanup(srv.Close)
+	var sched, draft string
+	if err := pool.QueryRow(context.Background(), `INSERT INTO campaigns (brief, status, approved_at, scheduled_at)
+		VALUES ('scheduled', 'scheduled', now(), '2099-01-01T09:30:00Z') RETURNING id::text`).Scan(&sched); err != nil {
+		t.Fatal(err)
+	}
+	if err := pool.QueryRow(context.Background(), `INSERT INTO campaigns (brief) VALUES ('draft') RETURNING id::text`).Scan(&draft); err != nil {
+		t.Fatal(err)
+	}
+	status, _, b := do(t, "GET", srv.URL+"/api/campaigns", "", nil)
+	var page struct {
+		Items []struct {
+			ID          string  `json:"id"`
+			ScheduledAt *string `json:"scheduled_at"`
+		} `json:"items"`
+	}
+	if err := json.Unmarshal(b, &page); err != nil || status != 200 || len(page.Items) != 2 {
+		t.Fatalf("list: %d %s", status, b)
+	}
+	for _, it := range page.Items {
+		switch it.ID {
+		case sched:
+			if it.ScheduledAt == nil || *it.ScheduledAt != "2099-01-01T09:30:00Z" {
+				t.Fatalf("scheduled item: %s", b)
+			}
+		case draft:
+			if !strings.Contains(string(b), `"scheduled_at":null`) || it.ScheduledAt != nil {
+				t.Fatalf("draft item: %s", b)
+			}
+		}
+	}
+}

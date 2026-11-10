@@ -68,7 +68,12 @@ onMounted(() => load())
             <td>
               <a :href="href(c)" class="brief-cell">{{ c.brief }}</a>
             </td>
-            <td><StatusPill :status="c.status" /></td>
+            <td>
+              <StatusPill :status="c.status" />
+              <div v-if="c.status === 'scheduled' && c.scheduled_at" class="muted num" data-testid="scheduled-at">
+                Scheduled for {{ formatTime(c.scheduled_at) }}
+              </div>
+            </td>
             <td class="num">{{ c.audience_total === null ? '—' : formatInt(c.audience_total) }}</td>
             <td class="muted num">{{ formatTime(c.created_at) }}</td>
           </tr>

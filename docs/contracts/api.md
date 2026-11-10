@@ -101,7 +101,8 @@ Every non-2xx JSON response:
 `send_variant` (`a` | `b` | `ab` | null before approve), `scheduled_at`, `cancelled_at`: v2, §9.
 
 **Campaign summary** (list item): `{ "id", "brief", "status", "language", "channels": [], "audience_total": 231 | null,
-"created_at", "approved_at", "completed_at" }`.
+"created_at", "approved_at", "scheduled_at", "completed_at" }`. `scheduled_at` is RFC 3339 UTC, `null` unless the
+campaign was approved with `send_at` (§9.6).
 
 ## 3. State machines
 
