@@ -34,7 +34,7 @@ Phase 2 (owner decisions 2026-11-10) added B-1, B-2 and F2–F8 below; all green
 | R-FLOW-3 | green | TestApprove_Gating_RFLOW3, TestApprove_ConcurrentOneWins_RFLOW3, approveGate.test.ts, e2e | S3: 100 racers → `202:1 409:99`, replay byte-identical; 10 campaigns at once all succeed |
 | R-FLOW-4 | green | TestDispatcher_EndToEnd_RFLOW4, e2e | S1; S2 at 25 000 users with a worker SIGKILLed: DB sent = provider accepted |
 | R-FLOW-5 | green | TestEvents_SnapshotThenDone_RFLOW5, TestHub_SharedPollAndDone_RFLOW5 | S6: 50 subscribers, 240 reconnects, 0 backwards counts, 50/50 end on DB counts |
-| R-AUD-1 | green | TestCompile_ValueNeverInSQL_RAUD1, TestRedTeam_SQLInjectionInert_RAUD1, **TestCount_EveryAcceptedRuleRunsOnPostgres_RAUD1** (361 accepted rules executed) | 45-case hostile corpus; 2 min fuzz, 5.9 M executions |
+| R-AUD-1 | green | TestCompile_ValueNeverInSQL_RAUD1, **TestErrorModel_RAUD1** (strict segment edit over HTTP), TestRedTeam_SQLInjectionInert_RAUD1, **TestCount_EveryAcceptedRuleRunsOnPostgres_RAUD1** (361 accepted rules executed) | 45-case hostile corpus; 2 min fuzz, 5.9 M executions |
 | R-AUD-2 | green | TestApprove_EnqueuesConsentedOnly_RAUD2, TestClaim_ConsentRevoked_Skipped_RAUD2, **TestApprove_ConsentProperty_RAUD2** (30 random rule × consent × channel rounds) | I2 = 0 in S1, S2, S7 |
 | R-CNT-1 | green | TestCount_SharedVectors_RCNT1, TestRedTeam_SMSBoundaryAfterPersonalization_RCNT1, **TestApprove_SMSFitsForEveryRecipient_RCNT1** (3530 recipients, longest 159) | 300-char SMS → repair or 422 |
 | R-CNT-2 | green | TestValidate_Subject_RCNT2, TestRedTeam_SubjectSingleLine_RCNT2 | same repair / 422 path |

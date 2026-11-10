@@ -265,7 +265,7 @@ func TestRedTeam_StrictDecodeIssuesUnbounded_RAI1(t *testing.T) {
 
 // RT-2 (fixed): PUT /api/campaigns/{id}/segment now decodes the rule with ParseRule (internal/api putSegment),
 // so these bodies are rejected with paths instead of silently becoming a rule that targets everyone. The HTTP
-// side is covered by TestErrorModel_ROBS1 in internal/api.
+// side is covered by TestErrorModel_RAUD1 in internal/api.
 func TestRedTeam_ManualEditMustBeStrict_RAUD1(t *testing.T) {
 	bodies := map[string]string{
 		"misspelled groups": `{"group":[{"conditions":[{"field":"city","op":"eq","value":"Ankara"}]}]}`,

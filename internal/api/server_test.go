@@ -70,7 +70,9 @@ func do(t *testing.T, method, url, body string, header map[string]string) (int, 
 	return resp.StatusCode, resp.Header, b
 }
 
-func TestErrorModel_ROBS1(t *testing.T) {
+// TestErrorModel_RAUD1: bad input gets the contract's error model; the segment edit is strict (a misspelled or
+// case-folded rule key is a 422, never a rule that targets everyone). R-AUD-1 is the requirement behind it.
+func TestErrorModel_RAUD1(t *testing.T) {
 	srv := newTestServer(t)
 	status, _, b := do(t, "POST", srv.URL+"/api/campaigns", `{"brief":"İstanbul'daki kullanıcılara indirim"}`, nil)
 	var created struct {

@@ -259,7 +259,6 @@ Known gaps (P2, from the CP3 spec audit in [`docs/review/traceability.md`](docs/
   counts only); worker-metric comparison in S2/S7 (a killed worker loses its counters, so I5 compares DB and
   provider there); a tighter goroutine bound in S6 (+10 allowed).
 - The real-model eval has three adversarial briefs; more would make S4 stronger.
-- `TestErrorModel_ROBS1` is named after R-OBS-1 but tests the error model.
 - Dashboard updates by polling (500 ms per running campaign); LISTEN/NOTIFY would scale to many campaigns.
 
 ## Time spent
