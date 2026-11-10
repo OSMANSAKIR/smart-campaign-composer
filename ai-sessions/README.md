@@ -9,7 +9,7 @@ Raw exports and harvested transcripts stay in the gitignored `_raw/`; only sanit
 
 | Session | Role | Model / effort | Date, duration | Purpose | Key outcomes | What was validated, and how |
 |---|---|---|---|---|---|---|
-| 00-planning | planning | Opus 5.5 | 2026-11-08 ~00:00–02:40 | Turn the case into a build brief with the owner | `KICKOFF.md`, `need.md`, project settings and plugins | Claude Code headless probe for the `claudecode` adapter (structured output, 1.7 s) |
+| 00-planning | planning | Opus 5.5 | 2026-11-05 – 2026-11-11 (with long breaks; build brief 2026-11-08 ~00:00–02:40) | Turn the case into a build brief with the owner; later the owner's review desk: independent checks of the orchestrator's reports, need.md answers, live-run review, submission | `KICKOFF.md`, `need.md`, project settings and plugins | Claude Code headless probe for the `claudecode` adapter (structured output, 1.7 s) |
 | 01-orchestrator | orchestrator | Opus 5.5 | 2026-11-08 02:40– | Phase 0: contracts, skeleton, compose, task files; W1–W5 orchestration | see commits `docs:`/`feat:`/`build:` of 2026-11-08 | `make test` green in containers; compose healthy; Go and Vitest run the same test vectors; golangci-lint clean |
 
 ## Agent launch log
@@ -39,6 +39,7 @@ and base64 are dropped. `make sanitize-check` fails if a file listed here is mis
 
 | File | Session / agent |
 |---|---|
+| `sessions/00-planning.md` | 00-planning (owner's planning and review session; includes the compacted history) |
 | `sessions/01-orchestrator.md` | 01-orchestrator (main session, all stages; includes the compacted history) |
 | `subagents/02-builder-llm.md` | W1 builder-llm |
 | `subagents/03-builder-delivery.md` | W1 builder-delivery |
@@ -53,8 +54,9 @@ and base64 are dropped. `make sanitize-check` fails if a file listed here is mis
 | `subagents/08-builder-delivery-phase2.md` | Phase 2 builder-delivery |
 | `subagents/08-builder-web-phase2.md` | Phase 2 builder-web |
 
-`00-planning` ran in the home directory, outside this project's transcript folder; its export is the owner's
-`/export` (KICKOFF §13 step 1).
+`00-planning` ran in the home directory, outside this project's transcript folder, so `harvest-sessions` does
+not find it; it was converted from its JSONL with `scripts/transcript2md.py` and sanitized the same way. The
+export ends at the submission commit; the few turns after it (push, CI) are not in it.
 
 ## How the agents were connected
 
