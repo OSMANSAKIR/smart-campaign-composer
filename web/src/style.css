@@ -124,6 +124,13 @@ input[type='checkbox'] { width: 18px; height: 18px; accent-color: var(--accent);
 .stepper .n { width: 24px; height: 24px; border-radius: 50%; display: grid; place-items: center; font-size: 0.8rem; background: var(--line-soft); color: var(--ink-2); flex: none; }
 .stepper button[aria-current='step'] .n { background: var(--accent); color: #fff; }
 .stepper .done .n { background: var(--ok-soft); color: var(--ok); }
+/* Phone width: four buttons in one row do not fit (the last one was clipped by overflow: hidden), so two rows of two. */
+@media (max-width: 520px) {
+  .stepper { display: grid; grid-template-columns: 1fr 1fr; }
+  .stepper button { padding: 10px 12px; border-bottom: 1px solid var(--line-soft); }
+  .stepper li:nth-child(even) button { border-right: 0; }
+  .stepper li:nth-last-child(-n + 2) button { border-bottom: 0; }
+}
 
 /* audience */
 .counts { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 12px; }

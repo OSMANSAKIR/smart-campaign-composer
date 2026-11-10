@@ -141,3 +141,22 @@ test('rule editor: change the city, the count changes, save, "Edited" badge [F2]
   await expect(rules).toContainText('Ankara')
   expect(await matchedCount()).not.toBe(before)
 })
+
+test('composer step bar fits a 390 px viewport: the last step is fully visible [R-FLOW-1]', async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 })
+  await page.goto('/#/new')
+  const last = page.getByRole('navigation', { name: 'Campaign steps' }).getByRole('button', { name: /Approve/ })
+  await expect(last).toBeVisible()
+  const box = await last.boundingBox()
+  expect(box).not.toBeNull()
+  // The whole button lies inside the viewport, and the page itself does not scroll sideways.
+  expect(box!.x).toBeGreaterThanOrEqual(0)
+  expect(box!.x + box!.width).toBeLessThanOrEqual(390)
+  // Its label is not cut off inside the button either.
+  const label = await last.evaluate((el) => {
+    const span = el.querySelector('span:not(.n)') as HTMLElement
+    return span.getBoundingClientRect().right <= el.getBoundingClientRect().right
+  })
+  expect(label).toBe(true)
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true)
+})
