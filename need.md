@@ -25,14 +25,14 @@ The next agent that owns the area implements the answer and updates the status.
 
 ## Digest (maintained by the orchestrator only)
 
-_Last updated: 2026-11-10 23:20 by the orchestrator (owner answered every open entry; phase-2 features started)._
+_Last updated: 2026-11-10 23:49 by the orchestrator (phase 2 merged; new entries N-ORC-014..016, N-LLM-006, N-WEB-005)._
 
 **Needs the owner soon (high impact):** none.
 
-**Change requested, being implemented tonight:**
+**Review when convenient (phase 2, 2026-11-10):** N-ORC-014 (split formula), N-ORC-015 (cancel in-flight
+bound), N-ORC-016 (schedule: frozen audience, consent at send time), N-LLM-006, N-WEB-005 (low).
 
-- 🔁 N-WEB-001 → B: catalog shape in api.md and a manual segment-rule editor (phase-2 F2).
-- 🔁 N-LLM-005 → keep B, but the response flags an unrecorded cost and the UI shows a notice (phase-2 F6).
+**Implemented tonight:** ✅ N-WEB-001 → B (manual rule editor, F2), ✅ N-LLM-005 change (cost_recorded, F6).
 
 **Answered:** every other entry is ✅ ACCEPTED or RESOLVED as of 2026-11-10, including N-PLAN-009 (A:
 private GitHub repo now, public at submission; noreply commit address) and N-PLAN-005 (keep code points;
@@ -417,7 +417,7 @@ encoding and segments shown as information).
 - **Owner response:** ACCEPT (chat, 2026-11-08 10:09)
 - **Status:** ACCEPTED
 
-### 🔁 N-WEB-001 · Catalog response shape is not in the contract · impact: low
+### ✅ N-WEB-001 · Catalog response shape is not in the contract · impact: low
 - **Date / agent / session:** 2026-11-08 10:20 · web · builder-web (W1 subagent)
 - **Requirement(s):** R-FLOW-1
 - **Context:** `GET /api/catalog` is listed in api.md without a shape. P0 UI does not need it (audience uses server rendering; limits come from the validation report).
@@ -426,7 +426,8 @@ encoding and segments shown as information).
 - **Cost to change later:** ~1 h (typed catalog + rule form).
 - **Question for owner:** —
 - **Owner response:** CHANGE → B (chat, 2026-11-10): define the catalog shape in api.md and build manual segment-rule editing in the UI (field / operator / value from the catalog, server validation, audience recomputed).
-- **Status:** CHANGE REQUESTED
+- **Implemented (2026-11-10, phase 2 F2):** catalog shape in api.md §9.1; `POST /api/segment/preview` (same validator, never saves); the stored segment keeps `original_rule` and `edited_at`; catalog-driven editor in the audience step with debounced preview and an "Edited" badge. Tests: `TestManualRuleEdit_KeepsClaudesRuleForAudit_RFLOW1`, `TestPreviewSegment_SameValidatorNeverSaves_RFLOW1`, `TestSegmentPreview_HTTP_RFLOW1`, web `RuleEditor.test.ts`, e2e rule-editor test, acceptance A9. DECISIONS D-19.
+- **Status:** RESOLVED
 
 ### ✅ N-WEB-002 · Does saving content move the campaign to content_ready? · impact: low
 - **Date / agent / session:** 2026-11-08 10:20 · web · builder-web (W1 subagent)
@@ -585,7 +586,7 @@ encoding and segments shown as information).
 - **Owner response:** ACCEPT (chat, 2026-11-10).
 - **Status:** ACCEPTED
 
-### 🔁 N-LLM-005 · A failed llm_calls insert does not fail the generation · impact: low
+### ✅ N-LLM-005 · A failed llm_calls insert does not fail the generation · impact: low
 - **Date / agent / session:** 2026-11-08 11:10 · llm · builder-llm (W1 subagent)
 - **Requirement(s):** R-AI-1, R-OBS-2
 - **Context:** One row per call is required; the database can fail independently of the model call.
@@ -594,7 +595,8 @@ encoding and segments shown as information).
 - **Cost to change later:** ~5 min.
 - **Question for owner:** OK?
 - **Owner response:** CHANGE (chat, 2026-11-10): keep B (the generation is not failed), but the user must be told. When the llm_calls row cannot be written, the response carries a flag and the UI shows a non-blocking notice such as "The content is ready, but its cost could not be recorded."
-- **Status:** CHANGE REQUESTED
+- **Implemented (2026-11-10, phase 2 F6):** `llm.cost_recorded` on the segment response and the content/refine `result` event; non-blocking notice in the UI. Tests: `TestCostRecordedFlag_NLLM005`, `TestCostRecorded_NLLM005`, web `panels.test.ts`. DECISIONS D-20.
+- **Status:** RESOLVED
 
 ### ✅ N-ORC-012 · How the per-channel rate bound is guaranteed · impact: high
 - **Date / agent / session:** 2026-11-08 · orchestrator · 01-orchestrator (after CP1 reliability review)
@@ -640,3 +642,58 @@ encoding and segments shown as information).
 - **Question for owner:** —
 - **Owner response:** ACCEPT (chat, 2026-11-10).
 - **Status:** ACCEPTED
+
+### 🟡 N-ORC-014 · A/B split formula · impact: medium
+- **Date / agent / session:** 2026-11-10 23:15 · orchestrator + builder-delivery · 01-orchestrator (phase 2)
+- **Requirement(s):** B-2
+- **Context:** The owner asked for a deterministic hash(campaign_id, user_id) mod 2.
+- **Options:** A) `md5` of `campaign_id:user_id`, first byte mod 2, in the enqueue SQL; B) Postgres `hashtextextended` (internal, not specified across versions); C) assign in Go after enqueue (a second pass).
+- **Decision taken:** A. Built in, set-based in the same statement, recomputable outside Postgres (the test recomputes it with `crypto/md5`), uniform (B share 45–55 % on the seed; acceptance A8: 49.8 %). Not a security use of md5.
+- **Cost to change later:** one SQL expression; stored per message, so old campaigns keep their split.
+- **Question for owner:** OK?
+- **Owner response:**
+- **Status:** OPEN
+
+### 🟡 N-ORC-015 · Cancel: in-flight bound without a pre-send status check · impact: medium
+- **Date / agent / session:** 2026-11-10 23:30 · builder-delivery · phase 2 F4
+- **Requirement(s):** F4, R-SND-1
+- **Context:** Messages already claimed when a cancel commits can still be sent.
+- **Options:** A) let them finish; bound = `MaxInFlight` per channel (32 by default), sweep stragglers to `cancelled`; B) look up the campaign status before every send (bound ~0, one DB read per send on the rate-limited path).
+- **Decision taken:** A. The bound is tight and tested (`TestCancel_InFlightBoundIsTight_F4`, race test mid-batch); acceptance A11 measured 0 deliveries after the cancel returned. B is a one-line addition before `Limiter.Acquire`. DECISIONS D-17.
+- **Cost to change later:** ~15 min.
+- **Question for owner:** Is ≤ 32 per channel after a cancel acceptable?
+- **Owner response:**
+- **Status:** OPEN
+
+### 🟡 N-ORC-016 · Scheduled send: audience frozen at approve, consent at send time, 50 s minimum · impact: medium
+- **Date / agent / session:** 2026-11-10 23:15 · orchestrator + builder-delivery · phase 2 F5
+- **Requirement(s):** B-1, R-AUD-2
+- **Context:** The owner asked to decide and log whether the audience is frozen at approve and whether consent is re-checked at send time.
+- **Options:** A) enqueue at approve (frozen audience), claim re-checks consent; B) re-run the rule at send time.
+- **Decision taken:** A. The marketer approves the audience they saw, and the claim's consent check (R-AUD-2) already covers withdrawals while scheduled (`TestScheduler_StartsOnlyWhenDue_B1`). The minimum is now + 50 s (1 minute minus 10 s for clock skew and request latency), checked on the database clock; the UI offers now + 1 min and defaults to now + 10 min. DECISIONS D-18.
+- **Cost to change later:** B ~1 h (enqueue moves into the scheduler).
+- **Question for owner:** OK?
+- **Owner response:**
+- **Status:** OPEN
+
+### 🟡 N-LLM-006 · Content v2 details: labels, token limit, refine status codes · impact: low
+- **Date / agent / session:** 2026-11-10 23:40 · builder-llm · phase 2 F1/F3
+- **Requirement(s):** B-2, F3
+- **Context:** Details the contract left open.
+- **Options:** —
+- **Decision taken:** Labels are 1–40 code points from the model; a hand-saved label may be empty but not longer than 40 (422 on a bad label). Content `max_tokens` 8192 → 12288 because one answer holds two variants. A bad refine instruction is 422 `validation_failed` (like every other validation error), a malformed body 400. The other variant is copied on refine with its source and instruction, and its report is recomputed for the current audience. `LLM_CONTENT_TIMEOUT` stays 60 s; the owner may raise it for the live run (two variants take longer). DECISIONS D-20.
+- **Cost to change later:** low.
+- **Question for owner:** —
+- **Owner response:**
+- **Status:** OPEN
+
+### 🟡 N-WEB-005 · Approve dialog defaults · impact: low
+- **Date / agent / session:** 2026-11-10 23:40 · builder-web · phase 2
+- **Requirement(s):** B-1, B-2, R-FLOW-3
+- **Context:** Defaults for the new choices.
+- **Options:** —
+- **Decision taken:** The send choice defaults to "Send A" (the contract default), so an A/B test is always an explicit choice; B options are disabled when B is missing or invalid for a selected channel. "Schedule" defaults to now + 10 minutes (a now + 1 min default would be too soon by the time it is submitted). Refine is blocked while the editor has unsaved edits. After an audience change the save button reads "Re-check and save".
+- **Cost to change later:** minutes.
+- **Question for owner:** —
+- **Owner response:**
+- **Status:** OPEN

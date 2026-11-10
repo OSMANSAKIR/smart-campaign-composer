@@ -158,3 +158,24 @@ Append-only (union-merged). Format: KICKOFF.md §13.
   write at 1.25× input; the owner confirmed it with a second call: cache read 5058, $0.0045 (−72 %).
 - **Fix:** the panel shows cache writes next to cache reads (phase-2 web round).
 - **Lesson / guard added:** a cost shown to the user must list every component that makes it up.
+
+### V-023 · A stress run under heavy host load was read as a rate-bound regression candidate
+- **When / agent:** 2026-11-10 · orchestrator (phase-2 merge)
+- **AI proposed:** nothing wrong in code; the first S1 after the delivery merge ran while a builder ran race
+  tests on the same machine and reported provider max 116 requests in a 1 s window (14 limiter rejections).
+- **How it was caught:** test — S1 invariant I3. Re-run on a quiet host after all merges: max 100, 0
+  rejections, 0 duplicates, all terminal.
+- **Fix:** none needed in code; the 25 ms window guard assumes sub-25 ms delay between the client's write and
+  the provider's arrival stamp (DECISIONS D-7), which a saturated host breaks. Recorded so the next reader does
+  not trust a stress number taken under foreign load.
+- **Lesson / guard added:** run stress scenarios alone; a bound that rests on an assumption is only measured
+  where the assumption holds (see V-021).
+
+### V-024 · A builder's file write replaced an existing test file
+- **When / agent:** 2026-11-10 · builder-llm (phase 2), self-caught
+- **AI proposed:** create `internal/api/provider_test.go` for the F6/F7 tests; the file already held the
+  provider-config tests (R-RES-3) and the write replaced it without warning.
+- **How it was caught:** review — `git status` showed ` M` instead of `??`.
+- **Fix:** restored with `git checkout -- internal/api/provider_test.go`; the new tests went to
+  `internal/api/llm_provider_test.go` before any commit.
+- **Lesson / guard added:** check that a path is free before creating a file; a successful write is not proof.
