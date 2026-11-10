@@ -5,6 +5,11 @@ A marketer writes a campaign brief in plain language. Claude turns it into a **v
 longest real names, and approves. Messages then go through a **Postgres queue** to a **mock SMS/email provider**
 at no more than 100 per second per channel, and a dashboard shows delivery live.
 
+Also built (phase 2, owner decisions 2026-11-10): **A/B variants** with a deterministic 50/50 split (bonus
+B-2), **scheduled send** (bonus B-1), a **manual segment-rule editor**, **refine a variant with an
+instruction**, **stop sending**, a notice when an LLM call's cost could not be recorded, a clear message when
+the AI provider rejects the key or credits, and an end-to-end **acceptance suite** (`make acceptance`).
+
 Go backend · Vue 3 + TypeScript frontend · Postgres (datastore and queue) · synthetic users only · mock
 provider only.
 
@@ -61,13 +66,22 @@ make smoke-live CONFIRM_SPEND=yes
    hatırlatması gönder. Samimi ama kısa olsun.”). Click **Find audience**.
 2. **Audience** — the rule as the server understood it, in words (Şehir: İstanbul · Son 30 günde sepete ürün
    ekledi · Sepeti terk edilmiş), the counts per channel with consent, Claude's assumptions, and the LLM call
-   details (model, latency, tokens, cost, prompt version).
-3. **Content** — **Write with Claude** streams the SMS and email into the editor. Counters show the length
-   with the longest name and city in this audience, the SMS encoding and segments. Edits are re-validated by
-   the server and saved as new versions.
-4. **Approve** — pick channels, confirm in the dialog. Approval is idempotent and enqueues in one transaction.
-5. **Dashboard** — live progress per channel, throughput, ETA, provider errors by kind, and recent attempts.
-   The **System** page shows the health of every component.
+   details (model, latency, tokens, cache read/write, cost, prompt version). **Edit rule** opens an editor
+   built from the field catalog (field, operator and value limited to what the field allows); the counts
+   refresh as you type, **Save rule** stores it with an **Edited** badge and keeps Claude's original rule.
+3. **Content** — **Write with Claude** streams **two variants** (A and B, each with its angle, e.g. friendly
+   vs. urgency) side by side. Counters show the length with the longest name and city in this audience, the
+   SMS encoding and segments. Edit either card, or type an instruction (“daha kısa”, “more formal”) and
+   **Rewrite** one variant; every save or rewrite is a new version.
+4. **Approve** — pick channels and **Send A**, **Send B** or **A/B test (50/50)**; **Send now** or
+   **Schedule** (1 minute to 7 days ahead, local time). Approval is idempotent and enqueues in one transaction.
+5. **Dashboard** — live progress per channel (and per variant), throughput, ETA, provider errors by kind,
+   recent attempts, a countdown for a scheduled campaign, and **Stop sending**. The **System** page shows the
+   health of every component.
+
+The A/B split is a deterministic hash of (campaign, user), so a user gets the same variant on SMS and email.
+The dashboard reports sent/failed per variant; there are **no open or click metrics** (the mock provider has
+none), so this is the split and per-variant delivery foundation, not experiment analysis.
 
 ---
 
@@ -125,7 +139,8 @@ make smoke-live CONFIRM_SPEND=yes
 | Command | What it runs | Needs |
 |---|---|---|
 | `make test` | `go vet`, `go test -race` for every package, Vitest — in containers, on a network **without internet**, no key | Docker |
-| `make e2e` | Playwright: official brief → audience → streamed content → invalid edit blocked → edit saved → approve → dashboard finishes → reload | Docker |
+| `make e2e` | Playwright: official brief → audience → two streamed variants → invalid edit blocked → edit saved → Send A → dashboard finishes → reload; rule editor: change the city, count changes, save, Edited badge | Docker |
+| `make acceptance` | Scenarios A1–A13 through the HTTP API with the real worker and the mock provider on a throwaway database (both channels, email/SMS only, unsupported criteria, consent bypass, prompt injection, zero audience, A/B split, rule edit, refine, cancel mid-send, scheduled send, double approve) → [`docs/acceptance/`](docs/acceptance/) | Postgres from `make up`, Go |
 | `make fresh-clone-check` | The reviewer's path: clean clone, no `.env`, `docker compose up`, seed, restart, `down -v`, key-only `.env`, `make test` | Docker |
 | `make stress` | Delivery scenarios with real worker processes → [`docs/stress/REPORT.md`](docs/stress/REPORT.md); API scenarios → [`docs/stress/REPORT-api.md`](docs/stress/REPORT-api.md) | Docker (Postgres from `make up`), Go |
 | `make eval PROVIDER=mock\|claudecode` | 17-brief eval set → `docs/eval/REPORT-*.md` | Go; `claudecode` needs the Claude Code CLI |
@@ -214,8 +229,18 @@ matter most:
 
 Owner actions:
 
-- Push to GitHub; the CI workflow (`.github/workflows/ci.yml`: `make test`, `make lint`, `make e2e`) has not run
-  there yet. The `00-planning` session export.
+- Push to GitHub; the CI workflow (`.github/workflows/ci.yml`: `make test`, `make lint`, `make acceptance`,
+  `make e2e`) has not run there yet. The `00-planning` session export.
+- The live acceptance run (`make acceptance PROVIDER=anthropic` with the spend flag; cost cap $1). Two variants
+  per call make content answers longer; if a call nears the 60 s `LLM_CONTENT_TIMEOUT`, raise it for that run.
+
+Phase-2 gaps (2026-11-10):
+
+- A/B: no open/click metrics (the mock provider has none), so no winner analysis; per-variant delivery only.
+- Cancel: up to `MaxInFlight` (32) messages per channel already claimed can still go out after a cancel
+  (DECISIONS D-17); a status check before each send would close it at one DB read per send.
+- The `messages_total` metric has no `cancelled` status; the campaign list items carry no `scheduled_at`.
+- The composer's step bar clips its last step at about 390 px width (the new controls themselves wrap).
 
 Known gaps (P2, from the CP3 spec audit in [`docs/review/traceability.md`](docs/review/traceability.md)):
 
@@ -237,4 +262,6 @@ Europe/Istanbul time. Planning with the owner: 2026-11-08 00:00–02:40 (~2.7 h)
 commit 02:59, CP3 audit fixes finished 2026-11-09 ~03:00 — about 24 h of wall-clock time, including pauses at
 the subscription's usage limits. Agent usage (API-equivalent, ccusage): about $73 over 8–9 November, almost all
 cache reads (`ai-sessions/usage/`). The claudecode eval run cost about $0.35 API-equivalent; no paid API calls
-were made during development.
+were made by agents. The owner's live runs on 2026-11-10 (smoke-live, one anthropic eval, the UI) cost about
+$0.15. Phase 2 (A/B, rule editor, refine, cancel, schedule, acceptance suite): 2026-11-10 23:10 to about 00:30,
+contracts first, then three builders in parallel.
