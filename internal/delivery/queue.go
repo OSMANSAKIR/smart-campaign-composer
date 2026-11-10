@@ -15,6 +15,10 @@ type querier interface {
 	Query(ctx context.Context, sql string, args ...any) (pgx.Rows, error)
 }
 
+// campaignCancelled is a SQL predicate over a `messages` row: its campaign was cancelled. Written results of a
+// claimed try use it to end a message that would retry as `cancelled` (F4).
+const campaignCancelled = `EXISTS (SELECT 1 FROM campaigns cc WHERE cc.id = messages.campaign_id AND cc.status = 'cancelled')`
+
 // Queue is the Postgres outbox for one channel: the `messages` table is the queue (KICKOFF §7, N-PLAN-010).
 // All time arithmetic uses the database clock (now()), so replicas agree on leases and due times.
 type Queue struct {
@@ -29,7 +33,8 @@ type Claimed struct {
 	CampaignID     string
 	UserID         int64
 	ContentVersion int
-	Attempts       int // value after the claim: the number of this try
+	Variant        string // a | b: which row of campaign_content this message renders (api.md §9.3)
+	Attempts       int    // value after the claim: the number of this try
 	Throttled      int
 	Unanswered     int  // earlier tries that got no answer (ambiguous, or lease expired mid-send)
 	ConfirmReplays int  // confirmation replays already used (need.md N-DEL-009)
@@ -66,7 +71,7 @@ func (q *Queue) ClaimOn(ctx context.Context, db querier, n int) ([]Claimed, erro
 			LIMIT $2
 			FOR UPDATE OF pm SKIP LOCKED)
 		  AND u.id = m.user_id AND c.id = m.campaign_id
-		RETURNING m.id::text, m.campaign_id::text, m.user_id, m.content_version, m.attempts, m.throttled_count,
+		RETURNING m.id::text, m.campaign_id::text, m.user_id, m.content_version, m.variant, m.attempts, m.throttled_count,
 		          m.unanswered_tries, m.confirm_replays, m.status = 'skipped_no_consent', u.email, u.phone, u.first_name, u.city,
 		          COALESCE(c.language, u.locale)`, consent),
 		string(q.Channel), n, q.Lease.Seconds())
@@ -77,7 +82,7 @@ func (q *Queue) ClaimOn(ctx context.Context, db querier, n int) ([]Claimed, erro
 	var out []Claimed
 	for rows.Next() {
 		var c Claimed
-		if err := rows.Scan(&c.ID, &c.CampaignID, &c.UserID, &c.ContentVersion, &c.Attempts, &c.Throttled, &c.Unanswered, &c.ConfirmReplays, &c.Skipped,
+		if err := rows.Scan(&c.ID, &c.CampaignID, &c.UserID, &c.ContentVersion, &c.Variant, &c.Attempts, &c.Throttled, &c.Unanswered, &c.ConfirmReplays, &c.Skipped,
 			&c.Recipient.Email, &c.Recipient.Phone, &c.Recipient.FirstName, &c.Recipient.City, &c.Recipient.Locale); err != nil {
 			return nil, err
 		}
@@ -97,18 +102,21 @@ func (q *Queue) ReclaimExpired(ctx context.Context, maxAttempts, maxReplays int)
 
 // ReclaimExpiredOn is ReclaimExpired on a specific connection source.
 func (q *Queue) ReclaimExpiredOn(ctx context.Context, db querier, maxAttempts, maxReplays int) (requeued, failed int, err error) {
+	// A lease that expires in a cancelled campaign ends the message as `cancelled` instead of retrying it
+	// (docs/contracts/api.md §9.5): whatever the lost try did, nothing more is sent.
 	// Past the attempt budget each further reclaim is a used confirmation replay; once those are gone it fails.
-	rows, err := db.Query(ctx, `
+	rows, err := db.Query(ctx, fmt.Sprintf(`
 		UPDATE messages SET
-			status           = CASE WHEN attempts >= $2 AND confirm_replays >= $3 THEN 'failed' ELSE 'retry' END,
-			last_error       = CASE WHEN attempts >= $2 AND confirm_replays >= $3 THEN 'lease_expired' ELSE last_error END,
+			status           = CASE WHEN %[1]s THEN 'cancelled'
+			                        WHEN attempts >= $2 AND confirm_replays >= $3 THEN 'failed' ELSE 'retry' END,
+			last_error       = CASE WHEN NOT (%[1]s) AND attempts >= $2 AND confirm_replays >= $3 THEN 'lease_expired' ELSE last_error END,
 			unanswered_tries = unanswered_tries + 1,
 			confirm_replays  = CASE WHEN attempts >= $2 AND confirm_replays < $3 THEN confirm_replays + 1 ELSE confirm_replays END,
 			lease_until      = NULL,
 			next_attempt_at  = now(),
 			updated_at       = now()
 		WHERE channel = $1 AND status = 'sending' AND lease_until < now()
-		RETURNING status = 'failed'`, string(q.Channel), maxAttempts, maxReplays)
+		RETURNING status = 'failed'`, campaignCancelled), string(q.Channel), maxAttempts, maxReplays)
 	if err != nil {
 		return 0, 0, err
 	}
@@ -149,7 +157,7 @@ func (q *Queue) Finish(ctx context.Context, c Claimed, o Outcome) (bool, error) 
 	tag, err := q.Pool.Exec(ctx, `
 		WITH upd AS (
 			UPDATE messages SET
-				status              = $3,
+				status              = CASE WHEN $3 = 'retry' AND `+campaignCancelled+` THEN 'cancelled' ELSE $3 END,
 				attempts            = attempts + $4,
 				throttled_count     = throttled_count + $5,
 				unanswered_tries    = unanswered_tries + CASE WHEN $12 THEN 1 ELSE 0 END,
@@ -177,7 +185,8 @@ func (q *Queue) Finish(ctx context.Context, c Claimed, o Outcome) (bool, error) 
 func (q *Queue) Release(ctx context.Context, c Claimed, delay time.Duration) error {
 	_, err := q.Pool.Exec(ctx, `
 		UPDATE messages SET
-			status          = CASE WHEN attempts - 1 > 0 OR throttled_count > 0 THEN 'retry' ELSE 'queued' END,
+			status          = CASE WHEN `+campaignCancelled+` THEN 'cancelled'
+			                       WHEN attempts - 1 > 0 OR throttled_count > 0 THEN 'retry' ELSE 'queued' END,
 			attempts        = attempts - 1,
 			lease_until     = NULL,
 			next_attempt_at = now() + make_interval(secs => $3),
@@ -187,11 +196,12 @@ func (q *Queue) Release(ctx context.Context, c Claimed, delay time.Duration) err
 	return err
 }
 
-// Template loads one approved content version.
-func (q *Queue) Template(ctx context.Context, campaignID string, version int) (Template, error) {
+// Template loads one variant of an approved content version.
+func (q *Queue) Template(ctx context.Context, campaignID string, version int, variant string) (Template, error) {
 	var t Template
 	err := q.Pool.QueryRow(ctx, `SELECT sms_text, email_subject, email_body FROM campaign_content
-		WHERE campaign_id = $1 AND version = $2`, campaignID, version).Scan(&t.SMSText, &t.EmailSubject, &t.EmailBody)
+		WHERE campaign_id = $1 AND version = $2 AND variant = $3`, campaignID, version, variant).
+		Scan(&t.SMSText, &t.EmailSubject, &t.EmailBody)
 	return t, err
 }
 
@@ -261,4 +271,21 @@ func Reconcile(ctx context.Context, pool *pgxpool.Pool) ([]string, error) {
 		ids = append(ids, id)
 	}
 	return ids, rows.Err()
+}
+
+// SweepCancelled moves messages that are still queued or waiting to retry in recently cancelled campaigns to
+// `cancelled`. Cancel itself does this in its own transaction and the write paths (Finish, Release,
+// ReclaimExpired) do it for messages that were in flight, so this is the safety net for any straggler; it is
+// guarded by the message status, so every replica may run it. Cancelled campaigns older than a day are not
+// scanned. It returns the number of messages moved.
+func SweepCancelled(ctx context.Context, pool *pgxpool.Pool) (int, error) {
+	tag, err := pool.Exec(ctx, `
+		UPDATE messages m SET status = 'cancelled', lease_until = NULL, updated_at = now()
+		FROM campaigns c
+		WHERE c.id = m.campaign_id AND c.status = 'cancelled' AND c.cancelled_at > now() - interval '1 day'
+		  AND m.status IN ('queued', 'retry')`)
+	if err != nil {
+		return 0, err
+	}
+	return int(tag.RowsAffected()), nil
 }

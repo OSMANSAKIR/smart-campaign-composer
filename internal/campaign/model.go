@@ -18,6 +18,9 @@ type Campaign struct {
 	Content                *ContentVersion `json:"content"`
 	Channels               []string        `json:"channels"`
 	ApprovedContentVersion *int            `json:"approved_content_version"`
+	SendVariant            *string         `json:"send_variant"` // a | b | ab; null before approve (§9.3)
+	ScheduledAt            *time.Time      `json:"scheduled_at"` // set when approved with send_at (§9.6)
+	CancelledAt            *time.Time      `json:"cancelled_at"` // set by cancel (§9.5)
 	CreatedAt              time.Time       `json:"created_at"`
 	ApprovedAt             *time.Time      `json:"approved_at"`
 	CompletedAt            *time.Time      `json:"completed_at"`
@@ -80,6 +83,7 @@ type Message struct {
 	UserID    int64      `json:"user_id"`
 	Channel   string     `json:"channel"`
 	Status    string     `json:"status"`
+	Variant   string     `json:"variant"` // a | b: the content variant this message renders (§9.3)
 	Attempts  int        `json:"attempts"`
 	LastError *string    `json:"last_error"`
 	SentAt    *time.Time `json:"sent_at"`
