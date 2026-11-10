@@ -331,3 +331,22 @@ simplest to explain.
   (default $1). Reports go to `docs/acceptance/`.
 - **Why in process.** One command, no compose dependency beyond Postgres, a fresh database per run, and the
   provider's own `/stats` (max per 1 s window, duplicates, delivery times) as the independent witness.
+
+## D-20 · Two variants in one call; refine; honest cost and provider errors [B-2, F3, N-LLM-005, F7]
+
+- **Content v2.** One streamed call returns exactly two variants (`content_v2` wire schema with fixed keys
+  `a`/`b`, so "exactly two" is a schema property). Each variant is validated alone with the v1 rules (160
+  worst case, subject ≤ 80 single line, variables, language, NUL) and a label of 1–40 code points; any invalid
+  variant sends the whole answer through the unchanged repair loop. A version is one `campaign_content` row
+  per variant; the API keeps a v1 mirror of variant A. `max_tokens` for content went from 8192 to 12288.
+- **Refine.** `refine_v1` rewrites one variant: the current variant goes into the prompt as JSON, the
+  instruction as escaped data in its own tag, and the system prompt says it cannot change any rule. The answer
+  is validated and repaired like any other; nothing invalid is saved ("ignore the 160 limit" ends valid or
+  `llm_invalid_output`). The new version copies the other variant; earlier versions stay. `llm_calls.purpose`
+  is `refine` (its repairs `repair`).
+- **cost_recorded (owner CHANGE to N-LLM-005).** A failed `llm_calls` insert still does not fail a paid
+  generation, but the response says `cost_recorded: false` and the UI shows a non-blocking notice.
+- **Provider rejection (F7).** A provider 4xx other than 408/409/429 (key, permissions, credits) is
+  `llm_provider_rejected` (502) with a fixed message; it is never retried or repaired. The provider body can
+  hold account identifiers: it goes to a warn log only, and `llm_calls.error` stores `provider_rejected
+  status=<n>`.

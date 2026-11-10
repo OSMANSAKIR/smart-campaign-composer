@@ -317,8 +317,8 @@ compatibility). `source` per variant: `llm` | `edited` | `refined`.
 
 `POST /api/campaigns/{id}/content/refine` `{ "variant": "a"|"b", "instruction": "…", "base_version": 3 }`.
 
-- `instruction`: 1..500 code points, control characters rejected (400 `validation_failed`, path
-  `instruction`). `base_version` must be the latest (409 `stale_content_version`).
+- `instruction`: 1..500 code points, control characters other than `\n`/`\t` rejected (422 `validation_failed`,
+  path `instruction`; a missing or malformed body is 400 `bad_request`). Checks run before the stream opens. `base_version` must be the latest (409 `stale_content_version`).
 - Same stream as §5 (`meta`, `delta`, `repairing`, `result` | `error`); prompt `refine_v1`; `llm_calls.purpose`
   `refine` (its repairs `repair`).
 - Claude rewrites the named variant only. The instruction is data inside the prompt (escaped, in its own
