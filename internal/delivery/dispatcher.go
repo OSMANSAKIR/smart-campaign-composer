@@ -75,7 +75,7 @@ type Dispatcher struct {
 
 	once       sync.Once
 	queue      *Queue
-	tmpl       sync.Map // "campaign/version" -> Template (immutable once approved)
+	tmpl       sync.Map // "campaign/version/variant" -> Template (immutable once approved)
 	holds      atomic.Bool
 	paused     atomic.Int64 // unix nanos until which the channel is paused (0 = not paused)
 	pauseStart atomic.Int64 // unix nanos at which the latest pause began
@@ -659,11 +659,11 @@ func (d *Dispatcher) release(ctx context.Context, log *slog.Logger, c Claimed, d
 }
 
 func (d *Dispatcher) template(ctx context.Context, c Claimed) (Template, error) {
-	key := c.CampaignID + "/" + strconv.Itoa(c.ContentVersion)
+	key := c.CampaignID + "/" + strconv.Itoa(c.ContentVersion) + "/" + c.Variant
 	if v, ok := d.tmpl.Load(key); ok {
 		return v.(Template), nil
 	}
-	t, err := d.queue.Template(ctx, c.CampaignID, c.ContentVersion)
+	t, err := d.queue.Template(ctx, c.CampaignID, c.ContentVersion, c.Variant)
 	if err != nil {
 		return Template{}, err
 	}

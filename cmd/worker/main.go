@@ -1,4 +1,4 @@
-// Command worker runs one dispatcher per channel, the campaign reconciler, and serves health, readiness and
+// Command worker runs one dispatcher per channel, the campaign reconciler, the scheduled-send scheduler, and serves health, readiness and
 // metrics (KICKOFF §7, port 9091). Owned by the delivery builder.
 //
 // Several replicas may run side by side: the dispatcher of each channel holds a Postgres advisory lock, so
@@ -120,6 +120,8 @@ func run() int {
 	}
 	rec := &delivery.Reconciler{Pool: pool, Log: log}
 	wg.Go(func() { rec.Run(ctx) })
+	sched := &delivery.Scheduler{Pool: pool, Log: log}
+	wg.Go(func() { sched.Run(ctx) })
 
 	<-ctx.Done()
 	log.Info("shutting down: draining in-flight sends")

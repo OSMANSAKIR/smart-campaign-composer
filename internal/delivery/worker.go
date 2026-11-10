@@ -47,7 +47,7 @@ func InitMetrics(m *metrics.Metrics) {
 	}
 }
 
-// Reconciler completes campaigns whose messages are all terminal.
+// Reconciler completes campaigns whose messages are all terminal and sweeps the leftovers of cancelled ones.
 type Reconciler struct {
 	Pool     *pgxpool.Pool
 	Log      *slog.Logger
@@ -72,6 +72,11 @@ func (r *Reconciler) Run(ctx context.Context) {
 			for _, id := range ids {
 				log.Info("campaign finished", "campaign_id", id)
 			}
+		}
+		if n, err := SweepCancelled(ctx, r.Pool); err != nil && ctx.Err() == nil {
+			log.Warn("sweep of cancelled campaigns failed", "err", err)
+		} else if n > 0 {
+			log.Info("cancelled leftover messages", "messages", n)
 		}
 		select {
 		case <-ctx.Done():

@@ -360,7 +360,7 @@ func (s *Service) Messages(ctx context.Context, id, status, channel string, limi
 			return nil, "", errorf("bad_request", "Invalid cursor.", Issue{Path: "cursor", Code: "invalid", Message: "Use next_cursor from a previous page."})
 		}
 	}
-	rows, err := s.Pool.Query(ctx, `SELECT id::text, user_id, channel, status, attempts, last_error, sent_at, updated_at
+	rows, err := s.Pool.Query(ctx, `SELECT id::text, user_id, channel, status, variant, attempts, last_error, sent_at, updated_at
 		FROM messages
 		WHERE campaign_id = $1 AND ($2 = '' OR status = $2) AND ($3 = '' OR channel = $3) AND ($4 = '' OR id > $4::uuid)
 		ORDER BY id LIMIT $5`, id, status, channel, cursor, limit+1)
@@ -369,7 +369,7 @@ func (s *Service) Messages(ctx context.Context, id, status, channel string, limi
 	}
 	items, err := pgx.CollectRows(rows, func(r pgx.CollectableRow) (Message, error) {
 		var m Message
-		err := r.Scan(&m.ID, &m.UserID, &m.Channel, &m.Status, &m.Attempts, &m.LastError, &m.SentAt, &m.UpdatedAt)
+		err := r.Scan(&m.ID, &m.UserID, &m.Channel, &m.Status, &m.Variant, &m.Attempts, &m.LastError, &m.SentAt, &m.UpdatedAt)
 		return m, err
 	})
 	if err != nil {
@@ -384,7 +384,7 @@ func (s *Service) Messages(ctx context.Context, id, status, channel string, limi
 }
 
 // MessageStatuses are the message states of docs/contracts/api.md §3.
-var MessageStatuses = []string{"queued", "sending", "sent", "retry", "failed", "skipped_no_consent"}
+var MessageStatuses = []string{"queued", "sending", "sent", "retry", "failed", "skipped_no_consent", "cancelled"}
 
 // load reads a campaign and its latest content version. With needRule it also re-validates the stored rule:
 // a ValidRule only ever comes out of segment.Validate, even for rules we stored ourselves.
@@ -398,14 +398,22 @@ func (s *Service) load(ctx context.Context, db DB, id string, needRule bool) (Ca
 		segVersion             int
 	)
 	err := db.QueryRow(ctx, `SELECT id::text, brief, status, coalesce(language, 'tr'), segment_rule, segment_version,
-			segment_meta, audience, channels, approved_content_version, created_at, approved_at, completed_at
+			segment_meta, audience, channels, approved_content_version, send_variant, scheduled_at, cancelled_at,
+			created_at, approved_at, completed_at
 		FROM campaigns WHERE id = $1`, id).Scan(&c.ID, &c.Brief, &c.Status, &c.Language, &ruleRaw, &segVersion,
-		&metaRaw, &audR, &c.Channels, &c.ApprovedContentVersion, &c.CreatedAt, &c.ApprovedAt, &c.CompletedAt)
+		&metaRaw, &audR, &c.Channels, &c.ApprovedContentVersion, &c.SendVariant, &c.ScheduledAt, &c.CancelledAt,
+		&c.CreatedAt, &c.ApprovedAt, &c.CompletedAt)
 	if err != nil {
 		return Campaign{}, nil, notFound(err)
 	}
 	if c.Channels == nil {
 		c.Channels = []string{}
+	}
+	for _, t := range []**time.Time{&c.ScheduledAt, &c.CancelledAt} { // RFC 3339 UTC on the wire, whatever the host zone
+		if *t != nil {
+			u := (*t).UTC()
+			*t = &u
+		}
 	}
 	var valid *segment.ValidRule
 	if ruleRaw != nil {

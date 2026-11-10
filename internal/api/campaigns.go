@@ -203,6 +203,8 @@ func (s *Server) approve(w http.ResponseWriter, r *http.Request) {
 	var req struct {
 		Channels       []string `json:"channels"`
 		ContentVersion *int     `json:"content_version"`
+		Variant        string   `json:"variant"` // a (default) | b | ab, docs/contracts/api.md §9.3
+		SendAt         *string  `json:"send_at"` // RFC 3339, any offset, §9.6
 	}
 	key := r.Header.Get("Idempotency-Key")
 	if key == "" {
@@ -216,7 +218,17 @@ func (s *Server) approve(w http.ResponseWriter, r *http.Request) {
 		writeError(w, 400, "bad_request", "Field `content_version` is required.", []Issue{{Path: "content_version", Code: "required", Message: "missing"}})
 		return
 	}
-	res, err := s.campaigns.Approve(r.Context(), r.PathValue("id"), key, req.Channels, *req.ContentVersion)
+	opt := campaign.ApproveOptions{Variant: req.Variant}
+	if req.SendAt != nil {
+		at, err := time.Parse(time.RFC3339, *req.SendAt)
+		if err != nil {
+			writeError(w, 422, "invalid_send_at", "send_at must be an RFC 3339 timestamp.",
+				[]Issue{{Path: "send_at", Code: "invalid", Message: "e.g. 2026-11-11T09:30:00+03:00"}})
+			return
+		}
+		opt.SendAt = &at
+	}
+	res, err := s.campaigns.ApproveWith(r.Context(), r.PathValue("id"), key, req.Channels, *req.ContentVersion, opt)
 	if err != nil {
 		s.fail(w, r, err)
 		return
@@ -259,7 +271,7 @@ func (s *Server) events(w http.ResponseWriter, r *http.Request) {
 	// the client's counts backwards (seen in stress S6). Snapshots carry the database time of their query, so
 	// only strictly newer ones go out. A skipped one is never the last: the hub polls again within 500 ms.
 	lastSent := p.UpdatedAt
-	if campaign.Terminal(p.Status) {
+	if p.Done() {
 		sse.send("done", map[string]string{"status": p.Status})
 		return
 	}

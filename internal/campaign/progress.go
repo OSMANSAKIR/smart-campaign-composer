@@ -24,8 +24,21 @@ type ChannelProgress struct {
 	Retry            int        `json:"retry"`
 	Failed           int        `json:"failed"`
 	SkippedNoConsent int        `json:"skipped_no_consent"`
+	Cancelled        int        `json:"cancelled"`
 	ThroughputPerS   float64    `json:"throughput_per_s"`
 	PausedUntil      *time.Time `json:"paused_until"`
+	// Variants holds the terminal counts per content variant, present for every variant that has messages;
+	// per channel they add up to the channel counters (docs/contracts/api.md §9.3).
+	Variants map[string]*VariantProgress `json:"variants"`
+}
+
+// VariantProgress is one variant's share of a channel.
+type VariantProgress struct {
+	Total            int `json:"total"`
+	Sent             int `json:"sent"`
+	Failed           int `json:"failed"`
+	Cancelled        int `json:"cancelled"`
+	SkippedNoConsent int `json:"skipped_no_consent"`
 }
 
 // Progress is the full progress snapshot; every snapshot is complete so a reconnecting client replaces its state.
@@ -60,9 +73,28 @@ var errorBuckets = map[string]string{
 	"permanent": "permanent", "config": "auth_error", // 401/403 pause the channel and retry; not permanent
 }
 
-// Terminal reports whether a campaign status is final.
+// Terminal reports whether a campaign status is a completion status. `cancelled` is final too, but a
+// cancelled campaign can still have messages in flight; use Progress.Done for "the stream is over".
 func Terminal(status string) bool {
 	return status == StatusCompleted || status == StatusCompletedWithFailures
+}
+
+// Done reports whether the progress stream can end: the campaign completed, or it was cancelled and none of
+// its messages is still in flight or waiting (docs/contracts/api.md §9.5: at that point sent + failed +
+// cancelled + skipped_no_consent = total per channel).
+func (p Progress) Done() bool {
+	if Terminal(p.Status) {
+		return true
+	}
+	if p.Status != StatusCancelled {
+		return false
+	}
+	for _, cp := range p.Channels {
+		if cp.Sending+cp.Queued+cp.Retry > 0 {
+			return false
+		}
+	}
+	return true
 }
 
 // Progress computes the snapshot with a few aggregate queries over the messages of one campaign.
@@ -70,7 +102,7 @@ func (s *Service) Progress(ctx context.Context, id string) (Progress, error) {
 	p := Progress{CampaignID: id, Channels: map[string]*ChannelProgress{},
 		Errors: map[string]int{"rate_limited": 0, "server_error": 0, "timeout": 0, "permanent": 0, "auth_error": 0}}
 	for _, ch := range catalog.Channels {
-		p.Channels[ch] = &ChannelProgress{}
+		p.Channels[ch] = &ChannelProgress{Variants: map[string]*VariantProgress{}}
 	}
 	var now time.Time
 	err := s.Pool.QueryRow(ctx, `SELECT status, approved_at, now() FROM campaigns WHERE id = $1`, id).Scan(&p.Status, &p.StartedAt, &now)
@@ -79,16 +111,16 @@ func (s *Service) Progress(ctx context.Context, id string) (Progress, error) {
 	}
 	p.UpdatedAt = now.UTC()
 
-	rows, err := s.Pool.Query(ctx, `SELECT channel, status, count(*),
+	rows, err := s.Pool.Query(ctx, `SELECT channel, variant, status, count(*),
 			count(*) FILTER (WHERE sent_at > now() - make_interval(secs => $2))
-		FROM messages WHERE campaign_id = $1 GROUP BY channel, status`, id, throughputWindow.Seconds())
+		FROM messages WHERE campaign_id = $1 GROUP BY channel, variant, status`, id, throughputWindow.Seconds())
 	if err != nil {
 		return Progress{}, err
 	}
 	for rows.Next() {
-		var ch, st string
+		var ch, variant, st string
 		var n, recent int
-		if err := rows.Scan(&ch, &st, &n, &recent); err != nil {
+		if err := rows.Scan(&ch, &variant, &st, &n, &recent); err != nil {
 			rows.Close()
 			return Progress{}, err
 		}
@@ -96,26 +128,42 @@ func (s *Service) Progress(ctx context.Context, id string) (Progress, error) {
 		if cp == nil {
 			continue
 		}
+		vp := cp.Variants[variant]
+		if vp == nil {
+			vp = &VariantProgress{}
+			cp.Variants[variant] = vp
+		}
 		cp.Total += n
+		vp.Total += n
+		// Counters accumulate: the query groups by variant too, so one status arrives once per variant.
 		switch st {
 		case "queued":
-			cp.Queued = n
+			cp.Queued += n
 		case "sending":
-			cp.Sending = n
+			cp.Sending += n
 		case "sent":
-			cp.Sent = n
-			cp.ThroughputPerS = math.Round(float64(recent)/throughputWindow.Seconds()*10) / 10
+			cp.Sent += n
+			vp.Sent += n
+			cp.ThroughputPerS += float64(recent) // sent in the window; converted to a rate below
 		case "retry":
-			cp.Retry = n
+			cp.Retry += n
 		case "failed":
-			cp.Failed = n
+			cp.Failed += n
+			vp.Failed += n
 		case "skipped_no_consent":
-			cp.SkippedNoConsent = n
+			cp.SkippedNoConsent += n
+			vp.SkippedNoConsent += n
+		case "cancelled":
+			cp.Cancelled += n
+			vp.Cancelled += n
 		}
 	}
 	rows.Close()
 	if err := rows.Err(); err != nil {
 		return Progress{}, err
+	}
+	for _, cp := range p.Channels {
+		cp.ThroughputPerS = math.Round(cp.ThroughputPerS/throughputWindow.Seconds()*10) / 10
 	}
 
 	rows, err = s.Pool.Query(ctx, `SELECT da.error_class, count(*) FROM delivery_attempts da
@@ -351,7 +399,7 @@ func (h *Hub) run(ctx context.Context, id string, f *feed) {
 		if len(events) > 0 {
 			lastEvent = events[len(events)-1].ID
 		}
-		u := Update{Events: events, Done: Terminal(p.Status)}
+		u := Update{Events: events, Done: p.Done()}
 		stamp := p.UpdatedAt
 		p.UpdatedAt = time.Time{}
 		cur, _ := json.Marshal(p)
