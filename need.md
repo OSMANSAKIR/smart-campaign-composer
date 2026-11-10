@@ -25,12 +25,12 @@ The next agent that owns the area implements the answer and updates the status.
 
 ## Digest (maintained by the orchestrator only)
 
-_Last updated: 2026-11-10 23:49 by the orchestrator (phase 2 merged; new entries N-ORC-014..016, N-LLM-006, N-WEB-005)._
+_Last updated: 2026-11-11 00:10 with the owner's answers to the phase-2 entries (planning session, on the owner's instruction)._
 
 **Needs the owner soon (high impact):** none.
 
-**Review when convenient (phase 2, 2026-11-10):** N-ORC-014 (split formula), N-ORC-015 (cancel in-flight
-bound), N-ORC-016 (schedule: frozen audience, consent at send time), N-LLM-006, N-WEB-005 (low).
+**Phase 2 entries answered (owner, chat, 2026-11-11):** N-ORC-014, N-ORC-015, N-ORC-016, N-LLM-006 and
+N-WEB-005 accepted. No entry is open.
 
 **Implemented tonight:** ✅ N-WEB-001 → B (manual rule editor, F2), ✅ N-LLM-005 change (cost_recorded, F6).
 
@@ -643,7 +643,7 @@ encoding and segments shown as information).
 - **Owner response:** ACCEPT (chat, 2026-11-10).
 - **Status:** ACCEPTED
 
-### 🟡 N-ORC-014 · A/B split formula · impact: medium
+### ✅ N-ORC-014 · A/B split formula · impact: medium
 - **Date / agent / session:** 2026-11-10 23:15 · orchestrator + builder-delivery · 01-orchestrator (phase 2)
 - **Requirement(s):** B-2
 - **Context:** The owner asked for a deterministic hash(campaign_id, user_id) mod 2.
@@ -651,10 +651,10 @@ encoding and segments shown as information).
 - **Decision taken:** A. Built in, set-based in the same statement, recomputable outside Postgres (the test recomputes it with `crypto/md5`), uniform (B share 45–55 % on the seed; acceptance A8: 49.8 %). Not a security use of md5.
 - **Cost to change later:** one SQL expression; stored per message, so old campaigns keep their split.
 - **Question for owner:** OK?
-- **Owner response:**
-- **Status:** OPEN
+- **Owner response:** ACCEPT (chat, 2026-11-11).
+- **Status:** ACCEPTED
 
-### 🟡 N-ORC-015 · Cancel: in-flight bound without a pre-send status check · impact: medium
+### ✅ N-ORC-015 · Cancel: in-flight bound without a pre-send status check · impact: medium
 - **Date / agent / session:** 2026-11-10 23:30 · builder-delivery · phase 2 F4
 - **Requirement(s):** F4, R-SND-1
 - **Context:** Messages already claimed when a cancel commits can still be sent.
@@ -662,10 +662,10 @@ encoding and segments shown as information).
 - **Decision taken:** A. The bound is tight and tested (`TestCancel_InFlightBoundIsTight_F4`, race test mid-batch); acceptance A11 measured 0 deliveries after the cancel returned. B is a one-line addition before `Limiter.Acquire`. DECISIONS D-17.
 - **Cost to change later:** ~15 min.
 - **Question for owner:** Is ≤ 32 per channel after a cancel acceptable?
-- **Owner response:**
-- **Status:** OPEN
+- **Owner response:** ACCEPT (chat, 2026-11-11): at most MaxInFlight (32) per channel after a cancel is acceptable.
+- **Status:** ACCEPTED
 
-### 🟡 N-ORC-016 · Scheduled send: audience frozen at approve, consent at send time, 50 s minimum · impact: medium
+### ✅ N-ORC-016 · Scheduled send: audience frozen at approve, consent at send time, 50 s minimum · impact: medium
 - **Date / agent / session:** 2026-11-10 23:15 · orchestrator + builder-delivery · phase 2 F5
 - **Requirement(s):** B-1, R-AUD-2
 - **Context:** The owner asked to decide and log whether the audience is frozen at approve and whether consent is re-checked at send time.
@@ -673,10 +673,10 @@ encoding and segments shown as information).
 - **Decision taken:** A. The marketer approves the audience they saw, and the claim's consent check (R-AUD-2) already covers withdrawals while scheduled (`TestScheduler_StartsOnlyWhenDue_B1`). The minimum is now + 50 s (1 minute minus 10 s for clock skew and request latency), checked on the database clock; the UI offers now + 1 min and defaults to now + 10 min. DECISIONS D-18.
 - **Cost to change later:** B ~1 h (enqueue moves into the scheduler).
 - **Question for owner:** OK?
-- **Owner response:**
-- **Status:** OPEN
+- **Owner response:** ACCEPT (chat, 2026-11-11).
+- **Status:** ACCEPTED
 
-### 🟡 N-LLM-006 · Content v2 details: labels, token limit, refine status codes · impact: low
+### ✅ N-LLM-006 · Content v2 details: labels, token limit, refine status codes · impact: low
 - **Date / agent / session:** 2026-11-10 23:40 · builder-llm · phase 2 F1/F3
 - **Requirement(s):** B-2, F3
 - **Context:** Details the contract left open.
@@ -684,10 +684,10 @@ encoding and segments shown as information).
 - **Decision taken:** Labels are 1–40 code points from the model; a hand-saved label may be empty but not longer than 40 (422 on a bad label). Content `max_tokens` 8192 → 12288 because one answer holds two variants. A bad refine instruction is 422 `validation_failed` (like every other validation error), a malformed body 400. The other variant is copied on refine with its source and instruction, and its report is recomputed for the current audience. `LLM_CONTENT_TIMEOUT` stays 60 s; the owner may raise it for the live run (two variants take longer). DECISIONS D-20.
 - **Cost to change later:** low.
 - **Question for owner:** —
-- **Owner response:**
-- **Status:** OPEN
+- **Owner response:** ACCEPT (chat, 2026-11-11).
+- **Status:** ACCEPTED
 
-### 🟡 N-WEB-005 · Approve dialog defaults · impact: low
+### ✅ N-WEB-005 · Approve dialog defaults · impact: low
 - **Date / agent / session:** 2026-11-10 23:40 · builder-web · phase 2
 - **Requirement(s):** B-1, B-2, R-FLOW-3
 - **Context:** Defaults for the new choices.
@@ -695,5 +695,5 @@ encoding and segments shown as information).
 - **Decision taken:** The send choice defaults to "Send A" (the contract default), so an A/B test is always an explicit choice; B options are disabled when B is missing or invalid for a selected channel. "Schedule" defaults to now + 10 minutes (a now + 1 min default would be too soon by the time it is submitted). Refine is blocked while the editor has unsaved edits. After an audience change the save button reads "Re-check and save".
 - **Cost to change later:** minutes.
 - **Question for owner:** —
-- **Owner response:**
-- **Status:** OPEN
+- **Owner response:** ACCEPT (chat, 2026-11-11).
+- **Status:** ACCEPTED
