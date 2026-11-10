@@ -263,5 +263,6 @@ commit 02:59, CP3 audit fixes finished 2026-11-09 ~03:00 — about 24 h of wall-
 the subscription's usage limits. Agent usage (API-equivalent, ccusage): about $73 over 8–9 November, almost all
 cache reads (`ai-sessions/usage/`). The claudecode eval run cost about $0.35 API-equivalent; no paid API calls
 were made by agents. The owner's live runs on 2026-11-10 (smoke-live, one anthropic eval, the UI) cost about
-$0.15. Phase 2 (A/B, rule editor, refine, cancel, schedule, acceptance suite): 2026-11-10 23:10 to about 00:30,
-contracts first, then three builders in parallel.
+$0.15. Phase 2 (A/B, rule editor, refine, cancel, schedule, acceptance suite): 2026-11-10 23:10–00:00, contracts
+first, then three builders in parallel (~15 min each). ccusage snapshot at the end: $106 API-equivalent for
+this project's orchestrator session including all subagents (`ai-sessions/usage/`).
