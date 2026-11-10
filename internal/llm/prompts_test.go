@@ -26,13 +26,22 @@ func TestPrompts_FewShotsAreValid_RAI1(t *testing.T) {
 		}
 	}
 	b, _ := json.Marshal(goldenContent())
-	p, issues := content.ParseProposal(b)
+	p, issues := content.ParseProposalV2(b)
 	if len(issues) != 0 {
 		t.Fatal(issues)
 	}
-	r := content.Validate(p.Content(), content.Constraints{Locale: "tr"}) // unknown audience → 20-rune names
-	if !r.Valid {
-		t.Fatalf("content few-shot invalid: %+v", r.Errors)
+	for _, key := range content.VariantKeys {
+		vp := p.Variant(key)
+		if li := content.ValidateLabel("label", vp.Label, false); len(li) != 0 {
+			t.Fatalf("variant %s label: %+v", key, li)
+		}
+		r := content.Validate(vp.Content(), content.Constraints{Locale: "tr"}) // unknown audience → 20-rune names
+		if !r.Valid {
+			t.Fatalf("content few-shot variant %s invalid: %+v", key, r.Errors)
+		}
+	}
+	if p.Variants.A.SMS.Text == p.Variants.B.SMS.Text {
+		t.Fatal("the few-shot variants must differ")
 	}
 }
 

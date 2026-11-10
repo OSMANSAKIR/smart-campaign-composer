@@ -53,10 +53,30 @@ func SegmentWireSchema() map[string]any {
 	return schema
 }
 
-// ContentWireSchema returns the ContentProposal schema.
+// variantSchema is one content variant: a short label plus the SMS and the email.
+func variantSchema() map[string]any {
+	return object(map[string]any{
+		"label": typ("string"),
+		"sms":   object(map[string]any{"text": typ("string")}),
+		"email": object(map[string]any{"subject": typ("string"), "body": typ("string")}),
+	})
+}
+
+// ContentWireSchema returns the content_v2 schema: two variants under the fixed keys a and b, so "exactly
+// two" is a schema property (docs/contracts/api.md §9.3). Label length is checked by the validator.
 func ContentWireSchema() map[string]any {
 	return object(map[string]any{
 		"language": enumOf(Locales),
+		"variants": object(map[string]any{"a": variantSchema(), "b": variantSchema()}),
+		"notes":    typ("string"),
+	})
+}
+
+// RefineWireSchema returns the refine_v1 schema: the one rewritten variant (docs/contracts/api.md §9.4).
+func RefineWireSchema() map[string]any {
+	return object(map[string]any{
+		"language": enumOf(Locales),
+		"label":    typ("string"),
 		"sms":      object(map[string]any{"text": typ("string")}),
 		"email":    object(map[string]any{"subject": typ("string"), "body": typ("string")}),
 		"notes":    typ("string"),
@@ -69,6 +89,7 @@ func WireSchemaFiles() (map[string][]byte, error) {
 	for name, s := range map[string]map[string]any{
 		"segment.wire.schema.json": SegmentWireSchema(),
 		"content.wire.schema.json": ContentWireSchema(),
+		"refine.wire.schema.json":  RefineWireSchema(),
 	} {
 		b, err := json.MarshalIndent(s, "", "  ")
 		if err != nil {

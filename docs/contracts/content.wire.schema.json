@@ -1,22 +1,6 @@
 {
   "additionalProperties": false,
   "properties": {
-    "email": {
-      "additionalProperties": false,
-      "properties": {
-        "body": {
-          "type": "string"
-        },
-        "subject": {
-          "type": "string"
-        }
-      },
-      "required": [
-        "body",
-        "subject"
-      ],
-      "type": "object"
-    },
     "language": {
       "enum": [
         "tr",
@@ -27,24 +11,105 @@
     "notes": {
       "type": "string"
     },
-    "sms": {
+    "variants": {
       "additionalProperties": false,
       "properties": {
-        "text": {
-          "type": "string"
+        "a": {
+          "additionalProperties": false,
+          "properties": {
+            "email": {
+              "additionalProperties": false,
+              "properties": {
+                "body": {
+                  "type": "string"
+                },
+                "subject": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "body",
+                "subject"
+              ],
+              "type": "object"
+            },
+            "label": {
+              "type": "string"
+            },
+            "sms": {
+              "additionalProperties": false,
+              "properties": {
+                "text": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "text"
+              ],
+              "type": "object"
+            }
+          },
+          "required": [
+            "email",
+            "label",
+            "sms"
+          ],
+          "type": "object"
+        },
+        "b": {
+          "additionalProperties": false,
+          "properties": {
+            "email": {
+              "additionalProperties": false,
+              "properties": {
+                "body": {
+                  "type": "string"
+                },
+                "subject": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "body",
+                "subject"
+              ],
+              "type": "object"
+            },
+            "label": {
+              "type": "string"
+            },
+            "sms": {
+              "additionalProperties": false,
+              "properties": {
+                "text": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "text"
+              ],
+              "type": "object"
+            }
+          },
+          "required": [
+            "email",
+            "label",
+            "sms"
+          ],
+          "type": "object"
         }
       },
       "required": [
-        "text"
+        "a",
+        "b"
       ],
       "type": "object"
     }
   },
   "required": [
-    "email",
     "language",
     "notes",
-    "sms"
+    "variants"
   ],
   "type": "object"
 }

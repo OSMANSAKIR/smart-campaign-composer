@@ -200,8 +200,26 @@ func TestService_BriefChecked_RAI1(t *testing.T) {
 	}
 }
 
-const validContentJSON = `{"language":"tr","sms":{"text":"Merhaba {{first_name}}, sepetin seni bekliyor! %30 indirim bugün senin."},
-"email":{"subject":"{{first_name}}, %30 indirim seni bekliyor","body":"Merhaba {{first_name}},\n\nSepetindeki ürünler seni bekliyor."},"notes":"kısa"}`
+const validContentJSON = `{"language":"tr","variants":{
+"a":{"label":"Samimi","sms":{"text":"Merhaba {{first_name}}, sepetin seni bekliyor! %30 indirim bugün senin."},
+"email":{"subject":"{{first_name}}, %30 indirim seni bekliyor","body":"Merhaba {{first_name}},\n\nSepetindeki ürünler seni bekliyor."}},
+"b":{"label":"Acil fayda","sms":{"text":"{{first_name}}, %30 indirimi kaçırma, sepetini hemen tamamla!"},
+"email":{"subject":"Sepette %30 indirim: kaçırma","body":"Merhaba {{first_name}},\n\nSepetini tamamla ve %30 indirimden yararlan."}}},"notes":"kısa"}`
+
+// copyText is the three texts of one variant in a test answer.
+type copyText struct{ SMS, Subject, Body string }
+
+var goodB = copyText{"{{first_name}}, %30 indirimi kaçırma!", "Sepette %30 indirim", "Merhaba {{first_name}},\n\nSepetini tamamla."}
+
+// v2Answer builds a content_v2 answer (labels "A" and "B") from the two variants' texts.
+func v2Answer(lang string, a, b copyText) string {
+	v := func(label string, c copyText) map[string]any {
+		return map[string]any{"label": label, "sms": map[string]any{"text": c.SMS},
+			"email": map[string]any{"subject": c.Subject, "body": c.Body}}
+	}
+	out, _ := json.Marshal(map[string]any{"language": lang, "variants": map[string]any{"a": v("A", a), "b": v("B", b)}, "notes": ""})
+	return string(out)
+}
 
 func contentInput() llm.ContentInput {
 	return llm.ContentInput{Brief: llm.OfficialBrief, Language: "tr", SegmentSummary: []string{"Şehir: İstanbul"},
@@ -264,7 +282,9 @@ func TestStream_CancelStopsProvider_RFLOW2(t *testing.T) {
 }
 
 func TestService_ContentRepairNotice_RCNT1(t *testing.T) {
-	tooLong := `{"language":"tr","sms":{"text":"` + strings.Repeat("a", 300) + `"},"email":{"subject":"s","body":"b"},"notes":""}`
+	// Only variant b is too long: the repair notice names variants.b.sms_text (B2: one invalid variant makes
+	// the whole answer invalid).
+	tooLong := v2Answer("tr", copyText{"Merhaba {{first_name}}!", "Konu", "Gövde"}, copyText{strings.Repeat("a", 300), "Konu", "Gövde"})
 	p := mock.NewScripted(mock.Step{JSON: tooLong}, mock.Step{JSON: validContentJSON})
 	var notices []llm.RepairNotice
 	res, err := llm.NewService(p, nil).ProposeContent(context.Background(), contentInput(), nil,
@@ -272,23 +292,25 @@ func TestService_ContentRepairNotice_RCNT1(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(notices) != 1 || notices[0].Attempt != 1 || !strings.Contains(string(notices[0].Errors), `"too_long"`) {
+	if len(notices) != 1 || notices[0].Attempt != 1 || !strings.Contains(string(notices[0].Errors), `"too_long"`) ||
+		!strings.Contains(string(notices[0].Errors), `"variants.b.sms_text"`) || strings.Contains(string(notices[0].Errors), `"variants.a.`) {
 		t.Fatalf("notices = %+v", notices)
 	}
-	if !res.Meta.Repaired || !res.Report.ValidFor["sms"] {
+	if !res.Meta.Repaired || !res.Report.ValidFor["sms"] || !res.B.Report.ValidFor["sms"] {
 		t.Fatalf("result = %+v", res)
 	}
 }
 
 func TestService_ContentOnlyRequestedChannelsBlock_RCNT1(t *testing.T) {
-	badSMS := `{"language":"tr","sms":{"text":"` + strings.Repeat("a", 300) + `"},"email":{"subject":"Konu","body":"Gövde"},"notes":""}`
+	long := copyText{strings.Repeat("a", 300), "Konu", "Gövde"}
+	badSMS := v2Answer("tr", long, long)
 	in := contentInput()
 	in.Channels = []string{"email"}
 	res, err := llm.NewService(mock.NewScripted(mock.Step{JSON: badSMS}), nil).ProposeContent(context.Background(), in, nil, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if res.Report.ValidFor["sms"] || !res.Report.ValidFor["email"] || res.Meta.Attempts != 1 {
+	if res.Report.ValidFor["sms"] || !res.Report.ValidFor["email"] || res.B.Report.ValidFor["sms"] || !res.B.Report.ValidFor["email"] || res.Meta.Attempts != 1 {
 		t.Fatalf("an invalid SMS must not trigger a repair for an email-only campaign: %+v", res.Report)
 	}
 }

@@ -142,7 +142,7 @@ func TestRedTeam_BriefBoundaries_RAI1(t *testing.T) {
 // Streaming: 4-byte runes delivered one byte per chunk, plus a repair in between. Every delta is valid
 // UTF-8, a repair notice separates the attempts, and each attempt's deltas concatenate to its answer.
 func TestRedTeam_StreamSplitRunesAcrossRepair_RFLOW2(t *testing.T) {
-	bad := `{"language":"tr","sms":{"text":"🌸🌸 {{phone}}"},"email":{"subject":"s","body":"b"},"notes":""}`
+	bad := v2Answer("tr", copyText{"🌸🌸 {{phone}}", "s", "b"}, goodB)
 	good := strings.Replace(validContentJSON, "Merhaba", "🌸 Merhaba", 1)
 	bytesOf := func(s string) []string {
 		var out []string

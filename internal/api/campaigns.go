@@ -17,9 +17,9 @@ import (
 	"smartcampaign/internal/segment"
 )
 
-// ContentPromptVersion is announced in the `meta` event before the model answers; it must match the prompt
-// file the llm service uses (internal/llm/prompts/content_v1.tmpl).
-const ContentPromptVersion = "content_v1"
+// ContentPromptVersion is announced in the `meta` event before the model answers. It is the llm service's own
+// constant, so it can never drift from the prompt file (internal/llm/prompts/content_v2.tmpl).
+const ContentPromptVersion = llm.ContentPromptVersion
 
 // maxBody bounds JSON request bodies; the largest legitimate body is an email of 5000 runes.
 const maxBody = 1 << 20
@@ -149,14 +149,76 @@ func (s *Server) generateContent(w http.ResponseWriter, r *http.Request) {
 	sse.send("result", map[string]any{"content": cv, "llm": meta})
 }
 
+// variantBody is one variant of the v2 PUT …/content body (api.md §9.3).
+type variantBody struct {
+	Label        *string `json:"label"`
+	SMSText      *string `json:"sms_text"`
+	EmailSubject *string `json:"email_subject"`
+	EmailBody    *string `json:"email_body"`
+}
+
+// edit checks that every field is present and returns it; missing fields are listed under path.
+func (v *variantBody) edit(path string, missing *[]Issue) campaign.VariantEdit {
+	var e campaign.VariantEdit
+	if v == nil {
+		return e
+	}
+	for name, f := range map[string]**string{"label": &v.Label, "sms_text": &v.SMSText, "email_subject": &v.EmailSubject, "email_body": &v.EmailBody} {
+		if *f == nil {
+			*missing = append(*missing, Issue{Path: path + "." + name, Code: "required", Message: "missing"})
+		}
+	}
+	if len(*missing) == 0 {
+		e = campaign.VariantEdit{Label: *v.Label, SMSText: *v.SMSText, EmailSubject: *v.EmailSubject, EmailBody: *v.EmailBody}
+	}
+	return e
+}
+
+// putContent saves an edited version: the v2 body (variants a and optionally b) or the v1 body (one variant).
+// Sending both shapes is a 400.
 func (s *Server) putContent(w http.ResponseWriter, r *http.Request) {
 	var req struct {
 		SMSText      *string `json:"sms_text"`
 		EmailSubject *string `json:"email_subject"`
 		EmailBody    *string `json:"email_body"`
 		BaseVersion  *int    `json:"base_version"`
+		Variants     *struct {
+			A *variantBody `json:"a"`
+			B *variantBody `json:"b"`
+		} `json:"variants"`
 	}
 	if !decode(w, r, &req) {
+		return
+	}
+	if req.Variants != nil {
+		if req.SMSText != nil || req.EmailSubject != nil || req.EmailBody != nil {
+			writeError(w, 400, "bad_request", "Send either `variants` or the v1 fields (sms_text, email_subject, email_body), not both.",
+				[]Issue{{Path: "variants", Code: "ambiguous", Message: "v1 and v2 bodies are mutually exclusive"}})
+			return
+		}
+		var missing []Issue
+		if req.BaseVersion == nil {
+			missing = append(missing, Issue{Path: "base_version", Code: "required", Message: "missing"})
+		}
+		if req.Variants.A == nil {
+			missing = append(missing, Issue{Path: "variants.a", Code: "required", Message: "missing"})
+		}
+		a := req.Variants.A.edit("variants.a", &missing)
+		var b *campaign.VariantEdit
+		if req.Variants.B != nil {
+			be := req.Variants.B.edit("variants.b", &missing)
+			b = &be
+		}
+		if len(missing) > 0 {
+			writeError(w, 400, "bad_request", "Fields base_version and variants.a (label, sms_text, email_subject, email_body) are required.", missing)
+			return
+		}
+		cv, err := s.campaigns.SaveVariants(r.Context(), r.PathValue("id"), a, b, *req.BaseVersion)
+		if err != nil {
+			s.fail(w, r, err)
+			return
+		}
+		writeJSON(w, http.StatusOK, map[string]any{"content": cv})
 		return
 	}
 	var missing []Issue

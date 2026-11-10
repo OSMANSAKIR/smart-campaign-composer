@@ -21,8 +21,11 @@ import (
 // repairs and cancellation inside llm.Service; these prove the wire format and that a browser closing the
 // request stops the upstream call.
 
-const streamedContent = `{"language":"tr","sms":{"text":"Merhaba {{first_name}}, sepetin seni bekliyor!"},` +
-	`"email":{"subject":"{{first_name}}, indirim","body":"Merhaba {{first_name}},\n\nİndirim seni bekliyor."},"notes":""}`
+const streamedContent = `{"language":"tr","variants":{` +
+	`"a":{"label":"Samimi","sms":{"text":"Merhaba {{first_name}}, sepetin seni bekliyor!"},` +
+	`"email":{"subject":"{{first_name}}, indirim","body":"Merhaba {{first_name}},\n\nİndirim seni bekliyor."}},` +
+	`"b":{"label":"Acil fayda","sms":{"text":"{{first_name}}, indirimi kaçırma!"},` +
+	`"email":{"subject":"İndirimi kaçırma","body":"Merhaba {{first_name}},\n\nHemen tamamla."}}},"notes":""}`
 
 func streamServer(t *testing.T, p llm.Provider) (*httptest.Server, string) {
 	t.Helper()

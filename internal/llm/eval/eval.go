@@ -195,8 +195,9 @@ func runCase(ctx context.Context, svc *llm.Service, db segment.Querier, c Case) 
 		return r, err
 	}
 	if err == nil {
+		// Content is valid when both variants are valid for the requested channels (F1).
 		for _, ch := range channels {
-			ok = ok && cres.Report.ValidFor[ch]
+			ok = ok && cres.A.Report.ValidFor[ch] && cres.B.Report.ValidFor[ch]
 		}
 		r.ContentTries = cres.Meta.Attempts
 		r.LatencyMS += cres.Meta.LatencyMS

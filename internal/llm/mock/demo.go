@@ -14,7 +14,6 @@ import (
 
 	"smartcampaign/internal/catalog"
 	"smartcampaign/internal/clock"
-	"smartcampaign/internal/content"
 	"smartcampaign/internal/llm"
 	"smartcampaign/internal/segment"
 )
@@ -58,7 +57,7 @@ func (d *Demo) Generate(ctx context.Context, req llm.Request, onDelta func(llm.D
 		brief = html.UnescapeString(m[1])
 	}
 	var out any
-	if req.Task == llm.PurposeContent {
+	if req.Task == llm.PurposeContent || req.Task == llm.PurposeRefine {
 		lang := "tr"
 		// Only the header after the brief counts: the brief is user text and may contain a "Language: en"
 		// line of its own (RT-6). The brief is escaped, so the first "</brief>" is the real one.
@@ -67,7 +66,17 @@ func (d *Demo) Generate(ctx context.Context, req llm.Request, onDelta func(llm.D
 				lang = m[1]
 			}
 		}
-		out = DemoContent(brief, lang)
+		if req.Task == llm.PurposeRefine {
+			// The current variant and the instruction come after the language header, so a brief cannot
+			// forge them: both are escaped and the first closing tags are the real ones.
+			rp, ok := DemoRefine(first, lang)
+			if !ok {
+				return llm.Response{}, fmt.Errorf("mock demo: refine request without a current variant")
+			}
+			out = rp
+		} else {
+			out = DemoContent(brief, lang)
+		}
 	} else {
 		out = DemoSegment(brief)
 	}
@@ -293,45 +302,6 @@ func containsAny(s string, subs ...string) bool {
 }
 
 var discountRE = regexp.MustCompile(`%\s?(\d{1,2})|(\d{1,2})\s?%`)
-
-// DemoContent writes short copy in the requested language that passes validation for a 20-rune name.
-func DemoContent(brief, lang string) content.Proposal {
-	var c content.Proposal
-	c.Language = lang
-	discount := ""
-	if m := discountRE.FindStringSubmatch(brief); m != nil {
-		discount = m[1] + m[2]
-	}
-	cart := strings.Contains(fold(brief), "sepet") || strings.Contains(strings.ToLower(brief), "cart")
-	if lang == "en" {
-		hook := "we picked something special for you"
-		if cart {
-			hook = "the items in your cart are waiting for you"
-		}
-		offer := "Take a look today."
-		if discount != "" {
-			offer = "Enjoy " + discount + "% off, just for you, today."
-		}
-		c.SMS.Text = "Hi {{first_name}}, " + hook + "! " + offer
-		c.Email.Subject = "{{first_name}}, " + subjectOffer(discount, "en")
-		c.Email.Body = "Hi {{first_name}},\n\n" + strings.ToUpper(hook[:1]) + hook[1:] + ". " + offer + "\n\nHappy shopping!"
-		c.Notes = "Demo copy (mock LLM). Set ANTHROPIC_API_KEY for real generation."
-		return c
-	}
-	hook := "sana özel fırsatlar seni bekliyor"
-	if cart {
-		hook = "sepetindeki ürünler seni bekliyor"
-	}
-	offer := "Bugün göz at."
-	if discount != "" {
-		offer = "Sana özel %" + discount + " indirimle bugün tamamla."
-	}
-	c.SMS.Text = "Merhaba {{first_name}}, " + hook + "! " + offer
-	c.Email.Subject = "{{first_name}}, " + subjectOffer(discount, "tr")
-	c.Email.Body = "Merhaba {{first_name}},\n\n" + strings.ToUpper(hook[:1]) + hook[1:] + ". " + offer + "\n\nKeyifli alışverişler!"
-	c.Notes = "Demo metni (mock LLM). Gerçek üretim için ANTHROPIC_API_KEY ayarlayın."
-	return c
-}
 
 func subjectOffer(discount, lang string) string {
 	switch {
