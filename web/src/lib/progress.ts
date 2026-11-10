@@ -1,6 +1,6 @@
 // Dashboard state. Every `snapshot` is the complete truth (api.md §7, need.md N-ORC-006): it replaces the
 // previous counts instead of being merged into them, which makes reconnects trivial (R-FLOW-5).
-import type { Channel, ChannelProgress, Progress, ProgressEvent } from './types'
+import type { Channel, ChannelProgress, Progress, ProgressEvent, VariantProgress } from './types'
 
 export const MAX_RECENT_EVENTS = 40
 
@@ -23,9 +23,20 @@ export function applyEvent(state: DashboardState, e: ProgressEvent): DashboardSt
   return { progress: state.progress, events: [e, ...state.events].slice(0, MAX_RECENT_EVENTS) }
 }
 
-// Messages in a terminal state (sent, failed, skipped) divided by the total, as a 0..1 fraction.
+// Messages in a terminal state (sent, failed, skipped, cancelled) divided by the total, as a 0..1 fraction.
+// A stopped campaign therefore ends at 100%: after `done`, sent + failed + cancelled + skipped = total (api.md §9.5).
 export function finishedCount(c: ChannelProgress): number {
-  return c.sent + c.failed + c.skipped_no_consent
+  return c.sent + c.failed + c.skipped_no_consent + (c.cancelled ?? 0)
+}
+
+// Per-variant rows for a channel, in A, B order, only for variants that have messages (api.md §9.3).
+export function variantRows(c: ChannelProgress): { key: 'a' | 'b'; v: VariantProgress }[] {
+  const out: { key: 'a' | 'b'; v: VariantProgress }[] = []
+  for (const key of ['a', 'b'] as const) {
+    const v = c.variants?.[key]
+    if (v) out.push({ key, v })
+  }
+  return out
 }
 
 export function channelFraction(c: ChannelProgress): number {

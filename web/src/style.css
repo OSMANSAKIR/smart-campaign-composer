@@ -168,6 +168,7 @@ table.list tr:last-child td { border-bottom: 0; }
 .bar .sent { background: var(--ok); }
 .bar .failed { background: var(--bad); }
 .bar .skipped { background: #8d96a8; }
+.bar .cancelled { background: #c4cad6; }
 .cells { display: grid; grid-template-columns: repeat(auto-fit, minmax(92px, 1fr)); gap: 8px; margin-top: 12px; }
 .cell { border: 1px solid var(--line-soft); border-radius: 6px; padding: 8px 10px; }
 .cell .v { font-size: 1.35rem; font-weight: 700; }
