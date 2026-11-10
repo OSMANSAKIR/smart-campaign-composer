@@ -320,18 +320,6 @@ simplest to explain.
   the stored rule, so they use the edit. The catalog is the editor's convenience only; the server stays the
   authority.
 
-## D-21 · Acceptance suite through the HTTP API [F8]
-
-- **Decision.** `make acceptance` runs scenarios A1–A13 (`acceptance/`, build tag `acceptance`) against the
-  real API handler, the real dispatchers, reconciler and scheduler, and the mock provider, in one process on a
-  throwaway database seeded with 5000 users. Mock LLM by default, so CI runs it (job with a Postgres service).
-  Assertions are semantic (fields used, unsupported list non-empty, consent note), so the same suite runs
-  against the real model: `make acceptance PROVIDER=anthropic` with the spend flag is owner-only, guarded in
-  the Makefile and again in the test, and stops when the cumulative cost passes `ACCEPTANCE_MAX_USD`
-  (default $1). Reports go to `docs/acceptance/`.
-- **Why in process.** One command, no compose dependency beyond Postgres, a fresh database per run, and the
-  provider's own `/stats` (max per 1 s window, duplicates, delivery times) as the independent witness.
-
 ## D-20 · Two variants in one call; refine; honest cost and provider errors [B-2, F3, N-LLM-005, F7]
 
 - **Content v2.** One streamed call returns exactly two variants (`content_v2` wire schema with fixed keys
@@ -350,3 +338,15 @@ simplest to explain.
   `llm_provider_rejected` (502) with a fixed message; it is never retried or repaired. The provider body can
   hold account identifiers: it goes to a warn log only, and `llm_calls.error` stores `provider_rejected
   status=<n>`.
+
+## D-21 · Acceptance suite through the HTTP API [F8]
+
+- **Decision.** `make acceptance` runs scenarios A1–A13 (`acceptance/`, build tag `acceptance`) against the
+  real API handler, the real dispatchers, reconciler and scheduler, and the mock provider, in one process on a
+  throwaway database seeded with 5000 users. Mock LLM by default, so CI runs it (job with a Postgres service).
+  Assertions are semantic (fields used, unsupported list non-empty, consent note), so the same suite runs
+  against the real model: `make acceptance PROVIDER=anthropic` with the spend flag is owner-only, guarded in
+  the Makefile and again in the test, and stops when the cumulative cost passes `ACCEPTANCE_MAX_USD`
+  (default $1). Reports go to `docs/acceptance/`.
+- **Why in process.** One command, no compose dependency beyond Postgres, a fresh database per run, and the
+  provider's own `/stats` (max per 1 s window, duplicates, delivery times) as the independent witness.
