@@ -48,6 +48,10 @@ const summary = computed(() => {
   return keys.value.map((k) => `Variant ${k.toUpperCase()}: ${describe(k)}`).join(' ')
 })
 
+// After the audience changed the content must be saved again (a new version, validated for the new audience)
+// before approval, even when the text is the same (api.md §3).
+const needsResave = computed(() => props.campaign.status === 'segmented' && !!props.campaign.content)
+
 // Refine rewrites the saved version of a variant, so unsaved edits would be lost: save first.
 const refineBlocked = computed(() => {
   if (!props.campaign.content) return 'Write the content with Claude first.'
@@ -112,9 +116,14 @@ const refineBlocked = computed(() => {
       </div>
 
       <div class="row">
-        <button class="btn primary" type="button" :disabled="!hasUnsavedEdits || saving || stream.active" @click="$emit('save')">
+        <button
+          class="btn primary"
+          type="button"
+          :disabled="(!hasUnsavedEdits && !needsResave) || saving || stream.active"
+          @click="$emit('save')"
+        >
           <span v-if="saving" class="spinner" aria-hidden="true" />
-          {{ saving ? 'Saving…' : 'Save changes' }}
+          {{ saving ? 'Saving…' : needsResave && !hasUnsavedEdits ? 'Re-check and save' : 'Save changes' }}
         </button>
         <span class="muted" role="status">
           <template v-if="stream.active">{{ summary }}</template>

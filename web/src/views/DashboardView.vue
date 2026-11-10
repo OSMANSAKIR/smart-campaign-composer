@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import ErrorNotice from '../components/ErrorNotice.vue'
+import MessagesPanel from '../components/MessagesPanel.vue'
 import StatusPill from '../components/StatusPill.vue'
 import { api } from '../lib/api'
 import { describeError, type UserMessage } from '../lib/errors'
@@ -92,6 +93,7 @@ async function confirmStop() {
 const overall = computed(() => (state.value.progress ? Math.round(overallFraction(state.value.progress) * 100) : 0))
 const errors = computed(() => Object.entries(state.value.progress?.errors ?? {}).filter(([, n]) => n > 0))
 const channels = computed(() => (state.value.progress ? channelEntries(state.value.progress) : []))
+const hasVariants = computed(() => channels.value.some(([, c]) => variantRows(c).length > 0))
 
 function pct(c: ChannelProgress, n: number) {
   return c.total > 0 ? (n / c.total) * 100 : 0
@@ -350,6 +352,8 @@ const notSent = computed(
           </ul>
         </section>
       </div>
+
+      <MessagesPanel :campaign-id="campaignId" :has-variants="hasVariants" />
       </template>
     </div>
 

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref } from 'vue'
+import { computed, ref, watch } from 'vue'
 import { renderPreview } from '../lib/templateVars'
 import type { ContentVariant, ValidationReport, VariantInput, VariantKey } from '../lib/types'
 import ContentField from './ContentField.vue'
@@ -26,6 +26,8 @@ const KEY = computed(() => props.k.toUpperCase())
 const instruction = ref('')
 const MAX_INSTRUCTION = 500
 const instructionRunes = computed(() => [...instruction.value].length)
+// A new saved version (the rewrite arrived) used the instruction up.
+watch(() => props.savedVersion, () => (instruction.value = ''))
 const instructionOk = computed(() => instructionRunes.value >= 1 && instructionRunes.value <= MAX_INSTRUCTION)
 
 const issuesFor = (path: string) => [
