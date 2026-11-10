@@ -25,7 +25,7 @@ const reachable = computed<Record<Step, boolean>>(() => ({
 watch(
   () => c.campaign.value?.status,
   (s) => {
-    if (c.campaign.value && (s === 'sending' || s === 'completed' || s === 'completed_with_failures')) {
+    if (c.campaign.value && s && ['scheduled', 'sending', 'cancelled', 'completed', 'completed_with_failures'].includes(s)) {
       navigate(links.live(c.campaign.value.id))
     }
   },
@@ -91,6 +91,8 @@ const alreadyApproved = computed(() => c.error.value?.code === 'already_approved
         :campaign="c.campaign.value"
         :llm="c.segmentLlm.value"
         :busy="c.busy.value === 'segment'"
+        :save-rule="c.saveRule"
+        :saving-rule="c.busy.value === 'rule'"
         @regenerate="c.generateSegment()"
         @next="c.goTo('content')"
       />
@@ -98,10 +100,11 @@ const alreadyApproved = computed(() => c.error.value?.code === 'already_approved
       <ContentStep
         v-else-if="c.step.value === 'content' && c.campaign.value"
         :campaign="c.campaign.value"
-        :form="c.form"
+        :forms="c.forms"
+        :has-b="c.hasB.value"
+        :checks="c.checks"
         :stream="c.stream"
-        :report="c.report.value"
-        :report-is-current="c.reportIsCurrent.value"
+        :report-is-current="c.reportIsCurrent"
         :validating="c.validating.value"
         :has-unsaved-edits="c.hasUnsavedEdits.value"
         :saving="c.busy.value === 'save'"
@@ -109,6 +112,7 @@ const alreadyApproved = computed(() => c.error.value?.code === 'already_approved
         @generate="c.generateContent()"
         @stop="c.stopGenerating()"
         @save="c.saveContent()"
+        @refine="(k, text) => c.refineVariant(k, text)"
         @next="c.goTo('approve')"
       />
 
@@ -120,6 +124,10 @@ const alreadyApproved = computed(() => c.error.value?.code === 'already_approved
         :gate="c.gate.value"
         :recipients="c.recipients.value"
         :approving="c.busy.value === 'approve'"
+        v-model:variant="c.variant.value"
+        v-model:schedule-mode="c.scheduleMode.value"
+        v-model:schedule-at="c.scheduleAt.value"
+        :schedule-problem="c.scheduleProblem.value"
         @toggle="c.toggleChannel"
         @confirm="confirmApprove"
         @back="c.goTo('content')"

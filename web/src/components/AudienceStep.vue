@@ -1,12 +1,29 @@
 <script setup lang="ts">
-import { computed, ref } from 'vue'
-import { formatCost, formatInt } from '../lib/format'
-import type { Campaign, LlmMeta } from '../lib/types'
+import { computed, onMounted, ref } from 'vue'
+import { loadCatalog } from '../lib/catalog'
+import { describeError } from '../lib/errors'
+import { formatInt } from '../lib/format'
+import { renderRule } from '../lib/ruleEditor'
+import type { Campaign, Catalog, LlmMeta, SegmentRule } from '../lib/types'
+import LlmPanel from './LlmPanel.vue'
+import RuleEditor from './RuleEditor.vue'
 
-const props = defineProps<{ campaign: Campaign; llm: LlmMeta | null; busy: boolean }>()
+const props = defineProps<{
+  campaign: Campaign
+  llm: LlmMeta | null
+  busy: boolean
+  // Saves a hand-edited rule; resolves true when the server accepted it (F2).
+  saveRule: (rule: SegmentRule) => Promise<boolean>
+  savingRule: boolean
+}>()
 defineEmits<{ regenerate: []; next: [] }>()
 
 const showJson = ref(false)
+const editing = ref(false)
+const catalog = ref<Catalog | null>(null)
+const catalogError = ref('')
+const loadingCatalog = ref(false)
+
 const seg = computed(() => props.campaign.segment)
 const chips = computed(() => {
   const s = seg.value
@@ -17,6 +34,36 @@ const chips = computed(() => {
 })
 const json = computed(() => JSON.stringify(seg.value?.rule ?? null, null, 2))
 const nobody = computed(() => (seg.value?.audience.total ?? 0) === 0)
+
+async function ensureCatalog() {
+  if (catalog.value) return
+  loadingCatalog.value = true
+  catalogError.value = ''
+  try {
+    catalog.value = await loadCatalog()
+  } catch (e) {
+    catalogError.value = describeError(e).message
+  } finally {
+    loadingCatalog.value = false
+  }
+}
+async function startEditing() {
+  await ensureCatalog()
+  if (catalog.value) editing.value = true
+}
+async function onSave(rule: SegmentRule) {
+  if (await props.saveRule(rule)) editing.value = false
+}
+
+// Claude's original rule is rendered client-side from the catalog labels; without a catalog the JSON shows.
+onMounted(() => {
+  if (props.campaign.segment?.original_rule) void ensureCatalog()
+})
+const original = computed(() => seg.value?.original_rule ?? null)
+const originalLines = computed(() =>
+  original.value && catalog.value && seg.value ? renderRule(original.value, catalog.value, seg.value.language) : [],
+)
+const originalJson = computed(() => JSON.stringify(original.value, null, 2))
 </script>
 
 <template>
@@ -25,7 +72,7 @@ const nobody = computed(() => (seg.value?.audience.total ?? 0) === 0)
       <header>
         <h2 id="aud-h">Who will receive it</h2>
         <span class="pill" :class="seg.source === 'edited' ? 'warn' : 'info'">
-          {{ seg.source === 'edited' ? 'Edited by hand' : 'Proposed by Claude' }}
+          {{ seg.source === 'edited' ? 'Edited' : 'Proposed by Claude' }}
         </span>
       </header>
 
@@ -34,6 +81,23 @@ const nobody = computed(() => (seg.value?.audience.total ?? 0) === 0)
       </ul>
       <p v-else class="muted">No conditions: this audience is everyone in the database.</p>
       <p v-if="seg.explanation" class="muted">{{ seg.explanation }}</p>
+
+      <div class="row">
+        <button v-if="!editing" type="button" class="btn" :disabled="loadingCatalog || busy" @click="startEditing">
+          <span v-if="loadingCatalog" class="spinner" aria-hidden="true" />
+          Edit rule
+        </button>
+        <span v-if="catalogError" class="muted" role="alert">{{ catalogError }}</span>
+      </div>
+
+      <details v-if="seg.source === 'edited' && original" class="original">
+        <summary>Claude’s original rule</summary>
+        <ul v-if="originalLines.length" class="chips" aria-label="Claude’s original rule in words">
+          <li v-for="(l, i) in originalLines" :key="i" class="chip">{{ l }}</li>
+        </ul>
+        <pre v-else class="code" tabindex="0" aria-label="Claude’s original rule as JSON">{{ originalJson }}</pre>
+        <p v-if="seg.edited_at" class="muted">Edited {{ new Date(seg.edited_at).toLocaleString('en-GB') }}.</p>
+      </details>
 
       <div>
         <button
@@ -48,6 +112,17 @@ const nobody = computed(() => (seg.value?.audience.total ?? 0) === 0)
         <pre v-show="showJson" id="rule-json" class="code" tabindex="0" aria-label="Raw audience rule as JSON">{{ json }}</pre>
       </div>
     </div>
+
+    <RuleEditor
+      v-if="editing && catalog"
+      :catalog="catalog"
+      :rule="seg.rule"
+      :language="seg.language"
+      :campaign-id="campaign.id"
+      :saving="savingRule"
+      @save="onSave"
+      @cancel="editing = false"
+    />
 
     <div class="counts" role="group" aria-label="Audience size">
       <div class="count lead">
@@ -90,19 +165,7 @@ const nobody = computed(() => (seg.value?.audience.total ?? 0) === 0)
       <strong>{{ w.message }}</strong>
     </div>
 
-    <div v-if="llm" class="card">
-      <header><h3>How Claude produced this</h3></header>
-      <dl class="meta">
-        <div><dt>Provider</dt><dd>{{ llm.provider }}</dd></div>
-        <div><dt>Model</dt><dd>{{ llm.model }}</dd></div>
-        <div><dt>Latency</dt><dd class="num">{{ formatInt(llm.latency_ms) }} ms</dd></div>
-        <div><dt>Attempts</dt><dd class="num">{{ llm.attempts }}{{ llm.repaired ? ' (repaired)' : '' }}</dd></div>
-        <div><dt>Tokens in / out</dt><dd class="num">{{ formatInt(llm.input_tokens) }} / {{ formatInt(llm.output_tokens) }}</dd></div>
-        <div><dt>Cache read</dt><dd class="num">{{ formatInt(llm.cache_read_tokens) }}</dd></div>
-        <div><dt>Cost</dt><dd class="num">{{ formatCost(llm.cost_usd) }}</dd></div>
-        <div><dt>Prompt</dt><dd>{{ llm.prompt_version }}</dd></div>
-      </dl>
-    </div>
+    <LlmPanel v-if="llm" :llm="llm" what="audience" />
 
     <div class="row">
       <button class="btn primary" type="button" :disabled="nobody || busy" @click="$emit('next')">
