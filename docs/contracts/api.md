@@ -253,7 +253,8 @@ the authority.
 - `POST /api/segment/preview` `{ "rule": { "groups": […] } }` → 200, never saves, never 422:
   `{ "valid": true, "errors": [], "warnings": [], "rendered": { "en": […], "tr": […] }, "audience": { … } | null }`.
   Same validator as model output (`segment.Validate`); `audience` is null when invalid. The UI calls it
-  debounced (≥ 300 ms) while the marketer edits.
+  debounced (≥ 300 ms) while the marketer edits. Error paths name the condition as `groups[i].conditions[j]…`
+  (the editor maps them to its rows); errors about the whole rule use `groups` or an empty path.
 - `PUT /api/campaigns/{id}/segment` (v1 endpoint) saves the edit. v2 additions on the stored segment:
   `"source": "edited"`, `"original_rule": { Claude's rule } | null` and `"edited_at": "…" | null`.
   `original_rule` is the last model-generated rule and survives further edits; a new generation clears it.
@@ -346,7 +347,8 @@ compatibility). `source` per variant: `llm` | `edited` | `refined`.
 
 - Approve with `send_at` (RFC 3339, any offset; stored UTC in `campaigns.scheduled_at`). Allowed window:
   server now + 50 s .. now + 7 days (the "1 minute" minimum minus 10 s for clock skew and request latency).
-  Outside → 422 `invalid_send_at`.
+  Outside, or not parseable as RFC 3339 → 422 `invalid_send_at` (path `send_at`). The window is checked on the
+  database clock inside the approve transaction; a replay of a stored key does not re-check it.
 - The approve transaction enqueues exactly as without `send_at` (audience frozen at approve) but moves the
   campaign `content_ready → scheduled`. A scheduler in the worker moves `scheduled → sending` when
   `scheduled_at <= now()` (database clock). Nothing is claimed before (the claim requires `sending`). Consent
