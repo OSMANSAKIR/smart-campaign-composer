@@ -1,7 +1,7 @@
 // Server-sent events, two ways:
 //  - createSseParser + streamGenerate: POST + fetch stream (EventSource is GET-only; need.md N-ORC-002).
 //  - connectProgress: EventSource wrapper for GET .../events, where every `snapshot` is the full state.
-import { generateUrl, eventsUrl, readError, sendRequest } from './api'
+import { generateUrl, refineUrl, eventsUrl, readError, sendRequest } from './api'
 import { ApiError } from './errors'
 import type { ErrorBody, GenerateEvent, Progress, ProgressEvent } from './types'
 
@@ -77,13 +77,32 @@ export function toGenerateEvent(raw: RawSseEvent): GenerateEvent | null {
 
 // Reads the generation stream. Resolves when the stream ends; rejects with ApiError for pre-stream failures
 // (404/409/network). A terminal `error` event is delivered through onEvent like any other event.
-export async function streamGenerate(
+export function streamGenerate(
   campaignId: string,
   onEvent: (e: GenerateEvent) => void,
   signal?: AbortSignal,
 ): Promise<void> {
-  const res = await sendRequest('POST', generateUrl(campaignId), {
-    body: {},
+  return streamPost(generateUrl(campaignId), {}, onEvent, signal)
+}
+
+// Refine one variant with an instruction (api.md §9.4); same stream as generate.
+export function streamRefine(
+  campaignId: string,
+  body: { variant: 'a' | 'b'; instruction: string; base_version: number },
+  onEvent: (e: GenerateEvent) => void,
+  signal?: AbortSignal,
+): Promise<void> {
+  return streamPost(refineUrl(campaignId), body, onEvent, signal)
+}
+
+async function streamPost(
+  url: string,
+  body: unknown,
+  onEvent: (e: GenerateEvent) => void,
+  signal?: AbortSignal,
+): Promise<void> {
+  const res = await sendRequest('POST', url, {
+    body,
     headers: { Accept: 'text/event-stream' },
     signal,
   })

@@ -31,7 +31,7 @@ async function load(more = false) {
 }
 
 function href(c: CampaignSummary): string {
-  const sent = c.status === 'sending' || c.status === 'completed' || c.status === 'completed_with_failures'
+  const sent = ['scheduled', 'sending', 'completed', 'completed_with_failures', 'cancelled'].includes(c.status)
   return sent ? links.live(c.id) : links.composer(c.id)
 }
 

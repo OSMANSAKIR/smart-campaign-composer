@@ -31,6 +31,8 @@ export const STATUS_LABEL: Record<string, string> = {
   draft: 'Draft',
   segmented: 'Audience ready',
   content_ready: 'Ready to approve',
+  scheduled: 'Scheduled',
+  cancelled: 'Stopped',
   sending: 'Sending',
   completed: 'Completed',
   completed_with_failures: 'Completed with failures',

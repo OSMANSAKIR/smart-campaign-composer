@@ -147,6 +147,41 @@ function str(o: Json | undefined, ...path: string[]): string {
   return typeof cur === 'string' ? cur : ''
 }
 
+export interface StreamedVariant extends StreamedContent {
+  label: string
+}
+
+export interface StreamedVariants {
+  a: StreamedVariant | null
+  b: StreamedVariant | null
+}
+
+function variantAt(v: Json | undefined, ...path: string[]): StreamedVariant | null {
+  let cur: Json | undefined = v
+  for (const k of path) {
+    if (cur === null || typeof cur !== 'object' || Array.isArray(cur)) return null
+    cur = cur[k]
+  }
+  if (cur === null || typeof cur !== 'object' || Array.isArray(cur)) return null
+  return {
+    label: str(cur, 'label'),
+    smsText: str(cur, 'sms', 'text'),
+    emailSubject: str(cur, 'email', 'subject'),
+    emailBody: str(cur, 'email', 'body'),
+  }
+}
+
+// Extracts variants.a / variants.b from a content_v2 proposal (api.md §9.3) as it streams. A key that has not
+// started yet is null, so the caller can keep showing an empty card. A refine answer (refine_v1, api.md §9.4)
+// has no `variants`; it reads as the single object it is, returned as `a`.
+export function extractVariants(partial: string): StreamedVariants {
+  const v = parsePartialJson(partial)
+  if (v !== null && v !== undefined && typeof v === 'object' && !Array.isArray(v) && 'variants' in v) {
+    return { a: variantAt(v, 'variants', 'a'), b: variantAt(v, 'variants', 'b') }
+  }
+  return { a: variantAt(v), b: null }
+}
+
 // Extracts sms.text, email.subject and email.body from the (possibly incomplete) proposal JSON.
 export function extractContent(partial: string): StreamedContent {
   const v = parsePartialJson(partial)

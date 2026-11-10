@@ -15,11 +15,24 @@ const CONTRACT_CODES = [
   'llm_refused',
   'content_invalid',
   'empty_audience',
+  'variant_missing',
+  'invalid_send_at',
+  'llm_provider_rejected',
   'llm_failed',
   'unavailable',
   'internal',
   'network',
 ]
+
+describe('llm_provider_rejected shows the server message as is (F7)', () => {
+  it('does not fall back to the generic failed-or-timed-out text', () => {
+    const msg = 'The AI provider rejected the request (check the API key or credits).'
+    const m = describeError(new ApiError(502, 'llm_provider_rejected', msg))
+    expect(m.message).toBe(msg)
+    expect(m.message).not.toMatch(/timed out/i)
+    expect(m.retryable).toBe(false)
+  })
+})
 
 describe('describeError maps every API error code (R-FLOW-1..3)', () => {
   it('covers every code in api.md §1', () => {
@@ -86,13 +99,13 @@ describe('api client', () => {
     const [url, init] = f.mock.calls[0] as [string, RequestInit]
     expect(url).toBe('/api/campaigns/c1/approve')
     expect((init.headers as Record<string, string>)['Idempotency-Key']).toBe('key-1')
-    expect(JSON.parse(init.body as string)).toEqual({ channels: ['sms'], content_version: 3 })
+    expect(JSON.parse(init.body as string)).toEqual({ channels: ['sms'], content_version: 3, variant: 'a' })
   })
 
   it('sends base_version with a content save and builds list queries', async () => {
     const f = vi.fn().mockImplementation(() => Promise.resolve(new Response('{}', { status: 200 })))
     vi.stubGlobal('fetch', f)
-    await api.saveContent('c1', { sms_text: 'a', email_subject: 'b', email_body: 'c' }, 0)
+    await api.saveContent('c1', { variants: { a: { label: 'A', sms_text: 'a', email_subject: 'b', email_body: 'c' }, b: null } }, 0)
     expect(JSON.parse((f.mock.calls[0] as [string, RequestInit])[1].body as string)).toMatchObject({ base_version: 0 })
     await api.listCampaigns({ limit: 5, cursor: 'x y' })
     expect((f.mock.calls[1] as [string])[0]).toBe('/api/campaigns?limit=5&cursor=x%20y')

@@ -27,7 +27,7 @@ function campaign(over: Partial<Campaign> = {}, rep = report(true, true), sms = 
     segment: {
       version: 1,
       source: 'llm',
-      rule: {},
+      rule: { groups: [] },
       rendered: { en: [], tr: [] },
       unsupported_criteria: [],
       assumptions: [],

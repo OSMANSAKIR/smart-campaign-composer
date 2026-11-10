@@ -1,6 +1,8 @@
 // Approve gating (R-FLOW-3): the button is enabled only when the server's report for the *latest saved*
-// content version says it is valid for every chosen channel, and each chosen channel has recipients.
-import type { Campaign, Channel } from './types'
+// content version says every variant that will be sent is valid for every chosen channel, and each chosen
+// channel has recipients.
+import type { Campaign, Channel, SendVariant } from './types'
+import { variantProblem } from './variants'
 
 export interface GateInput {
   campaign: Campaign | null
@@ -9,6 +11,10 @@ export interface GateInput {
   hasUnsavedEdits: boolean
   // True while a save or validation request is in flight.
   busy?: boolean
+  // Which variant(s) will be sent (B-2). Defaults to a.
+  variant?: SendVariant
+  // A reason the chosen send time is not allowed (F5), or '' / undefined when it is fine.
+  scheduleProblem?: string
 }
 
 export interface Gate {
@@ -23,7 +29,13 @@ export function approveGate(g: GateInput): Gate {
   const no = (reason: string): Gate => ({ enabled: false, reason })
   const c = g.campaign
   if (!c) return no('Campaign is not loaded yet.')
-  if (c.status === 'sending' || c.status === 'completed' || c.status === 'completed_with_failures') {
+  if (
+    c.status === 'sending' ||
+    c.status === 'scheduled' ||
+    c.status === 'cancelled' ||
+    c.status === 'completed' ||
+    c.status === 'completed_with_failures'
+  ) {
     return no('This campaign has already been approved.')
   }
   if (!c.segment) return no('Find the audience first.')
@@ -39,9 +51,8 @@ export function approveGate(g: GateInput): Gate {
     const reachable = ch === 'sms' ? c.segment.audience.sms_reachable : c.segment.audience.email_reachable
     if (reachable <= 0) return no(`No one in this audience has consented to ${NAMES[ch]}.`)
   }
-  const report = c.content.validation
-  for (const ch of g.channels) {
-    if (!report.valid_for[ch]) return no(`The ${NAMES[ch]} content is not valid yet. Fix the errors shown.`)
-  }
+  const problem = variantProblem(c.content, g.variant ?? 'a', g.channels)
+  if (problem) return no(problem)
+  if (g.scheduleProblem) return no(g.scheduleProblem)
   return { enabled: true, reason: '' }
 }
