@@ -14,7 +14,7 @@ async function watchSmsWhileStreaming(page: Page): Promise<string[]> {
         const seen: string[] = []
         const started = Date.now()
         const timer = setInterval(() => {
-          const el = document.querySelector<HTMLTextAreaElement>('#sms-text')
+          const el = document.querySelector<HTMLTextAreaElement>('#sms-text-a')
           const v = el?.value ?? ''
           if (v && seen[seen.length - 1] !== v) seen.push(v)
           const done = document.body.innerText.includes('Saved as version 1')
@@ -56,9 +56,11 @@ test('official brief: audience, streamed content, edit, approve, delivery comple
   expect((await generate).headers()['content-type']).toContain('text/event-stream')
   const values = await watching
   expect(values.length, `SMS field values seen while streaming: ${JSON.stringify(values)}`).toBeGreaterThan(1)
-  const sms = page.getByRole('textbox', { name: 'SMS text' })
+  const sms = page.getByRole('textbox', { name: 'SMS text, variant A' })
   await expect(sms).toHaveValue(/\{\{first_name\}\}/)
-  await expect(page.getByText('Saved as version 1. Valid for SMS and email.')).toBeVisible()
+  // Two variants stream in (B-2): the second card is filled too, and both are valid.
+  await expect(page.getByRole('textbox', { name: 'SMS text, variant B' })).toHaveValue(/\S/)
+  await expect(page.getByText('Saved as version 1. Both variants are valid for SMS and email.')).toBeVisible()
 
   // 4. Edit (R-FLOW-3, R-CNT-3): an unknown variable is an error and blocks approval…
   await sms.fill('Merhaba {{first_name}}, kodun {{coupon}} seni bekliyor!')
@@ -66,14 +68,15 @@ test('official brief: audience, streamed content, edit, approve, delivery comple
   await expect(page.getByRole('button', { name: 'Continue to approve' })).toBeDisabled()
   // …a valid edit is measured with the longest name and city in this audience (R-CNT-1), then saved.
   await sms.fill('Merhaba {{first_name}}, sepetin seni bekliyor! {{city}} için %30 indirim bugün geçerli.')
-  await expect(page.getByText('Unsaved changes. Valid for SMS and email.')).toBeVisible()
-  await expect(page.getByText(/\/ 160 with longest name and city/)).toBeVisible()
+  await expect(page.getByText('Unsaved changes. Both variants are valid for SMS and email.')).toBeVisible()
+  await expect(page.getByText(/\/ 160 with longest name and city/).first()).toBeVisible()
   await page.getByRole('button', { name: 'Save changes' }).click()
-  await expect(page.getByText('Saved as version 2. Valid for SMS and email.')).toBeVisible()
+  await expect(page.getByText('Saved as version 2. Both variants are valid for SMS and email.')).toBeVisible()
 
   // 5. Approve behind a confirmation dialog.
   await page.getByRole('button', { name: 'Continue to approve' }).click()
   await expect(page.getByText('Version 2 of the content will be sent.')).toBeVisible()
+  await page.getByRole('radio', { name: 'Send A' }).check() // B-2: one variant keeps the delivery counts simple
   await page.getByRole('button', { name: 'Review and approve' }).click()
   const dialog = page.getByRole('dialog', { name: 'Send this campaign?' })
   await expect(dialog).toBeVisible()
@@ -96,9 +99,45 @@ test('official brief: audience, streamed content, edit, approve, delivery comple
     expect(p.sent).toBeGreaterThan(0)
   }
   expect(c.approved_content_version).toBe(2)
+  expect(c.send_variant).toBe('a')
 
   // 7. A reload reconnects and the first snapshot already holds the final state.
   await page.reload()
   await expect(page.getByText('100% · finished')).toBeVisible()
   await expect(page.getByText('Finished', { exact: true })).toBeVisible()
+})
+
+// F2 (N-WEB-001 B): the marketer edits Claude's rule in the catalog-driven editor; the count follows, the rule is
+// saved, and the audience shows the "Edited" badge with Claude's original rule kept.
+test('rule editor: change the city, the count changes, save, "Edited" badge [F2]', async ({ page }) => {
+  await page.goto('/#/new')
+  await page.getByRole('button', { name: 'Find audience' }).click()
+  const rules = page.getByRole('list', { name: 'Audience rules' })
+  await expect(rules).toContainText('İstanbul')
+
+  const size = page.getByRole('group', { name: 'Audience size' })
+  const matchedCount = async () =>
+    Number((await size.locator('text=people match').locator('..').innerText()).replace(/\D/g, ''))
+  const before = await matchedCount()
+
+  await page.getByRole('button', { name: 'Edit rule' }).click()
+  const editor = page.getByRole('region', { name: 'Edit the audience rule' })
+  await expect(editor).toBeVisible()
+  await expect(editor.getByTestId('preview-count')).toBeVisible()
+
+  // Find the condition on the city field (the model's group order is not part of the contract).
+  let group = 0
+  for (let g = 1; g <= 5 && group === 0; g++) {
+    const field = editor.getByRole('combobox', { name: `Condition 1 of group ${g}: field` })
+    if ((await field.count()) > 0 && (await field.inputValue()) === 'city') group = g
+  }
+  expect(group, 'a group whose first condition is on city').toBeGreaterThan(0)
+  await editor.getByRole('combobox', { name: `Condition 1 of group ${group}: value` }).selectOption('Ankara')
+  await expect(editor.getByTestId('preview-count')).toBeVisible()
+
+  await editor.getByRole('button', { name: 'Save rule' }).click()
+  await expect(page.getByText('Edited', { exact: true })).toBeVisible()
+  await expect(page.getByText('Claude’s original rule')).toBeVisible()
+  await expect(rules).toContainText('Ankara')
+  expect(await matchedCount()).not.toBe(before)
 })
