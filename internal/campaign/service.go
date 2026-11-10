@@ -227,6 +227,11 @@ func (s *Service) ContentInput(ctx context.Context, id string) (llm.ContentInput
 	if err != nil {
 		return llm.ContentInput{}, err
 	}
+	return buildContentInput(id, c, wc), nil
+}
+
+// buildContentInput is what the content and refine prompts need about the campaign; c has a segment.
+func buildContentInput(id string, c Campaign, wc map[string]content.Vars) llm.ContentInput {
 	channels := catalog.Channels
 	if ch := c.Segment.ChannelsRequested; ch == "sms" || ch == "email" {
 		channels = []string{ch}
@@ -234,10 +239,11 @@ func (s *Service) ContentInput(ctx context.Context, id string) (llm.ContentInput
 	return llm.ContentInput{
 		CampaignID: id, Brief: c.Brief, Language: c.Language, SegmentSummary: c.Segment.Rendered[c.Language],
 		Audience: c.Segment.Audience.Audience, Channels: channels, WorstCaseByChannel: wc,
-	}, nil
+	}
 }
 
-// GenerateContent runs the streamed content generation and saves the result as a new `llm` version.
+// GenerateContent runs the streamed content generation and saves the two variants as a new version of `llm`
+// rows (one transaction, both rows).
 func (s *Service) GenerateContent(ctx context.Context, id string, in llm.ContentInput, onDelta func(llm.Delta), onRepair func(llm.RepairNotice)) (ContentVersion, llm.Meta, error) {
 	res, err := s.LLM.ProposeContent(ctx, in, onDelta, onRepair)
 	if err != nil {
@@ -246,12 +252,14 @@ func (s *Service) GenerateContent(ctx context.Context, id string, in llm.Content
 	// The generation may outlive the client; saving must not depend on the request context.
 	saveCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
 	defer cancel()
-	cv, err := s.saveVersion(saveCtx, id, res.Content, "llm", res.Report, -1)
+	a := VariantInput{Label: res.A.Label, Source: "llm", Content: res.A.Content, Report: res.A.Report}
+	b := VariantInput{Label: res.B.Label, Source: "llm", Content: res.B.Content, Report: res.B.Report}
+	cv, err := s.saveVersion(saveCtx, id, a, &b, -1)
 	return cv, res.Meta, err
 }
 
-// SaveContent stores a user-edited version, even when invalid (the report says why). baseVersion must be the
-// latest version (0 when there is none).
+// SaveContent stores a user-edited one-variant version (the v1 body of PUT …/content), even when invalid
+// (the report says why). baseVersion must be the latest version (0 when there is none).
 func (s *Service) SaveContent(ctx context.Context, id string, c content.Content, baseVersion int) (ContentVersion, error) {
 	if baseVersion < 0 {
 		return ContentVersion{}, errorf("bad_request", "base_version must be 0 or greater.")
@@ -268,11 +276,12 @@ func (s *Service) SaveContent(ctx context.Context, id string, c content.Content,
 		return ContentVersion{}, err
 	}
 	report := content.Validate(c, constraints(camp.Language, wc))
-	return s.saveVersion(ctx, id, c, "edited", report, baseVersion)
+	return s.saveVersion(ctx, id, VariantInput{Source: "edited", Content: c, Report: report}, nil, baseVersion)
 }
 
-// saveVersion appends a content version; baseVersion < 0 skips the staleness check (model output).
-func (s *Service) saveVersion(ctx context.Context, id string, c content.Content, source string, report content.Report, baseVersion int) (ContentVersion, error) {
+// saveVersion appends a content version with one row per variant (b == nil: a one-variant version) in one
+// transaction; baseVersion < 0 skips the staleness check (model output).
+func (s *Service) saveVersion(ctx context.Context, id string, a VariantInput, b *VariantInput, baseVersion int) (ContentVersion, error) {
 	var cv ContentVersion
 	err := pgx.BeginFunc(ctx, s.Pool, func(tx pgx.Tx) error {
 		var status string
@@ -290,13 +299,35 @@ func (s *Service) saveVersion(ctx context.Context, id string, c content.Content,
 			return errorf("stale_content_version", fmt.Sprintf("Version %d is not the latest (%d); reload and edit again.", baseVersion, latest),
 				Issue{Path: "base_version", Code: "stale", Message: fmt.Sprintf("latest is %d", latest)})
 		}
-		cv = ContentVersion{Version: latest + 1, Source: source, SMSText: c.SMSText, EmailSubject: c.EmailSubject,
-			EmailBody: c.EmailBody, Validation: normalizeReport(report)}
-		if err := tx.QueryRow(ctx, `INSERT INTO campaign_content (campaign_id, version, sms_text, email_subject, email_body, source, validation)
-			VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING created_at`,
-			id, cv.Version, c.SMSText, c.EmailSubject, c.EmailBody, source, mustJSON(cv.Validation)).Scan(&cv.CreatedAt); err != nil {
-			return err
+		cv = ContentVersion{Version: latest + 1}
+		rows := []struct {
+			key string
+			in  VariantInput
+		}{{"a", a}}
+		if b != nil {
+			rows = append(rows, struct {
+				key string
+				in  VariantInput
+			}{"b", *b})
 		}
+		for _, r := range rows {
+			cvr := ContentVariant{Label: r.in.Label, Source: r.in.Source, Instruction: r.in.Instruction,
+				SMSText: r.in.Content.SMSText, EmailSubject: r.in.Content.EmailSubject, EmailBody: r.in.Content.EmailBody,
+				Validation: normalizeReport(r.in.Report)}
+			if err := tx.QueryRow(ctx, `INSERT INTO campaign_content (campaign_id, version, variant, label, sms_text, email_subject,
+					email_body, source, instruction, validation)
+				VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10) RETURNING created_at`,
+				id, cv.Version, r.key, cvr.Label, cvr.SMSText, cvr.EmailSubject, cvr.EmailBody, cvr.Source, cvr.Instruction,
+				mustJSON(cvr.Validation)).Scan(&cv.CreatedAt); err != nil {
+				return err
+			}
+			if r.key == "a" {
+				cv.Variants.A = cvr
+			} else {
+				cv.Variants.B = &cvr
+			}
+		}
+		cv.mirrorA()
 		_, err := tx.Exec(ctx, `UPDATE campaigns SET status = 'content_ready', updated_at = now() WHERE id = $1`, id)
 		return err
 	})
@@ -428,21 +459,11 @@ func (s *Service) load(ctx context.Context, db DB, id string, needRule bool) (Ca
 	} else if needRule && slices.Contains(contentEditable, c.Status) {
 		return Campaign{}, nil, fmt.Errorf("campaign %s is %s without a segment", id, c.Status)
 	}
-	var cv ContentVersion
-	var valRaw []byte
-	err = db.QueryRow(ctx, `SELECT version, source, sms_text, email_subject, email_body, validation, created_at
-		FROM campaign_content WHERE campaign_id = $1 ORDER BY version DESC LIMIT 1`, id).
-		Scan(&cv.Version, &cv.Source, &cv.SMSText, &cv.EmailSubject, &cv.EmailBody, &valRaw, &cv.CreatedAt)
-	switch {
-	case errors.Is(err, pgx.ErrNoRows):
-	case err != nil:
+	cv, err := loadLatestContent(ctx, db, id)
+	if err != nil {
 		return Campaign{}, nil, err
-	default:
-		if err := json.Unmarshal(valRaw, &cv.Validation); err != nil {
-			return Campaign{}, nil, fmt.Errorf("stored validation: %w", err)
-		}
-		c.Content = &cv
 	}
+	c.Content = cv
 	return c, valid, nil
 }
 

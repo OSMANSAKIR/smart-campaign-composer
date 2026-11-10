@@ -10,6 +10,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"time"
 
 	"smartcampaign/internal/content"
@@ -26,6 +27,7 @@ const (
 	PurposeSegment Purpose = "segment"
 	PurposeContent Purpose = "content"
 	PurposeRepair  Purpose = "repair"
+	PurposeRefine  Purpose = "refine"
 )
 
 // StopReason is the normalized reason the model stopped.
@@ -52,7 +54,7 @@ type Message struct {
 // Request is everything an adapter needs for one call.
 type Request struct {
 	Purpose   Purpose
-	Task      Purpose // segment or content, also for repair calls (adapters pick per-task settings)
+	Task      Purpose // segment, content or refine, also for repair calls (adapters pick per-task settings)
 	System    []SystemBlock
 	Messages  []Message
 	Schema    map[string]any // wire schema from internal/catalog
@@ -107,6 +109,9 @@ type Meta struct {
 	CacheReadTokens  int     `json:"cache_read_tokens"`
 	CacheWriteTokens int     `json:"cache_write_tokens"`
 	CostUSD          float64 `json:"cost_usd"`
+	// CostRecorded is false when any llm_calls insert of this generation failed (api.md §9.7); the
+	// generation itself still succeeded.
+	CostRecorded bool `json:"cost_recorded"`
 }
 
 // SegmentResult is a validated segment proposal.
@@ -131,12 +136,59 @@ type ContentInput struct {
 	WorstCaseByChannel map[string]content.Vars
 }
 
-// ContentResult is validated content plus its report.
+// VariantResult is one validated content variant.
+type VariantResult struct {
+	Label   string
+	Content content.Content
+	Report  content.Report
+}
+
+// ContentResult is the two validated variants plus their reports. Content and Report mirror variant A (the
+// v1 shape).
 type ContentResult struct {
+	A, B    VariantResult
 	Content content.Content
 	Report  content.Report
 	Notes   string
 	Meta    Meta
+}
+
+// RefineInput is what the refine prompt needs: the campaign context, the variant to rewrite and the
+// marketer's instruction. The instruction is data and never relaxes a limit.
+type RefineInput struct {
+	ContentInput
+	Variant     string // "a" or "b"
+	Label       string
+	Current     content.Content
+	Instruction string
+}
+
+// RefineResult is the validated rewrite of one variant.
+type RefineResult struct {
+	Label   string
+	Content content.Content
+	Report  content.Report
+	Notes   string
+	Meta    Meta
+}
+
+// StatusError is a provider answer with an HTTP status (the adapters' typed error). Its text never carries
+// the provider's response body: the body can hold account identifiers and goes to the warn log only.
+type StatusError struct {
+	Status int
+	Body   string // raw provider body; log at warn level, never send to a client
+	Err    error  // the transport's own error (its text may embed the body); reachable with errors.As only
+}
+
+func (e *StatusError) Error() string { return fmt.Sprintf("provider returned HTTP %d", e.Status) }
+
+// Unwrap exposes the transport error to errors.As without ever printing it.
+func (e *StatusError) Unwrap() error { return e.Err }
+
+// IsRejection reports whether a provider status is a rejection of the request itself (401/403, billing or
+// credit errors, a malformed request): 4xx other than 408, 409 and 429 (api.md §9.8).
+func IsRejection(status int) bool {
+	return status >= 400 && status < 500 && status != 408 && status != 409 && status != 429
 }
 
 // Error is returned for terminal LLM failures; Code matches the API error codes

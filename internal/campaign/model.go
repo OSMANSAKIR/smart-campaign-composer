@@ -63,15 +63,59 @@ type AudienceCount struct {
 	CountedAt time.Time `json:"counted_at"`
 }
 
-// ContentVersion is one row of campaign_content.
+// ContentVersion is one version of the campaign copy: one campaign_content row per variant (api.md §9.3).
+// The top-level source, texts and validation mirror variant a (the v1 shape).
 type ContentVersion struct {
 	Version      int            `json:"version"`
-	Source       string         `json:"source"` // llm | edited
+	Source       string         `json:"source"` // llm | edited | refined (variant a)
 	SMSText      string         `json:"sms_text"`
 	EmailSubject string         `json:"email_subject"`
 	EmailBody    string         `json:"email_body"`
 	Validation   content.Report `json:"validation"`
 	CreatedAt    time.Time      `json:"created_at"`
+	Variants     Variants       `json:"variants"`
+}
+
+// Variants holds variant a (always present) and variant b (nil for a one-variant version).
+type Variants struct {
+	A ContentVariant  `json:"a"`
+	B *ContentVariant `json:"b"`
+}
+
+// Get returns the variant for key "a" or "b", nil when it does not exist.
+func (v Variants) Get(key string) *ContentVariant {
+	switch key {
+	case "a":
+		return &v.A
+	case "b":
+		return v.B
+	}
+	return nil
+}
+
+// ContentVariant is one campaign_content row.
+type ContentVariant struct {
+	Label        string         `json:"label"`
+	Source       string         `json:"source"` // llm | edited | refined
+	Instruction  *string        `json:"instruction"`
+	SMSText      string         `json:"sms_text"`
+	EmailSubject string         `json:"email_subject"`
+	EmailBody    string         `json:"email_body"`
+	Validation   content.Report `json:"validation"`
+}
+
+// Content returns the variant's copy.
+func (v ContentVariant) Content() content.Content {
+	return content.Content{SMSText: v.SMSText, EmailSubject: v.EmailSubject, EmailBody: v.EmailBody}
+}
+
+// VariantInput is one variant to store: its copy, label, provenance and validation report.
+type VariantInput struct {
+	Label       string
+	Source      string // llm | edited | refined
+	Instruction *string
+	Content     content.Content
+	Report      content.Report
 }
 
 // Message is one row of GET /api/campaigns/{id}/messages.

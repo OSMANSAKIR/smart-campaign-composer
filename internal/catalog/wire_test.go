@@ -59,6 +59,7 @@ func checkSchema(t *testing.T, path string, node any) {
 func TestWireSchemas_UseOnlySupportedKeywords_RAI1(t *testing.T) {
 	checkSchema(t, "segment", SegmentWireSchema())
 	checkSchema(t, "content", ContentWireSchema())
+	checkSchema(t, "refine", RefineWireSchema())
 }
 
 func TestWireSchemas_CommittedFilesMatchGenerator(t *testing.T) {

@@ -151,6 +151,12 @@ func (a *Adapter) Generate(ctx context.Context, req llm.Request, onDelta func(ll
 		}
 	}
 	if err := stream.Err(); err != nil {
+		// The SDK error's text embeds the response body, which can hold account identifiers. Hand the service
+		// a typed error with the status and the body kept apart (F7); the service decides what is logged.
+		var apiErr *sdk.Error
+		if errors.As(err, &apiErr) {
+			return resp, fmt.Errorf("anthropic: %w", &llm.StatusError{Status: apiErr.StatusCode, Body: apiErr.RawJSON(), Err: err})
+		}
 		return resp, fmt.Errorf("anthropic: %w", err)
 	}
 	if err := ctx.Err(); err != nil {

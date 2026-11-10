@@ -3,6 +3,7 @@ package llm
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log/slog"
 	"slices"
@@ -23,7 +24,7 @@ const MaxRepairs = 2
 // leave room for it; a max_tokens stop doubles the limit for the next attempt.
 const (
 	DefaultSegmentMaxTokens = 8192
-	DefaultContentMaxTokens = 8192
+	DefaultContentMaxTokens = 12288
 	maxTokensCeiling        = 32768
 )
 
@@ -110,60 +111,6 @@ func (s *Service) ProposeSegment(ctx context.Context, campaignID, brief string) 
 	return res, nil
 }
 
-// ProposeContent streams content generation; onDelta receives JSON fragments (never a split rune),
-// onRepair is called before each repair attempt so the client can clear its partial buffer.
-func (s *Service) ProposeContent(ctx context.Context, in ContentInput, onDelta func(Delta), onRepair func(RepairNotice)) (ContentResult, error) {
-	if err := checkBrief(in.Brief); err != nil {
-		return ContentResult{}, err
-	}
-	_, sys, err := systemPrompts()
-	if err != nil {
-		return ContentResult{}, fmt.Errorf("llm: prompts: %w", err)
-	}
-	channels := normalizeChannels(in.Channels)
-	requested := in.Language
-	if !slices.Contains(catalog.Locales, requested) {
-		requested = "tr" // same default as the prompt and content.Validate
-	}
-	cons := content.Constraints{Locale: in.Language, WorstCase: in.WorstCase, WorstCaseByChannel: in.WorstCaseByChannel}
-	var res ContentResult
-	validate := func(raw []byte) []segment.Issue {
-		p, issues := content.ParseProposal(raw)
-		if len(issues) > 0 {
-			return toSegmentIssues(issues)
-		}
-		c := p.Content()
-		report := content.Validate(c, cons)
-		var blocking []segment.Issue
-		// RT-6: the copy must be in the language that was asked for; the model's own "language" field is
-		// otherwise never compared with the request, so wrong-language copy would reach the approver.
-		if p.Language != requested {
-			blocking = append(blocking, segment.Issue{Path: "language", Code: "language_mismatch",
-				Message: "language must be " + requested + " as requested; write the whole copy in that language and set language to " + requested})
-		}
-		nul := content.NULFields(c)
-		for _, e := range report.Errors {
-			// RT-8c: NUL blocks even in a field of a channel that was not requested; it could never be stored.
-			if slices.Contains(channels, channelOf(e.Path)) || slices.Contains(nul, e.Path) && e.Code == "control_character" {
-				blocking = append(blocking, segment.Issue(e))
-			}
-		}
-		res = ContentResult{Content: c, Report: report, Notes: p.Notes}
-		return blocking
-	}
-	meta, err := s.run(ctx, job{
-		task: PurposeContent, campaignID: in.CampaignID, promptVersion: ContentPromptVersion,
-		system: []SystemBlock{{Text: sys, Cache: true}}, user: contentUserMessage(in, channels, worstLengths(in)),
-		schema: catalog.ContentWireSchema(), maxTokens: DefaultContentMaxTokens, timeout: s.contentTimeout,
-		stream: true, onDelta: onDelta, onRepair: onRepair, validate: validate,
-	})
-	if err != nil {
-		return ContentResult{}, err
-	}
-	res.Meta = meta
-	return res, nil
-}
-
 type job struct {
 	task          Purpose
 	campaignID    string
@@ -182,7 +129,13 @@ type job struct {
 // run is the shared pipeline: call → stop reason → strict decode + validate → at most MaxRepairs repair turns
 // with the structured errors. Rules are never relaxed; every call is recorded and measured.
 func (s *Service) run(ctx context.Context, j job) (Meta, error) {
-	meta := Meta{Provider: s.provider.Name(), Model: s.provider.Model(), PromptVersion: j.promptVersion}
+	meta := Meta{Provider: s.provider.Name(), Model: s.provider.Model(), PromptVersion: j.promptVersion, CostRecorded: true}
+	// record writes the llm_calls row; a failed insert flips cost_recorded but never fails the generation (F6).
+	record := func(c Call) {
+		if !s.finish(ctx, c, j.task) {
+			meta.CostRecorded = false
+		}
+	}
 	msgs := []Message{{Role: "user", Text: j.user}}
 	maxTokens := j.maxTokens
 	start := s.now()
@@ -215,7 +168,19 @@ func (s *Service) run(ctx context.Context, j job) (Meta, error) {
 
 		if callErr != nil {
 			call.Outcome, call.Error = "error", truncateErr(callErr.Error())
-			s.finish(ctx, call, j.task)
+			var se *StatusError
+			if ctx.Err() == nil && errors.As(callErr, &se) && IsRejection(se.Status) {
+				// F7: the provider rejected the request itself (key, credits, bad request). Retrying cannot
+				// help, so the user gets a clear code. The raw body can hold account identifiers: it goes to
+				// the warn log only, never to llm_calls or the client.
+				s.log.Warn("llm provider rejected the request", "campaign_id", j.campaignID, "task", j.task,
+					"status", se.Status, "body", segment.SafeText(se.Body, 500))
+				call.Error = fmt.Sprintf("provider_rejected status=%d", se.Status)
+				record(call)
+				return meta, &Error{Code: "llm_provider_rejected", Meta: meta, Err: &StatusError{Status: se.Status},
+					Message: "The AI provider rejected the request (check the API key or credits)."}
+			}
+			record(call)
 			code, msg := "llm_failed", "The language model call failed. Try again."
 			if ctx.Err() != nil {
 				msg = "The request was cancelled."
@@ -227,7 +192,7 @@ func (s *Service) run(ctx context.Context, j job) (Meta, error) {
 		switch resp.StopReason {
 		case StopRefusal:
 			call.Outcome = "refused"
-			s.finish(ctx, call, j.task)
+			record(call)
 			category := resp.RefusalCategory
 			if category == "" {
 				category = "unknown"
@@ -250,12 +215,12 @@ func (s *Service) run(ctx context.Context, j job) (Meta, error) {
 				call.Outcome = "repaired"
 				meta.Repaired = true
 			}
-			s.finish(ctx, call, j.task)
+			record(call)
 			return meta, nil
 		}
 		call.Outcome = "invalid"
 		call.Error = truncateErr(issueCodes(issues))
-		s.finish(ctx, call, j.task)
+		record(call)
 		if s.metrics != nil {
 			for _, is := range issues {
 				s.metrics.LLMValidationFails.WithLabelValues(is.Code).Inc()
@@ -316,8 +281,9 @@ func (s *Service) costOf(r Response) float64 {
 	return 0
 }
 
-// finish records the call (even when the client went away) and updates metrics.
-func (s *Service) finish(ctx context.Context, c Call, task Purpose) {
+// finish records the call (even when the client went away) and updates metrics. It reports whether the
+// llm_calls row was stored (true when there is no recorder).
+func (s *Service) finish(ctx context.Context, c Call, task Purpose) (recorded bool) {
 	if s.metrics != nil {
 		s.metrics.LLMRequests.WithLabelValues(string(c.Purpose), c.Provider, c.Model, c.Outcome).Inc()
 		s.metrics.LLMTokens.WithLabelValues("input").Add(float64(c.Usage.InputTokens))
@@ -331,15 +297,18 @@ func (s *Service) finish(ctx context.Context, c Call, task Purpose) {
 		"model", c.Model, "outcome", c.Outcome, "stop_reason", c.StopReason, "latency_ms", c.Latency.Milliseconds(),
 		"input_tokens", c.Usage.InputTokens, "output_tokens", c.Usage.OutputTokens, "cache_read_tokens", c.Usage.CacheReadTokens)
 	if s.recorder == nil {
-		return
+		return true
 	}
 	// Accounting must survive a client disconnect, but must not hang a request either.
 	rctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
 	defer cancel()
 	if err := s.recorder.RecordCall(rctx, c); err != nil {
-		// Losing one accounting row must not fail the user's generation; the log line keeps the data.
+		// Losing one accounting row must not fail the user's generation; the log line keeps the data, and
+		// cost_recorded=false tells the UI the cost is missing (F6).
 		s.log.Error("llm_calls insert failed", "campaign_id", c.CampaignID, "purpose", c.Purpose, "err", err)
+		return false
 	}
+	return true
 }
 
 func checkBrief(brief string) error {

@@ -55,7 +55,7 @@ func TestRedTeam_ValidatedValuesAreStorable_RAI1(t *testing.T) {
 	}
 
 	// 3. Content for an SMS-only campaign whose (non-blocking) email body contains NUL.
-	nulBody := `{"language":"tr","sms":{"text":"Merhaba {{first_name}}"},"email":{"subject":"s","body":"a\u0000b"},"notes":""}`
+	nulBody := v2Answer("tr", copyText{"Merhaba {{first_name}}", "s", "a\x00b"}, goodB)
 	cleanBody := strings.Replace(nulBody, `a\u0000b`, `ab`, 1)
 	svc.LLM = llm.NewService(mock.NewScripted(mock.Step{JSON: nulBody}, mock.Step{JSON: cleanBody}), nil)
 	c2, err := svc.Create(ctx, "SMS gönder")

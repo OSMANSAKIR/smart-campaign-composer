@@ -20,7 +20,8 @@ import (
 // text changes in a way that affects outputs, so eval reports stay comparable.
 const (
 	SegmentPromptVersion = "segment_v1"
-	ContentPromptVersion = "content_v1"
+	ContentPromptVersion = "content_v2"
+	RefinePromptVersion  = "refine_v1"
 )
 
 //go:embed prompts/*.tmpl
@@ -95,14 +96,21 @@ func segmentExamples() []fewShot {
 	}
 }
 
-// goldenContent is the content few-shot and the mock demo's Turkish copy.
-func goldenContent() content.Proposal {
-	var p content.Proposal
+// goldenContent is the content few-shot and the mock demo's Turkish copy: variant a is the friendly, short
+// angle, variant b the urgency/benefit angle (no invented deadline, the brief gives none).
+func goldenContent() content.ProposalV2 {
+	var p content.ProposalV2
 	p.Language = "tr"
-	p.SMS.Text = "Merhaba {{first_name}}, sepetindeki ürünler seni bekliyor! Bugüne özel %30 indirimle tamamla."
-	p.Email.Subject = "{{first_name}}, sepetin seni bekliyor: %30 indirim"
-	p.Email.Body = "Merhaba {{first_name}},\n\nSepetine eklediğin ürünler hâlâ seni bekliyor. Sana özel %30 indirimle alışverişini şimdi tamamlayabilirsin.\n\nKeyifli alışverişler!"
-	p.Notes = "Samimi ve kısa bir ton seçildi; indirim kodu, link veya tarih eklenmedi çünkü briefte yok."
+	a, b := &p.Variants.A, &p.Variants.B
+	a.Label = "Samimi hatırlatma"
+	a.SMS.Text = "Merhaba {{first_name}}, sepetindeki ürünler seni bekliyor! Bugüne özel %30 indirimle tamamla."
+	a.Email.Subject = "{{first_name}}, sepetin seni bekliyor: %30 indirim"
+	a.Email.Body = "Merhaba {{first_name}},\n\nSepetine eklediğin ürünler hâlâ seni bekliyor. Sana özel %30 indirimle alışverişini şimdi tamamlayabilirsin.\n\nKeyifli alışverişler!"
+	b.Label = "Acil fayda"
+	b.SMS.Text = "{{first_name}}, sepetindeki ürünlerde %30 indirim seni bekliyor. Fırsatı kaçırma, hemen tamamla!"
+	b.Email.Subject = "Sepetindeki ürünlerde %30 indirim: kaçırma"
+	b.Email.Body = "Merhaba {{first_name}},\n\nSepetindeki ürünler için %30 indirimden yararlanmak şimdi çok kolay. Siparişini hemen tamamla ve indirimi kaçırma.\n\nSepetine dönmen yeterli."
+	p.Notes = "A samimi ve kısa bir hatırlatma, B indirimin faydasını ve harekete geçmeyi öne çıkarıyor; kod, link veya tarih eklenmedi çünkü briefte yok."
 	return p
 }
 
@@ -110,6 +118,7 @@ var (
 	promptOnce    sync.Once
 	segmentSystem string
 	contentSystem string
+	refineSystem  string
 	promptErr     error
 )
 
@@ -162,17 +171,27 @@ func loadPrompts() {
 	for i, v := range catalog.Variables {
 		vars[i] = "{{" + v + "}}"
 	}
-	contentSystem, promptErr = render(ContentPromptVersion+".tmpl", map[string]any{
+	data := map[string]any{
 		"SMSMax": catalog.SMSMaxRunes, "SMSTarget": catalog.SMSMaxRunes - 25, "SubjectMax": catalog.EmailSubjectMaxRunes,
 		"BodyMax": catalog.EmailBodyMaxRunes, "Variables": strings.Join(vars, " and "),
 		"FallbackTR": content.Fallbacks["tr"]["first_name"], "FallbackEN": content.Fallbacks["en"]["first_name"],
-		"Example": string(ex),
-	})
+		"Example": string(ex), "LabelMax": content.MaxLabelRunes,
+	}
+	contentSystem, promptErr = render(ContentPromptVersion+".tmpl", data)
+	if promptErr != nil {
+		return
+	}
+	refineSystem, promptErr = render(RefinePromptVersion+".tmpl", data)
 }
 
 func systemPrompts() (seg, cnt string, err error) {
 	promptOnce.Do(loadPrompts)
 	return segmentSystem, contentSystem, promptErr
+}
+
+func refineSystemPrompt() (string, error) {
+	promptOnce.Do(loadPrompts)
+	return refineSystem, promptErr
 }
 
 // marshalPlain marshals without HTML escaping, so examples read naturally ("<" stays "<").
@@ -214,7 +233,34 @@ func contentUserMessage(in ContentInput, channels []string, worst map[string]int
 	for _, v := range catalog.Variables {
 		parts = append(parts, fmt.Sprintf("{{%s}} up to %d characters", v, worst[v]))
 	}
-	b.WriteString("Longest values: " + strings.Join(parts, ", ") + ".\n</request>\nReturn the copy for this campaign.")
+	b.WriteString("Longest values: " + strings.Join(parts, ", ") + ".\n</request>\nReturn the two variants for this campaign.")
+	return b.String()
+}
+
+// refineUserMessage is the refine request. The current variant is JSON (json.Marshal escapes <, > and &) and
+// the instruction is escaped like the brief, each in its own tag, so neither can close a tag or open a fake
+// one; both are data (refine_v1.tmpl says so).
+func refineUserMessage(in RefineInput, channels []string, worst map[string]int) string {
+	cur, _ := json.Marshal(struct {
+		Label        string `json:"label"`
+		SMSText      string `json:"sms_text"`
+		EmailSubject string `json:"email_subject"`
+		EmailBody    string `json:"email_body"`
+	}{in.Label, in.Current.SMSText, in.Current.EmailSubject, in.Current.EmailBody})
+	var b strings.Builder
+	b.WriteString("<request>\n<brief>" + escapeBrief(in.Brief) + "</brief>\n")
+	lang := in.Language
+	if lang != "tr" && lang != "en" {
+		lang = "tr"
+	}
+	fmt.Fprintf(&b, "Language: %s\nChannels: %s\n", lang, strings.Join(channels, ", "))
+	parts := make([]string, 0, len(catalog.Variables))
+	for _, v := range catalog.Variables {
+		parts = append(parts, fmt.Sprintf("{{%s}} up to %d characters", v, worst[v]))
+	}
+	b.WriteString("Longest values: " + strings.Join(parts, ", ") + ".\n")
+	b.WriteString("<current_variant>" + escapeBrief(string(cur)) + "</current_variant>\n")
+	b.WriteString("<instruction>" + escapeBrief(in.Instruction) + "</instruction>\n</request>\nReturn the rewritten variant.")
 	return b.String()
 }
 
