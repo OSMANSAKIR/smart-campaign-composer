@@ -3,6 +3,7 @@ package campaign
 import (
 	"context"
 	"crypto/md5"
+	"errors"
 	"fmt"
 	"strconv"
 	"strings"
@@ -243,9 +244,5 @@ func TestProgress_PerVariantCounts_B2(t *testing.T) {
 }
 
 func asError(err error, target **Error) bool {
-	ce, ok := err.(*Error)
-	if ok {
-		*target = ce
-	}
-	return ok
+	return errors.As(err, target)
 }

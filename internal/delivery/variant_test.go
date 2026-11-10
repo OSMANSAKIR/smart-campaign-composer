@@ -39,7 +39,7 @@ func TestDispatcher_RendersTheMessagesVariant_B2(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	var wantB map[int64]bool = map[int64]bool{}
+	wantB := map[int64]bool{}
 	rows, err := pool.Query(ctx, `SELECT user_id FROM messages WHERE campaign_id = $1 AND channel = 'sms' AND variant = 'b'`, camp)
 	if err != nil {
 		t.Fatal(err)
