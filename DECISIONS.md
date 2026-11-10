@@ -263,3 +263,71 @@ simplest to explain.
 - **Consequences.** The verifiers found real defects that green unit tests missed: the rate bound under
   takeover and cold connections, an empty rule from a misspelled manual edit, NUL bytes failing inserts. The
   launch log is in `ai-sessions/README.md`.
+
+## D-16 · A/B split: a documented hash of (campaign, user) [B-2, owner 2026-11-10]
+
+- **Context.** "A/B test (50/50)" must give each user one variant on both channels, be reproducible and stay
+  inside the single enqueue statement (D-6).
+- **Decision.** `variant = get_byte(decode(md5(campaign_id::text || ':' || user_id::text), 'hex'), 0) % 2`
+  (0 → A, 1 → B), computed in the approve `INSERT … SELECT`. Every message stores its variant; the worker
+  renders that variant's row (`campaign_content (campaign_id, version, variant)`). Send A / Send B put every
+  message on one variant. Every variant that will be sent is re-validated for every selected channel inside
+  the approve transaction (`content_invalid` with `variants.<v>.` paths, `variant_missing`).
+- **Why md5.** Built in (no extension), set-based in the same statement, uniform enough (B share 45–55 % on
+  the 5000-user seed in `TestApprove_SplitDeterministicAndBalanced_B2`), and recomputable outside Postgres
+  (the test recomputes it with `crypto/md5`). It is not used as a security primitive. `random()` would be
+  neither reproducible nor recomputable.
+- **Consequences.** The dashboard and progress API report sent/failed per variant per channel. There are no
+  open or click metrics (the mock provider has none): this is the split and per-variant delivery foundation,
+  not an experiment-analysis tool.
+
+## D-17 · Cancel: stop claiming, cancel what is waiting, let what is in flight finish [F4]
+
+- **Decision.** `POST …/cancel` is one transaction: guarded `scheduled | sending → cancelled`, then
+  `queued | retry → cancelled` for that campaign. Idempotent (already cancelled → 200, `cancelled: 0`);
+  other statuses → 409. The claim already requires `campaigns.status = 'sending'`. A claimed message finishes
+  and records its outcome; a retry result, a released message or an expired lease of a cancelled campaign
+  ends `cancelled`. A `Finish` that read its snapshot just before the cancel committed can still write
+  `retry`, so the reconciler sweeps cancelled campaigns every second, and the event stream sends `done` only
+  when nothing is `queued`, `retry` or `sending`. Then `sent + failed + cancelled + skipped = total`.
+- **Bound.** After the cancel commits, at most `MaxInFlight` messages per channel can still be sent
+  (`MAX_IN_FLIGHT_PER_CHANNEL`, default 32: 64 over both channels, ~0.3 s of sending). The dispatcher takes an
+  in-flight slot before it claims and claims no more rows than it holds slots, and a claim that starts after
+  the commit sees `cancelled`. A takeover does not widen it. The bound is tight
+  (`TestCancel_InFlightBoundIsTight_F4`); `TestCancel_RaceMidBatch_F4` cancels mid-run with 5xx faults.
+- **Alternative.** A status lookup before every send would tighten the bound to ~0 at one DB read per send on
+  the rate-limited path; it is a one-line addition before `Limiter.Acquire` if wanted.
+
+## D-18 · Scheduled send: freeze the audience at approve, start on the database clock [B-1]
+
+- **Decision.** Approve with `send_at` (server window now + 50 s .. now + 7 days, checked on the database clock
+  inside the approve transaction) enqueues exactly as without it and parks the campaign in `scheduled` with
+  `scheduled_at` in UTC. `delivery.Scheduler` (every worker replica, every 1 s) runs a guarded
+  `scheduled → sending WHERE scheduled_at <= now()`.
+- **Audience frozen at approve** (the simplest rule, and what the marketer saw and approved). **Consent is
+  re-checked at send time** anyway, because the claim always re-checks it (R-AUD-2): a user who withdraws
+  consent while the campaign is scheduled is `skipped_no_consent`.
+- **Why the database clock.** Leases and retry times already use it, so replicas agree and tests move time by
+  updating `scheduled_at` instead of sleeping. Start lag ≤ 1 s tick + one dispatcher poll. Cancel works on a
+  scheduled campaign and the guarded activation never revives it.
+
+## D-19 · Manual rule edits: same validator, audit trail kept [N-WEB-001 → B]
+
+- **Decision.** The editor is driven by `GET /api/catalog` (fields, types, operators, enum values, limits);
+  `POST /api/segment/preview` validates with the validator used for model output and counts, without saving;
+  `PUT …/segment` stores the edit with `source: edited`, `edited_at` and `original_rule` (Claude's last
+  generated rule, kept across later edits, cleared by a new generation). Content generation and approve read
+  the stored rule, so they use the edit. The catalog is the editor's convenience only; the server stays the
+  authority.
+
+## D-21 · Acceptance suite through the HTTP API [F8]
+
+- **Decision.** `make acceptance` runs scenarios A1–A13 (`acceptance/`, build tag `acceptance`) against the
+  real API handler, the real dispatchers, reconciler and scheduler, and the mock provider, in one process on a
+  throwaway database seeded with 5000 users. Mock LLM by default, so CI runs it (job with a Postgres service).
+  Assertions are semantic (fields used, unsupported list non-empty, consent note), so the same suite runs
+  against the real model: `make acceptance PROVIDER=anthropic` with the spend flag is owner-only, guarded in
+  the Makefile and again in the test, and stops when the cumulative cost passes `ACCEPTANCE_MAX_USD`
+  (default $1). Reports go to `docs/acceptance/`.
+- **Why in process.** One command, no compose dependency beyond Postgres, a fresh database per run, and the
+  provider's own `/stats` (max per 1 s window, duplicates, delivery times) as the independent witness.
