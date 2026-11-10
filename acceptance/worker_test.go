@@ -16,4 +16,6 @@ import (
 func startBackground(ctx context.Context, wg *sync.WaitGroup, pool *pgxpool.Pool, log *slog.Logger) {
 	rec := &delivery.Reconciler{Pool: pool, Log: log}
 	wg.Go(func() { rec.Run(ctx) })
+	sched := &delivery.Scheduler{Pool: pool, Log: log}
+	wg.Go(func() { sched.Run(ctx) })
 }
