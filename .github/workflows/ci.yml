@@ -44,6 +44,27 @@ jobs:
       - run: npm run typecheck
         working-directory: web
 
+  acceptance:
+    name: make acceptance (A1-A13 through the HTTP API, mock LLM)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_USER: scc
+          POSTGRES_PASSWORD: scc
+          POSTGRES_DB: scc
+        ports: ["55432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U scc" --health-interval 2s --health-timeout 2s --health-retries 30
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+      - run: make acceptance
+
   e2e:
     name: make e2e (Playwright against the compose stack, mock LLM)
     runs-on: ubuntu-latest

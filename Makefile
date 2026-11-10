@@ -1,6 +1,7 @@
 # Smart Campaign Composer — developer entry points (KICKOFF §11).
-# Money guard (need.md N-PLAN-014): up/test/e2e/stress force LLM_PROVIDER=mock; only `smoke-live` and
-# `eval PROVIDER=anthropic` can reach the paid API, and both refuse to run without CONFIRM_SPEND=yes.
+# Money guard (need.md N-PLAN-014): up/test/e2e/stress/acceptance force LLM_PROVIDER=mock; only `smoke-live`,
+# `eval PROVIDER=anthropic` and `acceptance PROVIDER=anthropic` can reach the paid API, and they refuse to run
+# without CONFIRM_SPEND=yes.
 
 SHELL        := /bin/bash
 COMPOSE      := docker compose
@@ -8,7 +9,7 @@ TEST_COMPOSE := docker compose -p scc-test --profile test
 HOST_TEST_DB ?= postgres://scc:scc@localhost:55432/postgres?sslmode=disable
 
 .DEFAULT_GOAL := help
-.PHONY: help up down logs ps test test-host lint fmt schema dev-sub stress e2e eval smoke-live \
+.PHONY: help up down logs ps test test-host lint fmt schema dev-sub stress e2e eval smoke-live acceptance \
         sanitize-check fresh-clone-check harvest-sessions
 
 help: ## List targets
@@ -74,6 +75,18 @@ smoke-live: ## One real Claude API call per task (needs CONFIRM_SPEND=yes and AN
 	@# Reads ANTHROPIC_API_KEY from the owner's shell (e.g. `set -a; . ./.env; set +a` first); the test refuses
 	@# without the flag and skips cleanly without a key.
 	CONFIRM_SPEND=$(CONFIRM_SPEND) go test -tags smokelive -count=1 -v -run TestSmokeLive ./internal/llm/anthropic/
+
+acceptance: ## Acceptance A1-A13 through the HTTP API (mock LLM; PROVIDER=anthropic also needs CONFIRM_SPEND=yes; needs `make up`)
+	@if [ -n "$(PROVIDER)" ] && [ "$(PROVIDER)" != "mock" ] && [ "$(PROVIDER)" != "anthropic" ]; then \
+	  echo "acceptance: PROVIDER=mock (default) or anthropic"; exit 2; fi
+	@if [ "$(PROVIDER)" = "anthropic" ] && [ "$(CONFIRM_SPEND)" != "yes" ]; then \
+	  echo "acceptance: PROVIDER=anthropic calls the paid Claude API. Owner only: make acceptance PROVIDER=anthropic CONFIRM_SPEND=yes"; exit 2; fi
+	@# Live mode reads ANTHROPIC_API_KEY from the owner's shell; make never loads .env. The suite stops when the
+	@# cumulative LLM cost passes ACCEPTANCE_MAX_USD (default 1.00).
+	@mkdir -p docs/acceptance
+	$(if $(filter anthropic,$(PROVIDER)),LLM_PROVIDER=anthropic CONFIRM_SPEND=$(CONFIRM_SPEND),LLM_PROVIDER=mock ANTHROPIC_API_KEY=) \
+	  TEST_DATABASE_URL=$(HOST_TEST_DB) ACCEPTANCE_REPORT=docs/acceptance \
+	  go test -tags acceptance -count=1 -v -timeout 20m -run TestAcceptance ./acceptance/
 
 sanitize-check: ## gitleaks over git history and ai-sessions/, plus the owner-term grep
 	scripts/sanitize-check.sh
