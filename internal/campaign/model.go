@@ -55,6 +55,9 @@ type SegmentMeta struct {
 	ChannelsRequested   string              `json:"channels_requested"`
 	Language            string              `json:"language"`
 	Warnings            []segment.Issue     `json:"warnings"`
+	// OriginalRule is Claude's last generated rule once a human has edited it (kept for audit; api.md §9.2).
+	OriginalRule *segment.Rule `json:"original_rule"`
+	EditedAt     *time.Time    `json:"edited_at"`
 }
 
 // AudienceCount is stored in campaigns.audience.

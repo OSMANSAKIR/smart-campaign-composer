@@ -139,7 +139,7 @@ campaign is cancelled.
 | `GET /api/system/status` | — | 200 status | §8 |
 | `GET /api/system/provider-config` | — | 200 the mock provider's fault config (provider-api.md §3) | 502 `provider_unavailable` when the provider does not answer |
 | `PUT /api/system/provider-config` | any subset of the config fields | 200 merged config | Forwarded to the provider's `/admin/config`; unknown fields or bad values → 400 `validation_failed` (need.md N-WEB-003) |
-| `POST /api/segment/preview` | `{ "rule": {…}, "campaign_id"?: "…" }` | 200 preview (§9.2) | v2. Stateless; never saves |
+| `POST /api/segment/preview` | `{ "rule": {…} }` | 200 preview (§9.2) | v2. Stateless; never saves |
 | `POST /api/campaigns/{id}/content/refine` | `{ "variant": "a"\|"b", "instruction": "…", "base_version": 3 }` | 200 `text/event-stream` (§9.4) | v2. Allowed in `segmented`, `content_ready` |
 | `POST /api/campaigns/{id}/cancel` | `{}` | 200 `{ campaign, cancelled }` (§9.5) | v2. Allowed in `scheduled`, `sending`; idempotent in `cancelled` |
 | `GET /healthz`, `GET /readyz`, `GET /metrics` | — | | See `observability.md` |

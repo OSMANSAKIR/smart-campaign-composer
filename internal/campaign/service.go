@@ -172,11 +172,18 @@ func (s *Service) PutSegment(ctx context.Context, id string, rule segment.Rule) 
 	if len(errs) > 0 {
 		return Campaign{}, errorf("validation_failed", "The segment rule is invalid.", errs...)
 	}
-	meta := SegmentMeta{Source: "edited", ChannelsRequested: "both", Language: c.Language, Warnings: warns}
+	now := time.Now().UTC()
+	meta := SegmentMeta{Source: "edited", ChannelsRequested: "both", Language: c.Language, Warnings: warns, EditedAt: &now}
 	if c.Segment != nil { // keep what the model said about the brief; only the rule changed
 		prev := c.Segment.SegmentMeta
 		meta.UnsupportedCriteria, meta.Assumptions, meta.Explanation = prev.UnsupportedCriteria, prev.Assumptions, prev.Explanation
 		meta.ChannelsRequested = prev.ChannelsRequested
+		// Audit trail of a human edit (api.md §9.2): Claude's rule survives any number of later edits.
+		meta.OriginalRule = prev.OriginalRule
+		if prev.Source == "llm" {
+			orig := c.Segment.Rule
+			meta.OriginalRule = &orig
+		}
 	}
 	if err := s.storeSegment(ctx, id, v, meta, c.Language); err != nil {
 		return Campaign{}, err
