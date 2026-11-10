@@ -1,9 +1,10 @@
-# Traceability — CP3 (brought forward), 2026-11-09
+# Traceability — CP3 (2026-11-09) + phase 2 (2026-11-10)
 
 Audit: spec-auditor (read-only, transcript `ai-sessions/subagents/07-review-spec-auditor-cp3.md`) at `d5636f2`,
 then the orchestrator closed the P0/P1 findings; this file is the audit's matrix updated with that evidence.
 Status: **green** = implemented + a check test that can fail, seen passing · **owner** = needs the owner.
 Totals: 28 green, 1 owner (R-DEL-1). P2 gaps are listed in README → "Not done / next steps".
+Phase 2 (owner decisions 2026-11-10) added B-1, B-2 and F2–F8 below; all green on mock, live acceptance is the owner's.
 
 ## Commands and results
 
@@ -17,6 +18,12 @@ Totals: 28 green, 1 owner (R-DEL-1). P2 gaps are listed in README → "Not done 
 | `make eval PROVIDER=claudecode` | 16/16 segments valid first try, 14/14 exact audiences, 16/16 content valid |
 | `make sanitize-check` | gitleaks history + session exports clean, every export listed, no personal terms |
 | `make lint` | golangci-lint `0 issues`, vue-tsc clean |
+| Phase 2: `make test` | 17 Go packages `ok`, Vitest `214 passed` |
+| Phase 2: `make acceptance` (mock) | 13/13 PASS — [`docs/acceptance/REPORT-mock-2026-11-10.md`](../acceptance/REPORT-mock-2026-11-10.md) |
+| Phase 2: `make e2e` | `2 passed` (two-variant flow with Send A; rule editor) |
+| Phase 2: stress S1 (alone on the host) | PASS: provider max 100 per 1 s window, 0 limiter rejections, 0 duplicates, all terminal |
+| Phase 2: `make eval PROVIDER=mock` | unchanged from 11-08 (15/16, contradiction unrepairable by design); content 15/15 with both variants valid |
+| Owner, live (2026-11-10) | smoke-live PASS; `make eval PROVIDER=anthropic` 16/16 first try, 14/14 exact, $0.1227 (README "Live verification") |
 
 ## Requirements
 
@@ -51,3 +58,16 @@ Totals: 28 green, 1 owner (R-DEL-1). P2 gaps are listed in README → "Not done 
 | R-DEL-4 | green | README: setup with/without key, architecture, LLM design, tests, stress, eval, limitations, not done, time | — |
 | R-DEL-5 | green | DECISIONS D-1…D-15 | — |
 | R-DEL-6 | green | `make sanitize-check` (exports listed and present, gitleaks, personal terms) | `ai-sessions/sessions/`, `ai-sessions/subagents/` (10 transcripts), `usage/`; 00-planning export is the owner's |
+
+## Phase 2 (owner decisions 2026-11-10)
+
+| ID | Status | Check tests (all pass) | End-to-end evidence |
+|---|---|---|---|
+| B-2 A/B variants | green | TestProposeContent_TwoVariants_B2, TestProposeContent_InvalidVariantRepairs_B2, TestApprove_SplitDeterministicAndBalanced_B2 (md5 recomputed in Go, 45–55 %), TestApprove_SendModes_B2, TestApprove_InvalidBBlocksABNotA_B2, TestProgress_PerVariantCounts_B2, TestDispatcher_RendersTheMessagesVariant_B2, web `variants.test.ts` | acceptance A1 (Send A), A8 (split 49.8 %, documented hash, per-variant counts add up) |
+| B-1 scheduled send | green | TestApprove_SendAtWindow_B1, TestApprove_ScheduledEnqueuesNowAndWaits_B1, TestScheduler_StartsOnlyWhenDue_B1 (database clock; consent withdrawn while scheduled → skipped), TestActivate_OnceAndNotCancelled_B1, web `schedule.test.ts` | acceptance A12 (+65 s: nothing before, everything after) |
+| F2 manual rule edit (N-WEB-001 B) | green | TestManualRuleEdit_KeepsClaudesRuleForAudit_RFLOW1, TestPreviewSegment_SameValidatorNeverSaves_RFLOW1, TestSegmentPreview_HTTP_RFLOW1, web `RuleEditor.test.ts`, `ruleEditor.test.ts` | acceptance A9; e2e rule-editor test |
+| F3 refine | green | TestRefineContent_ShorterRewrite_F3, TestRefineContent_InstructionCannotRelaxLimits_F3, TestRefineStream_NeverSavesInvalid_F3, TestRefineStream_NewVersionKeepsOtherVariant_F3, TestCheckInstruction_F3 | acceptance A10 (SMS 97 → 58 code points, B unchanged, `refine` in llm_calls) |
+| F4 cancel | green | TestCancel_InFlightBoundIsTight_F4, TestCancel_RaceMidBatch_F4 (15 runs under -race), TestCancel_NeverClaimsCancelledCampaign_F4, TestCancel_ExpiredLeaseAndReleaseBecomeCancelled_F4, TestCancelEndpoint_F4 | acceptance A5, A11 (0 deliveries after the cancel returned; counts add up) |
+| F6 cost_recorded (N-LLM-005) | green | TestCostRecordedFlag_NLLM005, TestCostRecorded_NLLM005, web `panels.test.ts` | — |
+| F7 provider rejection | green | TestProviderRejected_F7 (4xx table vs 408/409/429/5xx), TestProviderRejection_F7 (httptest Anthropic 401/403/400-billing; fake org id never in the response) | — |
+| F8 acceptance suite | green | `make acceptance` A1–A13; CI job `acceptance` | live mode is owner-only (spend flag, cost cap) |
