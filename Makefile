@@ -85,7 +85,7 @@ acceptance: ## Acceptance A1-A13 through the HTTP API (mock LLM; PROVIDER=anthro
 	@# cumulative LLM cost passes ACCEPTANCE_MAX_USD (default 1.00).
 	@mkdir -p docs/acceptance
 	$(if $(filter anthropic,$(PROVIDER)),LLM_PROVIDER=anthropic CONFIRM_SPEND=$(CONFIRM_SPEND),LLM_PROVIDER=mock ANTHROPIC_API_KEY=) \
-	  TEST_DATABASE_URL=$(HOST_TEST_DB) ACCEPTANCE_REPORT=docs/acceptance \
+	  TEST_DATABASE_URL=$(HOST_TEST_DB) ACCEPTANCE_REPORT=$(CURDIR)/docs/acceptance \
 	  go test -tags acceptance -count=1 -v -timeout 20m -run TestAcceptance ./acceptance/
 
 sanitize-check: ## gitleaks over git history and ai-sessions/, plus the owner-term grep

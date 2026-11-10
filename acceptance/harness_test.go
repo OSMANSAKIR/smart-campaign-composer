@@ -22,6 +22,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"slices"
 	"strconv"
 	"strings"
 	"sync"
@@ -519,6 +520,11 @@ func (e *env) writeReport() {
 	if dir == "" {
 		return
 	}
+	slices.SortFunc(e.results, func(a, b result) int { // A12 runs in parallel and finishes late
+		x, _ := strconv.Atoi(strings.TrimPrefix(a.ID, "A"))
+		y, _ := strconv.Atoi(strings.TrimPrefix(b.ID, "A"))
+		return x - y
+	})
 	var b strings.Builder
 	date := time.Now().Format("2006-01-02")
 	fmt.Fprintf(&b, "# Acceptance report: %s / %s / %s\n\n", e.llmName, e.llmModel, date)
