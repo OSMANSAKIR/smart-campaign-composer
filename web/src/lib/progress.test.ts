@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { applyEvent, applySnapshot, channelFraction, emptyDashboard, errorLabel, MAX_RECENT_EVENTS, overallFraction } from './progress'
+import { applyEvent, applySnapshot, channelFraction, emptyDashboard, errorLabel, MAX_RECENT_EVENTS, overallFraction, variantRows } from './progress'
 import type { Progress, ProgressEvent } from './types'
 
 function snap(sent: number, extra: Partial<Progress> = {}): Progress {
@@ -57,5 +57,20 @@ describe('dashboard state (R-FLOW-5)', () => {
     expect(errorLabel('rate_limited')).toContain('429')
     expect(errorLabel('server_error')).toContain('5xx')
     expect(errorLabel('weird_thing')).toBe('weird thing')
+  })
+})
+
+describe('cancelled messages and per-variant rows (F4, B-2)', () => {
+  it('counts cancelled as finished, so a stopped campaign reaches 100%', () => {
+    const c = { ...snap(0).channels.sms!, total: 10, queued: 0, sent: 6, failed: 1, skipped_no_consent: 1, cancelled: 2 }
+    expect(channelFraction(c)).toBe(1)
+  })
+
+  it('lists only the variants that have messages, in A, B order', () => {
+    const v = { total: 5, sent: 4, failed: 1, cancelled: 0, skipped_no_consent: 0 }
+    const c = { ...snap(0).channels.sms!, variants: { b: v, a: { ...v, total: 6 } } }
+    expect(variantRows(c).map((r) => [r.key, r.v.total])).toEqual([['a', 6], ['b', 5]])
+    expect(variantRows({ ...c, variants: { a: v } }).map((r) => r.key)).toEqual(['a'])
+    expect(variantRows(snap(0).channels.sms!)).toEqual([])
   })
 })

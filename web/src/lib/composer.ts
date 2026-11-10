@@ -3,9 +3,22 @@ import { computed, onBeforeUnmount, reactive, ref, watch } from 'vue'
 import { api, newIdempotencyKey } from './api'
 import { approveGate } from './approveGate'
 import { describeError, ApiError, type UserMessage } from './errors'
-import { errorFromBody, streamGenerate } from './sse'
-import { extractContent } from './partialJson'
-import type { ApproveResult, Campaign, Channel, ContentInput, LlmMeta, ValidationReport } from './types'
+import { extractVariants, type StreamedVariant } from './partialJson'
+import { parseLocalInput, scheduleProblem as checkSchedule, toOffsetISO } from './schedule'
+import { errorFromBody, streamGenerate, streamRefine } from './sse'
+import type {
+  ApproveResult,
+  Campaign,
+  Channel,
+  ContentVersion,
+  LlmMeta,
+  SegmentRule,
+  SendVariant,
+  ValidationReport,
+  VariantInput,
+  VariantKey,
+} from './types'
+import { toInput, variantsOf } from './variants'
 
 export type Step = 'brief' | 'audience' | 'content' | 'approve'
 export const STEPS: { id: Step; label: string }[] = [
@@ -30,46 +43,82 @@ export const EXAMPLE_BRIEFS: { label: string; text: string }[] = [
   },
 ]
 
-const contentKey = (c: ContentInput) => JSON.stringify([c.sms_text, c.email_subject, c.email_body])
+const variantKey = (c: VariantInput) => JSON.stringify([c.label, c.sms_text, c.email_subject, c.email_body])
+const emptyForm = (label: string): VariantInput => ({ label, sms_text: '', email_subject: '', email_body: '' })
+const defaultLabel = (k: VariantKey) => `Variant ${k.toUpperCase()}`
+const KEYS: VariantKey[] = ['a', 'b']
+
+interface VariantCheck {
+  report: ValidationReport | null
+  key: string // content key the report belongs to
+  validating: boolean
+}
 
 export function useComposer(initialId: string | null) {
   const campaign = ref<Campaign | null>(null)
   const brief = ref(OFFICIAL_BRIEF)
   const step = ref<Step>('brief')
   const loading = ref(initialId !== null)
-  const busy = ref<null | 'create' | 'segment' | 'save' | 'approve'>(null)
+  const busy = ref<null | 'create' | 'segment' | 'save' | 'approve' | 'rule'>(null)
   const error = ref<UserMessage | null>(null)
   const segmentLlm = ref<LlmMeta | null>(null)
   const contentLlm = ref<LlmMeta | null>(null)
   const channels = ref<Channel[]>(['sms', 'email'])
   const approved = ref<ApproveResult | null>(null)
 
+  // --- send options (approve dialog) -------------------------------------------------------------------
+  const variant = ref<SendVariant>('a')
+  const scheduleMode = ref<'now' | 'later'>('now')
+  const scheduleAt = ref('') // datetime-local value, browser local time
+
   // --- content editor ---------------------------------------------------------------------------------
-  const form = reactive<ContentInput>({ sms_text: '', email_subject: '', email_body: '' })
-  const stream = reactive({ active: false, repairing: false, attempt: 1, buffer: '', started: false })
-  const report = ref<ValidationReport | null>(null)
-  const reportKey = ref('')
-  const validating = ref(false)
-  let validateTimer: ReturnType<typeof setTimeout> | undefined
-  let validateSeq = 0
-  let validateAbort: AbortController | undefined
+  // One form per variant; `hasB` says whether variant B exists in the editor.
+  const forms = reactive<Record<VariantKey, VariantInput>>({ a: emptyForm('Variant A'), b: emptyForm('Variant B') })
+  const hasB = ref(false)
+  const stream = reactive({
+    active: false,
+    repairing: false,
+    attempt: 1,
+    buffer: '',
+    started: false,
+    // 'all' while generating two variants, a/b while refining one.
+    target: 'all' as 'all' | VariantKey,
+  })
+  const checks = reactive<Record<VariantKey, VariantCheck>>({
+    a: { report: null, key: '', validating: false },
+    b: { report: null, key: '', validating: false },
+  })
+  const timers: Partial<Record<VariantKey, ReturnType<typeof setTimeout>>> = {}
+  const seqs: Record<VariantKey, number> = { a: 0, b: 0 }
+  const aborts: Partial<Record<VariantKey, AbortController>> = {}
   let streamAbort: AbortController | undefined
 
   const saved = computed(() => campaign.value?.content ?? null)
+  const savedVariants = computed(() => (saved.value ? variantsOf(saved.value) : null))
+  const activeKeys = computed<VariantKey[]>(() => (hasB.value ? KEYS : ['a']))
   const hasUnsavedEdits = computed(() => {
-    const s = saved.value
-    if (!s) return form.sms_text !== '' || form.email_subject !== '' || form.email_body !== ''
-    return contentKey(form) !== contentKey(s)
+    const s = savedVariants.value
+    if (!s) return forms.a.sms_text !== '' || forms.a.email_subject !== '' || forms.a.email_body !== ''
+    return activeKeys.value.some((k) => {
+      const sv = s[k]
+      return !sv || variantKey(forms[k]) !== variantKey(toInput(sv))
+    })
   })
-  // The report is current when it was produced for exactly the text in the editor.
-  const reportIsCurrent = computed(() => report.value !== null && reportKey.value === contentKey(form))
+  // A report is current when it was produced for exactly the text in that variant's editor.
+  const reportIsCurrent = (k: VariantKey) => checks[k].report !== null && checks[k].key === variantKey(forms[k])
+  const validating = computed(() => activeKeys.value.some((k) => checks[k].validating))
 
+  const scheduleProblem = computed(() =>
+    scheduleMode.value === 'later' ? checkSchedule(scheduleAt.value, new Date()) : '',
+  )
   const gate = computed(() =>
     approveGate({
       campaign: campaign.value,
       channels: channels.value,
       hasUnsavedEdits: hasUnsavedEdits.value || stream.active,
       busy: busy.value !== null,
+      variant: variant.value,
+      scheduleProblem: scheduleProblem.value,
     }),
   )
 
@@ -85,13 +134,24 @@ export function useComposer(initialId: string | null) {
     else if (seg === 'email') channels.value = ['email']
   }
 
+  function setFormsFrom(ct: ContentVersion | null) {
+    const vs = ct ? variantsOf(ct) : null
+    for (const k of KEYS) {
+      const v = vs?.[k]
+      forms[k].label = v?.label ?? defaultLabel(k)
+      forms[k].sms_text = v?.sms_text ?? ''
+      forms[k].email_subject = v?.email_subject ?? ''
+      forms[k].email_body = v?.email_body ?? ''
+      checks[k].report = v?.validation ?? null
+      checks[k].key = variantKey(forms[k])
+      checks[k].validating = false
+    }
+    hasB.value = !!vs?.b
+    if (!hasB.value && variant.value !== 'a') variant.value = 'a'
+  }
+
   function loadFormFromSaved() {
-    const s = saved.value
-    form.sms_text = s?.sms_text ?? ''
-    form.email_subject = s?.email_subject ?? ''
-    form.email_body = s?.email_body ?? ''
-    report.value = s?.validation ?? null
-    reportKey.value = contentKey(form)
+    setFormsFrom(saved.value)
   }
 
   async function load(id: string) {
@@ -148,10 +208,39 @@ export function useComposer(initialId: string | null) {
     }
   }
 
-  // --- streaming generation ---------------------------------------------------------------------------
-  async function generateContent() {
+  // F2: save a hand-edited rule, then take the campaign the server returns (new counts, status `segmented`).
+  // Returns true when saved; the editor shows the error itself for a 422.
+  async function saveRule(rule: SegmentRule): Promise<boolean> {
     const c = campaign.value
-    if (!c || stream.active) return
+    if (!c) return false
+    busy.value = 'rule'
+    error.value = null
+    try {
+      const r = await api.saveSegment(c.id, rule)
+      adopt(r.campaign)
+      return true
+    } catch (e) {
+      fail(e)
+      return false
+    } finally {
+      busy.value = null
+    }
+  }
+
+  // --- streaming generation and refine ----------------------------------------------------------------
+  function applyStreamed(k: VariantKey, x: StreamedVariant | null) {
+    if (!x) return
+    if (x.label) forms[k].label = x.label
+    forms[k].sms_text = x.smsText
+    forms[k].email_subject = x.emailSubject
+    forms[k].email_body = x.emailBody
+  }
+
+  async function runStream(
+    target: 'all' | VariantKey,
+    start: (onEvent: Parameters<typeof streamGenerate>[1], signal: AbortSignal) => Promise<void>,
+  ) {
+    if (!campaign.value || stream.active) return
     error.value = null
     streamAbort = new AbortController()
     stream.active = true
@@ -159,54 +248,58 @@ export function useComposer(initialId: string | null) {
     stream.attempt = 1
     stream.buffer = ''
     stream.started = true
+    stream.target = target
     cancelValidation()
+    const clearTarget = () => {
+      for (const k of target === 'all' ? KEYS : [target]) {
+        forms[k].sms_text = ''
+        forms[k].email_subject = ''
+        forms[k].email_body = ''
+        if (target === 'all') forms[k].label = defaultLabel(k)
+      }
+    }
+    if (target === 'all') {
+      hasB.value = true // both cards show while they fill
+      clearTarget()
+    }
     let finished = false
     try {
-      await streamGenerate(
-        c.id,
-        (ev) => {
-          switch (ev.type) {
-            case 'delta': {
-              stream.repairing = false
-              stream.buffer += ev.data.text
-              // Display only: the canonical text arrives with `result`.
-              const x = extractContent(stream.buffer)
-              form.sms_text = x.smsText
-              form.email_subject = x.emailSubject
-              form.email_body = x.emailBody
-              break
-            }
-            case 'repairing':
-              // The previous attempt was invalid: drop its partial text; a new attempt streams next.
-              stream.repairing = true
-              stream.attempt = ev.data.attempt
-              stream.buffer = ''
-              form.sms_text = ''
-              form.email_subject = ''
-              form.email_body = ''
-              break
-            case 'result': {
-              finished = true
-              contentLlm.value = ev.data.llm
-              const ct = ev.data.content
-              form.sms_text = ct.sms_text
-              form.email_subject = ct.email_subject
-              form.email_body = ct.email_body
-              report.value = ct.validation
-              reportKey.value = contentKey(ct)
-              if (campaign.value) campaign.value = { ...campaign.value, content: ct }
-              break
-            }
-            case 'error':
-              finished = true
-              fail(errorFromBody(ev.data))
-              break
-            default:
-              break
+      await start((ev) => {
+        switch (ev.type) {
+          case 'delta': {
+            stream.repairing = false
+            stream.buffer += ev.data.text
+            // Display only: the canonical text arrives with `result`.
+            const x = extractVariants(stream.buffer)
+            if (target === 'all') {
+              applyStreamed('a', x.a)
+              applyStreamed('b', x.b)
+            } else applyStreamed(target, x.a)
+            break
           }
-        },
-        streamAbort.signal,
-      )
+          case 'repairing':
+            // The previous attempt was invalid: drop its partial text; a new attempt streams next.
+            stream.repairing = true
+            stream.attempt = ev.data.attempt
+            stream.buffer = ''
+            if (target === 'all') clearTarget()
+            break
+          case 'result': {
+            finished = true
+            contentLlm.value = ev.data.llm
+            const ct = ev.data.content
+            setFormsFrom(ct)
+            if (campaign.value) campaign.value = { ...campaign.value, content: ct }
+            break
+          }
+          case 'error':
+            finished = true
+            fail(errorFromBody(ev.data))
+            break
+          default:
+            break
+        }
+      }, streamAbort.signal)
       if (!finished) {
         fail(new ApiError(0, 'network', 'The stream ended before a result arrived'))
       } else if (!error.value) {
@@ -218,8 +311,24 @@ export function useComposer(initialId: string | null) {
       stream.active = false
       stream.repairing = false
       // A failed attempt leaves partial text on screen; fall back to the last saved version instead.
-      if (error.value) loadFormFromSaved()
+      if (error.value || !finished) loadFormFromSaved()
     }
+  }
+
+  function generateContent() {
+    const c = campaign.value
+    if (!c) return Promise.resolve()
+    return runStream('all', (onEvent, signal) => streamGenerate(c.id, onEvent, signal))
+  }
+
+  // F3: rewrite one variant with an instruction. Uses the saved version (unsaved edits must be saved first).
+  function refineVariant(k: VariantKey, instruction: string) {
+    const c = campaign.value
+    const v = saved.value?.version
+    if (!c || v === undefined) return Promise.resolve()
+    return runStream(k, (onEvent, signal) =>
+      streamRefine(c.id, { variant: k, instruction: instruction.trim(), base_version: v }, onEvent, signal),
+    )
   }
 
   function stopGenerating() {
@@ -228,46 +337,49 @@ export function useComposer(initialId: string | null) {
 
   // --- validation and saving --------------------------------------------------------------------------
   function cancelValidation() {
-    clearTimeout(validateTimer)
-    validateAbort?.abort()
-    validating.value = false
+    for (const k of KEYS) {
+      clearTimeout(timers[k])
+      aborts[k]?.abort()
+      checks[k].validating = false
+    }
   }
 
-  async function validateNow() {
+  async function validateNow(k: VariantKey) {
     const c = campaign.value
-    const seq = ++validateSeq
-    const key = contentKey(form)
-    const body = { ...form }
-    validateAbort?.abort()
-    validateAbort = new AbortController()
-    validating.value = true
+    const seq = ++seqs[k]
+    const key = variantKey(forms[k])
+    const body = { sms_text: forms[k].sms_text, email_subject: forms[k].email_subject, email_body: forms[k].email_body }
+    aborts[k]?.abort()
+    const ctl = new AbortController()
+    aborts[k] = ctl
+    checks[k].validating = true
     try {
-      const r = await api.validateContent(
-        { ...body, campaign_id: c?.id, language: c?.language },
-        validateAbort.signal,
-      )
-      if (seq !== validateSeq) return // a newer edit superseded this response
-      report.value = r
-      reportKey.value = key
+      const r = await api.validateContent({ ...body, campaign_id: c?.id, language: c?.language }, ctl.signal)
+      if (seq !== seqs[k]) return // a newer edit superseded this response
+      checks[k].report = r
+      checks[k].key = key
     } catch (e) {
       if (e instanceof Error && e.name === 'AbortError') return
-      if (seq === validateSeq) fail(e)
+      if (seq === seqs[k]) fail(e)
     } finally {
-      if (seq === validateSeq) validating.value = false
+      if (seq === seqs[k]) checks[k].validating = false
     }
   }
 
   const DEBOUNCE_MS = 400
-  watch(
-    () => contentKey(form),
-    (key) => {
-      if (stream.active || !campaign.value) return
-      if (key === reportKey.value) return
-      clearTimeout(validateTimer)
-      validating.value = true
-      validateTimer = setTimeout(() => void validateNow(), DEBOUNCE_MS)
-    },
-  )
+  for (const k of KEYS) {
+    watch(
+      () => variantKey(forms[k]),
+      (key) => {
+        if (stream.active || !campaign.value) return
+        if (k === 'b' && !hasB.value) return
+        if (key === checks[k].key) return
+        clearTimeout(timers[k])
+        checks[k].validating = true
+        timers[k] = setTimeout(() => void validateNow(k), DEBOUNCE_MS)
+      },
+    )
+  }
 
   async function saveContent() {
     const c = campaign.value
@@ -276,10 +388,13 @@ export function useComposer(initialId: string | null) {
     busy.value = 'save'
     error.value = null
     try {
-      const r = await api.saveContent(c.id, { ...form }, c.content?.version ?? 0)
+      const r = await api.saveContent(
+        c.id,
+        { variants: { a: { ...forms.a }, b: hasB.value ? { ...forms.b } : null } },
+        c.content?.version ?? 0,
+      )
       campaign.value = { ...c, content: r.content }
-      report.value = r.content.validation
-      reportKey.value = contentKey(r.content)
+      setFormsFrom(r.content)
       await refresh()
     } catch (e) {
       fail(e)
@@ -308,10 +423,19 @@ export function useComposer(initialId: string | null) {
     const c = campaign.value
     const v = saved.value?.version
     if (!c || v === undefined || !gate.value.enabled) return false
+    let sendAt: string | null = null
+    if (scheduleMode.value === 'later') {
+      const d = parseLocalInput(scheduleAt.value)
+      if (!d || checkSchedule(scheduleAt.value, new Date())) return false // window moved while the dialog was open
+      sendAt = toOffsetISO(d)
+    }
     busy.value = 'approve'
     error.value = null
     try {
-      approved.value = await api.approve(c.id, [...channels.value], v, newIdempotencyKey())
+      approved.value = await api.approve(c.id, [...channels.value], v, newIdempotencyKey(), {
+        variant: variant.value,
+        sendAt,
+      })
       campaign.value = approved.value.campaign
       return true
     } catch (e) {
@@ -343,8 +467,9 @@ export function useComposer(initialId: string | null) {
 
   return {
     campaign, brief, step, loading, busy, error, segmentLlm, contentLlm, channels, approved,
-    form, stream, report, reportIsCurrent, validating, hasUnsavedEdits, gate, recipients,
-    findAudience, generateSegment, generateContent, stopGenerating, saveContent, reloadFromServer,
-    approve, toggleChannel, goTo, load,
+    forms, hasB, checks, stream, reportIsCurrent, validating, hasUnsavedEdits, gate, recipients,
+    variant, scheduleMode, scheduleAt, scheduleProblem,
+    findAudience, generateSegment, saveRule, generateContent, refineVariant, stopGenerating, saveContent,
+    reloadFromServer, approve, toggleChannel, goTo, load,
   }
 }

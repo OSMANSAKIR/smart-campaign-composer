@@ -102,6 +102,22 @@ const MAP: Record<string, (e: ApiError) => Omit<UserMessage, 'details' | 'code'>
     message: 'No one in this audience has given consent for a selected channel. Deselect it or widen the audience.',
     retryable: false,
   }),
+  variant_missing: () => ({
+    title: 'There is no variant B',
+    message: 'This content version has only variant A. Write a new draft with Claude to get two variants, or send A.',
+    retryable: false,
+  }),
+  invalid_send_at: () => ({
+    title: 'The send time is not allowed',
+    message: 'Pick a time between one minute and seven days from now, then try again.',
+    retryable: false,
+  }),
+  // The server message is shown as is (api.md §9.8): it tells the marketer to check the key or credits.
+  llm_provider_rejected: (e) => ({
+    title: 'The AI provider rejected the request',
+    message: e.message || 'The AI provider rejected the request (check the API key or credits).',
+    retryable: false,
+  }),
   llm_failed: () => ({
     title: 'The AI service did not answer',
     message: 'The language model failed or timed out. Nothing was changed; try again in a moment.',

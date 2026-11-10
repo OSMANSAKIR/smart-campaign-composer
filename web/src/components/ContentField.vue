@@ -101,7 +101,7 @@ function insert(name: string) {
       :aria-invalid="issues.some((i) => !i.code.startsWith('contains_')) || undefined"
     />
 
-    <div v-if="limit > 0 && (sms || id === 'email-subject')" class="meter" :class="{ over }" aria-hidden="true">
+    <div v-if="limit > 0" class="meter" :class="{ over }" aria-hidden="true">
       <span :style="{ width: pct + '%' }" />
     </div>
 

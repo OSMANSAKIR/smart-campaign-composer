@@ -8,8 +8,10 @@ const tone = computed(() => {
     case 'completed':
       return 'ok'
     case 'completed_with_failures':
+    case 'cancelled':
       return 'warn'
     case 'sending':
+    case 'scheduled':
     case 'content_ready':
       return 'info'
     default:

@@ -2,17 +2,23 @@
 import { ApiError } from './errors'
 import type {
   ApproveResult,
+  CancelResult,
   Campaign,
   CampaignSummary,
   Catalog,
   Channel,
   ContentInput,
   ContentVersion,
+  SaveContentBody,
+  SegmentPreview,
+  SendVariant,
+  VariantKey,
   ErrorBody,
   LlmMeta,
   MessageItem,
   Page,
   ProviderConfig,
+  SegmentRule,
   SystemStatus,
   ValidateRequest,
   ValidationReport,
@@ -81,22 +87,44 @@ export const api = {
   generateSegment: (id: string, signal?: AbortSignal) =>
     request<{ campaign: Campaign; llm: LlmMeta }>('POST', `/api/campaigns/${enc(id)}/segment/generate`, { signal }),
 
-  saveSegment: (id: string, rule: unknown) =>
+  // Stateless: never saves (api.md §9.2). Called debounced by the rule editor.
+  previewSegment: (rule: SegmentRule, campaignId?: string, signal?: AbortSignal) =>
+    request<SegmentPreview>('POST', '/api/segment/preview', {
+      body: campaignId ? { rule, campaign_id: campaignId } : { rule },
+      signal,
+    }),
+
+  saveSegment: (id: string, rule: SegmentRule) =>
     request<{ campaign: Campaign }>('PUT', `/api/campaigns/${enc(id)}/segment`, { body: { rule } }),
 
-  saveContent: (id: string, input: ContentInput, baseVersion: number) =>
+  // v2 body (api.md §9.3): both variants in one save; `b` is null for a one-variant version.
+  saveContent: (id: string, body: SaveContentBody, baseVersion: number) =>
     request<{ content: ContentVersion }>('PUT', `/api/campaigns/${enc(id)}/content`, {
-      body: { ...input, base_version: baseVersion },
+      body: { base_version: baseVersion, variants: body.variants },
     }),
 
   validateContent: (req: ValidateRequest, signal?: AbortSignal) =>
     request<ValidationReport>('POST', '/api/content/validate', { body: req, signal }),
 
-  approve: (id: string, channels: Channel[], contentVersion: number, idempotencyKey: string) =>
+  // `variant` defaults to a on the server; `sendAt` (ISO 8601 with offset) schedules the send (api.md §9.6).
+  approve: (
+    id: string,
+    channels: Channel[],
+    contentVersion: number,
+    idempotencyKey: string,
+    opts: { variant?: SendVariant; sendAt?: string | null } = {},
+  ) =>
     request<ApproveResult>('POST', `/api/campaigns/${enc(id)}/approve`, {
-      body: { channels, content_version: contentVersion },
+      body: {
+        channels,
+        content_version: contentVersion,
+        variant: opts.variant ?? 'a',
+        ...(opts.sendAt ? { send_at: opts.sendAt } : {}),
+      },
       headers: { 'Idempotency-Key': idempotencyKey },
     }),
+
+  cancel: (id: string) => request<CancelResult>('POST', `/api/campaigns/${enc(id)}/cancel`, { body: {} }),
 
   listMessages: (
     id: string,
@@ -140,3 +168,9 @@ export function eventsUrl(campaignId: string): string {
 export function generateUrl(campaignId: string): string {
   return `/api/campaigns/${enc(campaignId)}/content/generate`
 }
+
+export function refineUrl(campaignId: string): string {
+  return `/api/campaigns/${enc(campaignId)}/content/refine`
+}
+
+export type { VariantKey }

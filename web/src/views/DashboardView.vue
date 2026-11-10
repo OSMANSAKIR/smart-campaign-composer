@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import ErrorNotice from '../components/ErrorNotice.vue'
+import MessagesPanel from '../components/MessagesPanel.vue'
 import StatusPill from '../components/StatusPill.vue'
 import { api } from '../lib/api'
 import { describeError, type UserMessage } from '../lib/errors'
@@ -13,7 +14,9 @@ import {
   emptyDashboard,
   errorLabel,
   overallFraction,
+  variantRows,
 } from '../lib/progress'
+import { formatCountdown } from '../lib/schedule'
 import { links } from '../lib/router'
 import { appendSample, linePoints, LIMIT_PER_S, type Sample } from '../lib/throughput'
 import { connectProgress, type ConnectionState } from '../lib/sse'
@@ -32,11 +35,65 @@ let stop: (() => void) | null = null
 
 const CHANNEL_NAME: Record<Channel, string> = { sms: 'SMS', email: 'Email' }
 
-const status = computed(() => finalStatus.value ?? state.value.progress?.status ?? campaign.value?.status)
+// A cancel answer is newer than any snapshot that was already on its way, so it wins over progress.status.
+const status = computed(
+  () =>
+    finalStatus.value ??
+    (campaign.value?.status === 'cancelled' ? 'cancelled' : (state.value.progress?.status ?? campaign.value?.status)),
+)
 const active = computed(() => status.value === 'sending')
+const isScheduled = computed(() => status.value === 'scheduled')
+const canStop = computed(() => status.value === 'sending' || status.value === 'scheduled')
+
+// --- F5: scheduled start with a live countdown ---------------------------------------------------------
+const nowMs = ref(Date.now())
+let ticker: ReturnType<typeof setInterval> | undefined
+const scheduledAt = computed(() => (campaign.value?.scheduled_at ? new Date(campaign.value.scheduled_at) : null))
+const scheduledLocal = computed(() =>
+  scheduledAt.value ? scheduledAt.value.toLocaleString('en-GB', { dateStyle: 'medium', timeStyle: 'medium' }) : '',
+)
+const countdown = computed(() => (scheduledAt.value ? formatCountdown(scheduledAt.value.getTime() - nowMs.value) : ''))
+function tick() {
+  nowMs.value = Date.now()
+  // Past the start time the worker's scheduler flips the campaign to sending; pick that up even if no snapshot comes.
+  if (isScheduled.value && scheduledAt.value && nowMs.value > scheduledAt.value.getTime() && Math.floor(nowMs.value / 1000) % 3 === 0) {
+    void api.getCampaign(props.campaignId).then((c) => (campaign.value = c)).catch(() => {})
+  }
+}
+
+// --- F4: stop sending (in-page confirmation, never window.confirm) --------------------------------------
+const stopDialog = ref<HTMLDialogElement | null>(null)
+const stopOpener = ref<HTMLButtonElement | null>(null)
+const stopping = ref(false)
+const stopError = ref<UserMessage | null>(null)
+const cancelledCount = ref<number | null>(null)
+
+function askStop() {
+  stopError.value = null
+  stopDialog.value?.showModal()
+}
+function closeStop() {
+  stopDialog.value?.close()
+  stopOpener.value?.focus()
+}
+async function confirmStop() {
+  stopping.value = true
+  stopError.value = null
+  try {
+    const r = await api.cancel(props.campaignId)
+    campaign.value = r.campaign
+    cancelledCount.value = r.cancelled
+    closeStop()
+  } catch (e) {
+    stopError.value = describeError(e)
+  } finally {
+    stopping.value = false
+  }
+}
 const overall = computed(() => (state.value.progress ? Math.round(overallFraction(state.value.progress) * 100) : 0))
 const errors = computed(() => Object.entries(state.value.progress?.errors ?? {}).filter(([, n]) => n > 0))
 const channels = computed(() => (state.value.progress ? channelEntries(state.value.progress) : []))
+const hasVariants = computed(() => channels.value.some(([, c]) => variantRows(c).length > 0))
 
 function pct(c: ChannelProgress, n: number) {
   return c.total > 0 ? (n / c.total) * 100 : 0
@@ -72,8 +129,14 @@ async function load() {
   }
 }
 
-onMounted(load)
-onBeforeUnmount(() => stop?.())
+onMounted(() => {
+  ticker = setInterval(tick, 1000)
+  void load()
+})
+onBeforeUnmount(() => {
+  stop?.()
+  clearInterval(ticker)
+})
 
 const connLabel = computed(() => {
   switch (conn.value) {
@@ -115,6 +178,9 @@ const notSent = computed(
       <div class="row">
         <StatusPill v-if="status" :status="status" />
         <span class="pill" :class="connTone" role="status"><span class="dot" aria-hidden="true" />{{ connLabel }}</span>
+        <button v-if="canStop && !loading && !error" ref="stopOpener" class="btn" type="button" @click="askStop">
+          Stop sending
+        </button>
       </div>
     </div>
 
@@ -132,7 +198,7 @@ const notSent = computed(
       <a class="btn primary" :href="links.composer(campaignId)">Continue editing</a>
     </div>
 
-    <div v-else-if="!state.progress" class="empty" role="status">
+    <div v-else-if="!state.progress && !isScheduled" class="empty" role="status">
       <span class="spinner" aria-hidden="true" />
       <p>Waiting for the first progress update…</p>
     </div>
@@ -143,12 +209,30 @@ const notSent = computed(
         <p>Reconnecting. The numbers below refresh as soon as the connection is back; nothing is lost.</p>
       </div>
 
+      <section v-if="isScheduled" class="card stack" aria-labelledby="sched-h" data-testid="scheduled">
+        <header><h2 id="sched-h">Scheduled</h2></header>
+        <p>
+          Sending starts at <b class="num">{{ scheduledLocal }}</b> (your local time).
+        </p>
+        <p class="num" role="timer" aria-live="off" style="font-size: 1.5rem; font-weight: 700">{{ countdown }}</p>
+        <p class="muted">The audience is already fixed. Nothing is sent before that time, and you can stop it until then.</p>
+      </section>
+
+      <div v-if="status === 'cancelled'" class="notice warn" role="status" data-testid="cancelled">
+        <strong>Sending was stopped.</strong>
+        <p>
+          <template v-if="cancelledCount !== null">{{ formatInt(cancelledCount) }} waiting messages were cancelled. </template>
+          Messages already handed to the provider finished and are counted as sent or failed.
+        </p>
+      </div>
+
+      <template v-if="state.progress">
       <div class="card">
         <header>
           <h2>Overall progress</h2>
           <span class="num">
             <b>{{ overall }}%</b>
-            <span class="muted"> · {{ active ? `ETA ${formatEta(state.progress.eta_seconds)}` : 'finished' }}</span>
+            <span class="muted"> · {{ active ? `ETA ${formatEta(state.progress.eta_seconds)}` : isScheduled ? 'not started' : 'finished' }}</span>
           </span>
         </header>
         <div
@@ -182,6 +266,7 @@ const notSent = computed(
             <span class="sent" :style="{ width: pct(c, c.sent) + '%' }" />
             <span class="failed" :style="{ width: pct(c, c.failed) + '%' }" />
             <span class="skipped" :style="{ width: pct(c, c.skipped_no_consent) + '%' }" />
+            <span class="cancelled" :style="{ width: pct(c, c.cancelled ?? 0) + '%' }" />
           </div>
           <div v-if="c.paused_until" class="notice warn" style="margin-top: 10px" role="status">
             <strong>Paused by the provider</strong>
@@ -194,6 +279,29 @@ const notSent = computed(
             <div class="cell"><div class="v">{{ formatInt(c.retry) }}</div><div class="l">Retrying</div></div>
             <div class="cell bad"><div class="v">{{ formatInt(c.failed) }}</div><div class="l">Failed</div></div>
             <div class="cell"><div class="v">{{ formatInt(c.skipped_no_consent) }}</div><div class="l">Skipped (no consent)</div></div>
+            <div v-if="(c.cancelled ?? 0) > 0 || status === 'cancelled'" class="cell">
+              <div class="v">{{ formatInt(c.cancelled ?? 0) }}</div><div class="l">Cancelled</div>
+            </div>
+          </div>
+          <div v-if="variantRows(c).length" class="variants">
+            <table class="list num" :aria-label="`${CHANNEL_NAME[ch]} delivery by variant`">
+              <thead>
+                <tr>
+                  <th scope="col">Variant</th><th scope="col">Total</th><th scope="col">Sent</th><th scope="col">Failed</th>
+                  <th v-if="status === 'cancelled'" scope="col">Cancelled</th><th scope="col">Skipped</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr v-for="r in variantRows(c)" :key="r.key" :data-variant="r.key">
+                  <th scope="row">{{ r.key.toUpperCase() }}</th>
+                  <td>{{ formatInt(r.v.total) }}</td>
+                  <td>{{ formatInt(r.v.sent) }}</td>
+                  <td>{{ formatInt(r.v.failed) }}</td>
+                  <td v-if="status === 'cancelled'">{{ formatInt(r.v.cancelled) }}</td>
+                  <td>{{ formatInt(r.v.skipped_no_consent) }}</td>
+                </tr>
+              </tbody>
+            </table>
           </div>
         </section>
       </div>
@@ -244,11 +352,34 @@ const notSent = computed(
           </ul>
         </section>
       </div>
+
+      <MessagesPanel :campaign-id="campaignId" :has-variants="hasVariants" />
+      </template>
     </div>
+
+    <dialog ref="stopDialog" aria-labelledby="stop-h">
+      <div class="inner">
+        <h2 id="stop-h">Stop sending?</h2>
+        <p>
+          Messages that are still waiting will be cancelled and will not be sent. Messages already handed to the
+          provider finish. This cannot be undone.
+        </p>
+        <p v-if="stopError" class="notice bad" role="alert">{{ stopError.title }}. {{ stopError.message }}</p>
+        <div class="actions">
+          <button class="btn" type="button" :disabled="stopping" @click="closeStop">Keep sending</button>
+          <button class="btn primary" type="button" :disabled="stopping" @click="confirmStop">
+            <span v-if="stopping" class="spinner" aria-hidden="true" />
+            {{ stopping ? 'Stopping…' : 'Stop sending' }}
+          </button>
+        </div>
+      </div>
+    </dialog>
   </div>
 </template>
 
 <style scoped>
+.variants { margin-top: 12px; overflow-x: auto; }
+.variants table.list td, .variants table.list th { padding: 6px 10px; }
 .chart { width: 100%; height: 140px; display: block; background: var(--paper); border-radius: 6px; }
 .chart polyline { fill: none; stroke-width: 2; vector-effect: non-scaling-stroke; }
 .chart .sms { stroke: var(--accent); }
