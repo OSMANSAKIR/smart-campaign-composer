@@ -25,28 +25,18 @@ The next agent that owns the area implements the answer and updates the status.
 
 ## Digest (maintained by the orchestrator only)
 
-_Last updated: 2026-11-09 by the orchestrator (N-DEL-007, N-LLM-003, N-DEL-009 implemented; N-ORC-013 added after stress S3)._
+_Last updated: 2026-11-10 23:20 by the orchestrator (owner answered every open entry; phase-2 features started)._
 
-**Needs the owner soon (high impact):**
+**Needs the owner soon (high impact):** none.
 
-- ❓ N-PLAN-009: repo visibility and reviewer access — the owner will say when, before the push.
+**Change requested, being implemented tonight:**
 
-**Review when convenient (medium):** N-ORC-013 (approves enqueue one at a time), N-ORC-003 (wire schema typing), N-ORC-004 (contradictions), N-ORC-005 (long names), N-PLAN-001, 002, 004, 005, 010, 011, 014.
+- 🔁 N-WEB-001 → B: catalog shape in api.md and a manual segment-rule editor (phase-2 F2).
+- 🔁 N-LLM-005 → keep B, but the response flags an unrecorded cost and the UI shows a notice (phase-2 F6).
 
-**Review when convenient (low):** N-ORC-002, 006, 007, 009, 010, N-PLAN-008, 012.
-
-**Answered:**
-
-- ✅ N-DEL-009: confirmation replays for messages with an unanswered try (implemented).
-- ✅ N-LLM-003: real claudecode capture is the fixture; claudecode eval report committed.
-- ✅ N-DEL-007: a refused connection pauses the channel and is not counted (implemented).
-- ✅ N-ORC-012: departure-time limiter (A) accepted; assumption and switch to B documented in DECISIONS.md.
-- ✅ N-ORC-001: Agent-tool subagents instead of workflows (Pro plan).
-- ✅ N-ORC-011: CP1 verifiers per area (red-team on llm, reliability on delivery), spec-auditor at CP3; limit recovery via SendMessage or a fresh builder from the branch log.
-- ✅ N-ORC-008: refusal fallback beta off until smoke-live verifies it.
-- ✅ N-PLAN-003: the owner will get an API key.
-- ✅ N-PLAN-006: no extension; one build day, then verification.
-- ✅ N-PLAN-007, N-PLAN-013: superseded; no ultracode.
+**Answered:** every other entry is ✅ ACCEPTED or RESOLVED as of 2026-11-10, including N-PLAN-009 (A:
+private GitHub repo now, public at submission; noreply commit address) and N-PLAN-005 (keep code points;
+encoding and segments shown as information).
 
 ---
 

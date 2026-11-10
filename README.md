@@ -153,6 +153,25 @@ What the evidence says today (details in the reports):
 - **Red-team:** 45 hostile briefs and model answers through the mock adapter run in `make test`; no path from
   model text to SQL text.
 
+### Live verification (owner, 2026-11-10)
+
+The owner ran the paid targets with their own key; agents never call the paid API. Numbers as measured:
+
+- **`make smoke-live`: PASS.** Segment: 1 attempt, cache read 5058 tokens, $0.00446. Content: 45 streamed
+  deltas, $0.00365.
+- **`make eval PROVIDER=anthropic`** ([report](docs/eval/REPORT-anthropic-claude-sonnet-5-5-2026-11-10.md)):
+  16/16 segments valid on the first try, 0 repairs, 14/14 exact audiences, 4/4 unsupported criteria listed,
+  1/1 consent note, 1/1 expected error, 16/16 contents valid. Latency p50 / p95 5995 / 30 766 ms: the p95 is a
+  single 28 s content call (`tr-include-opted-out`); the others took 2–5 s, all under
+  the 60 s timeout. Total $0.1227.
+- **The UI with real Claude:** the official brief → 312 users (a fresh seed gives 320; seed dates are relative
+  to seed time, so counts drift on a long-lived database — N-ORC-007). The first call wrote the prompt cache
+  ($0.0161); a later call read it ($0.0045, −72 %).
+- **Delivery of that campaign:** SMS 219 sent / 1 failed, email 256 sent / 1 failed — both failures HTTP 400,
+  permanent (the provider's answer to an invalid recipient; the seed has deliberately invalid ones). Provider
+  `/stats`: at most 100 requests in any 1 s window per channel, 0 limiter rejections, 0 duplicate deliveries;
+  11 × 5xx and 1 hang recovered by retry; 4 × 429 not counted as attempts.
+
 ---
 
 ## Configuration
@@ -173,9 +192,10 @@ matter most:
 
 ## Limitations
 
-- **The real Claude API path was not exercised during development** (no key; L-6). It is covered by contract
-  tests with documented request/response fixtures and by `make smoke-live`; prompts and evals were validated
-  against a real Sonnet model through the dev-only `claudecode` adapter.
+- **The real Claude API path was exercised once, by the owner** (no key during development; L-6): smoke-live
+  and one 17-brief eval on 2026-11-10 (see "Live verification"). Day to day it is covered by contract tests
+  with documented request/response fixtures; prompts were developed against a real Sonnet model through the
+  dev-only `claudecode` adapter.
 - **Rate bound assumption:** the limiter guarantees ≤ 100 per window if one-way network delay plus provider
   decode stay under 25 ms (sub-millisecond on the compose network). An assumption-free variant is a one-line
   switch at ~84/s (DECISIONS D-7).
@@ -194,7 +214,6 @@ matter most:
 
 Owner actions:
 
-- One real Claude API run (`make smoke-live`, one eval with `PROVIDER=anthropic`) with a key.
 - Push to GitHub; the CI workflow (`.github/workflows/ci.yml`: `make test`, `make lint`, `make e2e`) has not run
   there yet. The `00-planning` session export.
 

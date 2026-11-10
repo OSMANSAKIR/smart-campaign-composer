@@ -148,3 +148,13 @@ Append-only (union-merged). Format: KICKOFF.md §13.
 - **How it was caught:** test — containerized `make test` (race detector, all packages in parallel): takeover/graceful stop saw 101; host runs and three `-count=3` runs saw 100.
 - **Fix:** these tests use a 100 ms guard (the bound's stated assumption holds in the test environment) and a 150 ms cold dial, longer than the guard, so a limiter that paced admissions would still overshoot. Production keeps 25 ms (need.md N-ORC-012).
 - **Lesson / guard added:** a test of a bound that rests on an assumption must make the assumption true in its own environment, and say so.
+
+### V-022 · The LLM panel showed cache reads but not cache writes, so the first live call's cost looked wrong
+- **When / agent:** 2026-11-10 · builder-web (W1, `AudienceStep.vue`), caught in the owner's first live run
+- **AI proposed:** the "How Claude produced this" panel lists input, output and cache-read tokens. The API
+  response already carried `cache_write_tokens`, but the panel left it out.
+- **How it was caught:** owner — the first real segment call showed 101 input + 325 output tokens and
+  $0.016, about 4× what those tokens cost. The orchestrator attributed the gap to a ~5k-token prompt-cache
+  write at 1.25× input; the owner confirmed it with a second call: cache read 5058, $0.0045 (−72 %).
+- **Fix:** the panel shows cache writes next to cache reads (phase-2 web round).
+- **Lesson / guard added:** a cost shown to the user must list every component that makes it up.
