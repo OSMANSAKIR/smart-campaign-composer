@@ -544,6 +544,7 @@ func (e *env) writeReport() {
 		}
 		fmt.Fprintf(&b, "| %s | %s | %s | %s | $%.4f |\n", r.ID, r.Name, res, r.Duration.Round(100*time.Millisecond), r.CostUSD)
 	}
+	b.WriteString("\nPer-scenario cost is the cumulative cost that accrued while the scenario ran. A12 runs alongside A1–A8, so the A1 and A12 rows include each other's calls; the total above is exact.\n")
 	b.WriteString("\n## Checks\n")
 	for _, r := range e.results {
 		fmt.Fprintf(&b, "\n### %s %s\n\n", r.ID, r.Name)

@@ -186,6 +186,12 @@ The owner ran the paid targets with their own key; agents never call the paid AP
   permanent (the provider's answer to an invalid recipient; the seed has deliberately invalid ones). Provider
   `/stats`: at most 100 requests in any 1 s window per channel, 0 limiter rejections, 0 duplicate deliveries;
   11 × 5xx and 1 hang recovered by retry; 4 × 429 not counted as attempts.
+- **`make acceptance PROVIDER=anthropic`** (2026-11-11, [report](docs/acceptance/REPORT-anthropic-2026-11-11.md)):
+  13/13 scenarios pass with real Claude, $0.1627 in total. Among them: the A/B split put 49.0 % of 4012 users
+  in A with every message on the documented hash; a cancel mid-send left 0 deliveries after it returned (236 sent,
+  3294 cancelled); a scheduled campaign delivered nothing before its send time; prompt injection produced only
+  a city rule with the users table intact; every scenario kept ≤ 100 requests per second per channel and 0
+  duplicate deliveries.
 
 ---
 

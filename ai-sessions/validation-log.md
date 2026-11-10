@@ -179,3 +179,14 @@ Append-only (union-merged). Format: KICKOFF.md §13.
 - **Fix:** restored with `git checkout -- internal/api/provider_test.go`; the new tests went to
   `internal/api/llm_provider_test.go` before any commit.
 - **Lesson / guard added:** check that a path is free before creating a file; a successful write is not proof.
+
+### V-025 · Per-scenario cost in the live acceptance report did not add up to the total
+- **When / agent:** 2026-11-11 · planning session, reviewing the owner's live `make acceptance` run
+- **AI proposed:** the generated report listed A12 at $0.1150 and A1 at $0.0553, while the other scenarios cost
+  about $0.01 each; the rows summed to $0.2777 against a stated total of $0.1627.
+- **How it was caught:** review — summing the column by hand; the difference was exactly the A12 row.
+- **Cause:** each row is the cumulative-cost delta over the scenario's wall time, and A12 runs in parallel with
+  A1–A8, so A1 and A12 include each other's calls. The total is exact.
+- **Fix:** the report generator now prints this caveat under the table, and the committed report carries the
+  same note. No paid re-run.
+- **Lesson / guard added:** a derived figure is checked against its total before it is quoted.
