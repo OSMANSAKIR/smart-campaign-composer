@@ -192,6 +192,8 @@ The owner ran the paid targets with their own key; agents never call the paid AP
   3294 cancelled); a scheduled campaign delivered nothing before its send time; prompt injection produced only
   a city rule with the users table intact; every scenario kept ≤ 100 requests per second per channel and 0
   duplicate deliveries.
+- **CI on GitHub:** `make lint`, `make test`, `make e2e` and `make acceptance` all green on the first push
+  ([run](../../actions/runs/42903746322)).
 
 ---
 
@@ -233,12 +235,10 @@ matter most:
 
 ## Not done / next steps
 
-Owner actions:
+Not built:
 
-- Push to GitHub; the CI workflow (`.github/workflows/ci.yml`: `make test`, `make lint`, `make acceptance`,
-  `make e2e`) has not run there yet. The `00-planning` session export.
-- The live acceptance run (`make acceptance PROVIDER=anthropic` with the spend flag; cost cap $1). Two variants
-  per call make content answers longer; if a call nears the 60 s `LLM_CONTENT_TIMEOUT`, raise it for that run.
+- Bonus B-3, content in each recipient's language: a campaign has one language (the brief's), and every
+  recipient gets that copy. The seed already has a `locale` per user and name fallbacks per locale.
 
 Phase-2 gaps (2026-11-10):
 
