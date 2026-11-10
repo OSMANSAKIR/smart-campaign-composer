@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, nextTick, ref } from 'vue'
 import { formatInt } from '../lib/format'
-import { parseLocalInput, scheduleBounds } from '../lib/schedule'
+import { parseLocalInput, scheduleBounds, toLocalInputValue } from '../lib/schedule'
 import type { Campaign, Channel, SendVariant } from '../lib/types'
 import type { Gate } from '../lib/approveGate'
 import { variantProblem, variantsOf } from '../lib/variants'
@@ -69,8 +69,10 @@ function confirm() {
 function setMode(m: 'now' | 'later') {
   emit('update:scheduleMode', m)
   if (m === 'later' && !props.scheduleAt) {
-    bounds.value = scheduleBounds(new Date())
-    emit('update:scheduleAt', bounds.value.min)
+    // Ten minutes ahead: the minimum (now + 1 min, minute precision) would already be too soon when read back.
+    const now = new Date()
+    bounds.value = scheduleBounds(now)
+    emit('update:scheduleAt', toLocalInputValue(new Date(now.getTime() + 10 * 60_000)))
   }
 }
 defineExpose({ close })
