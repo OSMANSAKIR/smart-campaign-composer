@@ -697,3 +697,14 @@ encoding and segments shown as information).
 - **Question for owner:** —
 - **Owner response:** ACCEPT (chat, 2026-11-11).
 - **Status:** ACCEPTED
+
+### 🟡 N-ORC-017 · Final polish: cancelled metric, test rename, step bar · impact: low
+- **Date / agent / session:** 2026-11-11 · polish agent · pre-submission
+- **Requirement(s):** R-OBS-2, F4, B-1, R-AUD-1
+- **Context:** Five small items before submission needed three small choices.
+- **Options:** (1) `messages_total{status="cancelled"}` in the api (which performs the cancel) or the worker; (2) which requirement `TestErrorModel_ROBS1` covers; (3) wrap or shrink the step bar at 390 px.
+- **Decision taken:** (1) The api counts it, in `campaign.Service.Cancel`, after the commit, per channel; the worker's own cancel of a retry result or expired lease is not counted (the series is not pre-created at 0 in the api). `observability.md` lists the process. (2) R-AUD-1: the test's requirement-bearing cases are the strict segment edit over HTTP; renamed `TestErrorModel_RAUD1`. KICKOFF has no error-model requirement. (3) Two rows of two at ≤ 520 px. RT-8b never skipped (control-character briefs were already a structured 4xx); it now fails instead of skipping.
+- **Cost to change later:** minutes each.
+- **Question for owner:** OK?
+- **Owner response:** —
+- **Status:** OPEN

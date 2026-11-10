@@ -245,16 +245,13 @@ Phase-2 gaps (2026-11-10):
 - A/B: no open/click metrics (the mock provider has none), so no winner analysis; per-variant delivery only.
 - Cancel: up to `MaxInFlight` (32) messages per channel already claimed can still go out after a cancel
   (DECISIONS D-17); a status check before each send would close it at one DB read per send.
-- The `messages_total` metric has no `cancelled` status; the campaign list items carry no `scheduled_at`.
-- The composer's step bar clips its last step at about 390 px width (the new controls themselves wrap).
 
 Known gaps (P2, from the CP3 spec audit in [`docs/review/traceability.md`](docs/review/traceability.md)):
 
 - A "retry failed messages" button.
 - Tests that would make existing evidence stronger: API `/readyz` returning 503 with the database down (proven
   for the worker in S7 only); a `/metrics` scrape asserting the API's `llm_*` series; one test from
-  `GenerateSegment` to the stored audience compared with hand-written SQL (the parts are tested separately);
-  the red-team NUL-brief case still reports through `t.Skipf` instead of failing.
+  `GenerateSegment` to the stored audience compared with hand-written SQL (the parts are tested separately).
 - Stress checks: retry spacing from `delivery_attempts` timestamps ("no hot loop" is asserted by attempt
   counts only); worker-metric comparison in S2/S7 (a killed worker loses its counters, so I5 compares DB and
   provider there); a tighter goroutine bound in S6 (+10 allowed).
