@@ -6,6 +6,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/prometheus/client_golang/prometheus/testutil"
 	"go.uber.org/goleak"
 
 	"smartcampaign/internal/clock"
@@ -133,5 +134,25 @@ func TestProgress_CancelledIsDoneOnlyWhenQuiet_F4(t *testing.T) {
 	sms := u.Snapshot.Channels["sms"]
 	if sms.Sent+sms.Failed+sms.Cancelled+sms.SkippedNoConsent != sms.Total || sms.Total != 3 || sms.Cancelled != 1 {
 		t.Fatalf("final counts do not add up: %+v", sms)
+	}
+}
+
+func TestCancel_CountsCancelledMessagesPerChannel_F4(t *testing.T) {
+	svc, pool := newService(t, 60)
+	id := sendingCampaign(t, pool, map[string][]string{
+		"sms":   {"queued", "queued", "retry", "sending", "sent"},
+		"email": {"queued", "sent"},
+	})
+	if _, err := svc.Cancel(context.Background(), id); err != nil {
+		t.Fatal(err)
+	}
+	// A repeated cancel moves nothing, so it must not count again.
+	if _, err := svc.Cancel(context.Background(), id); err != nil {
+		t.Fatal(err)
+	}
+	for ch, want := range map[string]float64{"sms": 3, "email": 1} {
+		if got := testutil.ToFloat64(svc.Metrics.Messages.WithLabelValues(ch, StatusCancelled)); got != want {
+			t.Errorf("messages_total{channel=%q,status=\"cancelled\"} = %v, want %v", ch, got, want)
+		}
 	}
 }

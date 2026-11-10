@@ -25,6 +25,7 @@ func (s *Service) Cancel(ctx context.Context, id string) (CancelResult, error) {
 		return CancelResult{}, ErrNotFound
 	}
 	var n int
+	byChannel := map[string]int{}
 	err := pgx.BeginFunc(ctx, s.Pool, func(tx pgx.Tx) error {
 		tag, err := tx.Exec(ctx, `UPDATE campaigns SET status = 'cancelled', cancelled_at = now(), updated_at = now()
 			WHERE id = $1 AND status IN ('scheduled', 'sending')`, id)
@@ -43,13 +44,30 @@ func (s *Service) Cancel(ctx context.Context, id string) (CancelResult, error) {
 			}
 			return nil
 		}
-		tag, err = tx.Exec(ctx, `UPDATE messages SET status = 'cancelled', lease_until = NULL, updated_at = now()
-			WHERE campaign_id = $1 AND status IN ('queued', 'retry')`, id)
-		n = int(tag.RowsAffected())
-		return err
+		rows, err := tx.Query(ctx, `UPDATE messages SET status = 'cancelled', lease_until = NULL, updated_at = now()
+			WHERE campaign_id = $1 AND status IN ('queued', 'retry') RETURNING channel`, id)
+		if err != nil {
+			return err
+		}
+		defer rows.Close()
+		for rows.Next() {
+			var ch string
+			if err := rows.Scan(&ch); err != nil {
+				return err
+			}
+			byChannel[ch]++
+			n++
+		}
+		return rows.Err()
 	})
 	if err != nil {
 		return CancelResult{}, err
+	}
+	// Counted after the commit, in the API process that performed the cancel (a rolled-back cancel counts nothing).
+	if s.Metrics != nil {
+		for ch, k := range byChannel {
+			s.Metrics.Messages.WithLabelValues(ch, StatusCancelled).Add(float64(k))
+		}
 	}
 	c, err := s.Get(ctx, id)
 	if err != nil {

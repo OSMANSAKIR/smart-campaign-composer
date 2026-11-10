@@ -22,7 +22,7 @@ Definitions live in `internal/metrics`; services only use them. Names and labels
 
 | Metric | Type | Labels | Emitted by |
 |---|---|---|---|
-| `messages_total` | counter | `channel`, `status` (sent, failed, skipped_no_consent, retry) | worker |
+| `messages_total` | counter | `channel`, `status` (sent, failed, skipped_no_consent, retry, cancelled) | worker; `cancelled` by the api (the cancel call counts the messages it moves) |
 | `queue_depth` | gauge | `channel`, `status` (queued, retry, sending) | worker (sampled every 2 s) |
 | `retries_total` | counter | `channel`, `class` (throttled, transient, ambiguous, unreachable) | worker |
 | `provider_responses_total` | counter | `channel`, `code` (HTTP status, or `timeout`, `conn_error`, `unreachable` = no connection made) | worker |
