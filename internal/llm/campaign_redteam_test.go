@@ -25,7 +25,7 @@ func structured(err error) bool {
 // RT-8: NUL in model free text (assumptions/explanation/notes), in any content field or in a brief passes
 // validation but Postgres rejects it (text: 22021; jsonb "\u0000": 22P05), so the request fails as `internal`.
 // RT-8a (free text) and RT-8c (content) are fixed in the validators and asserted here; RT-8b (the brief at
-// campaign creation) belongs to internal/campaign and stays a skipped finding until the orchestrator fixes it.
+// campaign creation) is fixed in internal/campaign and asserted here too.
 func TestRedTeam_ValidatedValuesAreStorable_RAI1(t *testing.T) {
 	pool := storetest.NewDB(t)
 	ctx := context.Background()
@@ -76,6 +76,6 @@ func TestRedTeam_ValidatedValuesAreStorable_RAI1(t *testing.T) {
 	}
 
 	if len(failures) > 0 {
-		t.Skipf("FINDING RT-8b: %d briefs end as internal errors:\n%s", len(failures), strings.Join(failures, "\n"))
+		t.Errorf("RT-8b: %d briefs end as internal errors:\n%s", len(failures), strings.Join(failures, "\n"))
 	}
 }
