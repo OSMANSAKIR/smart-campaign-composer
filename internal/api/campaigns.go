@@ -32,7 +32,8 @@ var statusOf = map[string]int{
 	"bad_request": 400, "idempotency_key_required": 400, "not_found": 404,
 	"invalid_state": 409, "stale_content_version": 409, "approve_in_progress": 409, "already_approved": 409,
 	"validation_failed": 422, "llm_invalid_output": 422, "llm_refused": 422, "content_invalid": 422, "empty_audience": 422,
-	"llm_failed": 502, "unavailable": 503,
+	"variant_missing": 422, "invalid_send_at": 422,
+	"llm_failed": 502, "llm_provider_rejected": 502, "unavailable": 503,
 }
 
 func (s *Server) createCampaign(w http.ResponseWriter, r *http.Request) {
