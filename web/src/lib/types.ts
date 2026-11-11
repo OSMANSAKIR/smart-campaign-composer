@@ -40,11 +40,21 @@ export interface LlmMeta {
   cost_recorded?: boolean
 }
 
+// Consented counts of one recipient locale (B-3, api.md §9.9).
+export interface LocaleAudience {
+  total: number
+  sms_reachable: number
+  email_reachable: number
+  both: number
+}
+
 export interface Audience {
   total: number
   sms_reachable: number
   email_reachable: number
   both: number
+  // B-3: the same counts per recipient locale. Missing on a campaign counted before B-3.
+  by_locale?: Partial<Record<Language, LocaleAudience>>
   counted_at: string
 }
 
@@ -110,6 +120,19 @@ export interface ValidationReport {
 
 export type VariantKey = 'a' | 'b'
 export type SendVariant = 'a' | 'b' | 'ab'
+export type LanguageMode = 'campaign' | 'recipient'
+
+// The adaptation of a primary copy to the other locale (B-3, api.md §9.9).
+export interface LocalizedCopy {
+  label: string
+  source: 'llm' | 'edited'
+  sms_text: string
+  email_subject: string
+  email_body: string
+  validation: ValidationReport
+  // The primary copy changed after this adaptation was made or last edited.
+  stale: boolean
+}
 
 export interface ContentVariant {
   label: string
@@ -119,6 +142,9 @@ export interface ContentVariant {
   email_subject: string
   email_body: string
   validation: ValidationReport
+  // B-3: the language of this primary copy and its adaptations by locale. Absent on an older server.
+  locale?: Language
+  localized?: Partial<Record<Language, LocalizedCopy>>
 }
 
 export interface ContentVersion {
@@ -142,6 +168,11 @@ export interface VariantInput {
   email_body: string
 }
 
+// One variant in a save: the primary copy plus the adaptations being replaced (B-3).
+export interface VariantSave extends VariantInput {
+  localized?: Partial<Record<Language, VariantInput>>
+}
+
 export interface ChannelProgress {
   total: number
   queued: number
@@ -153,6 +184,8 @@ export interface ChannelProgress {
   // v2: cancelled messages (api.md §9.5) and the per-variant split (§9.3).
   cancelled?: number
   variants?: Partial<Record<VariantKey, VariantProgress>>
+  // B-3: terminal counts per recipient locale (api.md §9.9).
+  locales?: Partial<Record<Language, VariantProgress>>
   throughput_per_s: number
   paused_until: string | null
 }
@@ -186,6 +219,8 @@ export interface Campaign {
   approved_content_version: number | null
   // v2 (api.md §2, §9).
   send_variant?: SendVariant | null
+  // B-3: 'campaign' sends everyone the campaign-language copy, 'recipient' each recipient's own language.
+  language_mode?: LanguageMode
   scheduled_at?: string | null
   cancelled_at?: string | null
   created_at: string
@@ -233,7 +268,7 @@ export interface ContentInput {
 
 // Body of PUT .../content in v2 (api.md §9.3).
 export interface SaveContentBody {
-  variants: { a: VariantInput; b: VariantInput | null }
+  variants: { a: VariantSave; b: VariantSave | null }
 }
 
 export interface ValidateRequest extends ContentInput {

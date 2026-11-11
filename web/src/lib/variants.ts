@@ -28,7 +28,7 @@ export function variantsOf(c: ContentVersion): { a: ContentVariant; b: ContentVa
   }
 }
 
-export function toInput(v: ContentVariant): VariantInput {
+export function toInput(v: Pick<ContentVariant, 'label' | 'sms_text' | 'email_subject' | 'email_body'>): VariantInput {
   return { label: v.label, sms_text: v.sms_text, email_subject: v.email_subject, email_body: v.email_body }
 }
 

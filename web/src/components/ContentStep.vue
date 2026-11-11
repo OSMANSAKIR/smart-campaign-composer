@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed } from 'vue'
-import type { Campaign, LlmMeta, ValidationReport, VariantInput, VariantKey } from '../lib/types'
+import { LOCALE_NAME, otherLocale } from '../lib/localization'
+import type { Campaign, LlmMeta, LocalizedCopy, ValidationReport, VariantInput, VariantKey } from '../lib/types'
 import { variantsOf } from '../lib/variants'
 import LlmPanel from './LlmPanel.vue'
 import VariantCard from './VariantCard.vue'
@@ -12,13 +13,37 @@ const props = defineProps<{
   hasB: boolean
   checks: Record<VariantKey, { report: ValidationReport | null; key: string; validating: boolean }>
   reportIsCurrent: (k: VariantKey) => boolean
-  stream: { active: boolean; repairing: boolean; attempt: number; started: boolean; target: 'all' | VariantKey }
+  stream: { active: boolean; repairing: boolean; attempt: number; started: boolean; target: 'all' | VariantKey | 'localize' }
   validating: boolean
   hasUnsavedEdits: boolean
   saving: boolean
   llm: LlmMeta | null
+  // B-3: the adaptation to the campaign's other language, one editor state per variant. All optional so a
+  // plain content step (no other-language recipients) needs none of it.
+  localForms?: Record<VariantKey, VariantInput>
+  localChecks?: Record<VariantKey, { report: ValidationReport | null; key: string; validating: boolean }>
+  localReportIsCurrent?: (k: VariantKey) => boolean
+  localStale?: (k: VariantKey) => boolean
+  savedLocalized?: (k: VariantKey) => LocalizedCopy | null
+  otherRecipients?: number
+  hasLocalized?: boolean
 }>()
-defineEmits<{ generate: []; stop: []; save: []; next: []; refine: [VariantKey, string] }>()
+defineEmits<{ generate: []; stop: []; save: []; next: []; refine: [VariantKey, string]; localize: [] }>()
+
+const emptyForm: VariantInput = { label: '', sms_text: '', email_subject: '', email_body: '' }
+const otherName = computed(() => LOCALE_NAME[otherLocale(props.campaign.language)])
+// The tabs show when somebody reads the other language or an adaptation already exists.
+const showTabs = computed(() => (props.otherRecipients ?? 0) > 0 || !!props.hasLocalized)
+const localizing = computed(() => props.stream.active && props.stream.target === 'localize')
+const localCurrent = (k: VariantKey) => (props.localReportIsCurrent?.(k) ? (props.localChecks?.[k].report ?? null) : null)
+// Adapting works on the saved version, so unsaved edits would be lost: save first (like refine).
+const localizeBlocked = computed(() => {
+  if (!props.campaign.content) return 'Write the content with Claude first.'
+  if (props.stream.active) return 'Wait for Claude to finish.'
+  if (props.hasUnsavedEdits) return 'Save your changes first; Claude adapts the saved version.'
+  if (!props.hasB) return 'Adapting needs both variants. Write a new draft with Claude.'
+  return ''
+})
 
 const keys = computed<VariantKey[]>(() => (props.hasB ? ['a', 'b'] : ['a']))
 const current = (k: VariantKey) => (props.reportIsCurrent(k) ? props.checks[k].report : null)
@@ -70,7 +95,18 @@ const refineBlocked = computed(() => {
           <button v-if="!stream.active" class="btn primary" type="button" @click="$emit('generate')">
             {{ campaign.content ? 'Write a new draft with Claude' : 'Write with Claude' }}
           </button>
-          <button v-else class="btn" type="button" @click="$emit('stop')">Stop</button>
+          <button
+            v-if="!stream.active && (otherRecipients ?? 0) > 0 && campaign.content"
+            class="btn"
+            type="button"
+            :disabled="!!localizeBlocked"
+            :title="localizeBlocked"
+            @click="$emit('localize')"
+          >
+            {{ hasLocalized ? `Re-adapt the ${otherName} version` : `Write the ${otherName} version` }}
+            ({{ otherRecipients }} {{ otherRecipients === 1 ? 'recipient' : 'recipients' }})
+          </button>
+          <button v-else-if="stream.active" class="btn" type="button" @click="$emit('stop')">Stop</button>
         </div>
       </header>
 
@@ -82,7 +118,9 @@ const refineBlocked = computed(() => {
               ? ` Fixing… (attempt ${stream.attempt})`
               : stream.target === 'all'
                 ? ' Claude is writing two variants'
-                : ` Claude is rewriting variant ${stream.target.toUpperCase()}`
+                : stream.target === 'localize'
+                  ? ` Claude is adapting both variants to ${otherName}`
+                  : ` Claude is rewriting variant ${stream.target.toUpperCase()}`
           }}
         </strong>
         <p v-if="stream.repairing">The first draft broke a rule, so Claude is rewriting it. The text below restarts.</p>
@@ -111,7 +149,16 @@ const refineBlocked = computed(() => {
           :streaming="stream.active"
           :refining="stream.active && stream.target === k"
           :refine-blocked="refineBlocked"
+          :primary-locale="campaign.language"
+          :show-tabs="showTabs"
+          :local-form="localForms?.[k] ?? emptyForm"
+          :local-report="localCurrent(k)"
+          :local-saved="savedLocalized?.(k) ?? null"
+          :local-stale="localStale?.(k) ?? false"
+          :localizing="localizing"
+          :localize-blocked="localizeBlocked"
           @refine="(text: string) => $emit('refine', k, text)"
+          @localize="$emit('localize')"
         />
       </div>
 

@@ -16,6 +16,7 @@ import {
   overallFraction,
   variantRows,
 } from '../lib/progress'
+import { localeRows } from '../lib/localization'
 import { formatCountdown } from '../lib/schedule'
 import { links } from '../lib/router'
 import { appendSample, linePoints, LIMIT_PER_S, type Sample } from '../lib/throughput'
@@ -294,6 +295,26 @@ const notSent = computed(
               <tbody>
                 <tr v-for="r in variantRows(c)" :key="r.key" :data-variant="r.key">
                   <th scope="row">{{ r.key.toUpperCase() }}</th>
+                  <td>{{ formatInt(r.v.total) }}</td>
+                  <td>{{ formatInt(r.v.sent) }}</td>
+                  <td>{{ formatInt(r.v.failed) }}</td>
+                  <td v-if="status === 'cancelled'">{{ formatInt(r.v.cancelled) }}</td>
+                  <td>{{ formatInt(r.v.skipped_no_consent) }}</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <div v-if="localeRows(c).length" class="variants">
+            <table class="list num" :aria-label="`${CHANNEL_NAME[ch]} delivery by language`">
+              <thead>
+                <tr>
+                  <th scope="col">Language</th><th scope="col">Total</th><th scope="col">Sent</th><th scope="col">Failed</th>
+                  <th v-if="status === 'cancelled'" scope="col">Cancelled</th><th scope="col">Skipped</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr v-for="r in localeRows(c)" :key="r.locale" :data-locale="r.locale">
+                  <th scope="row">{{ r.name }}</th>
                   <td>{{ formatInt(r.v.total) }}</td>
                   <td>{{ formatInt(r.v.sent) }}</td>
                   <td>{{ formatInt(r.v.failed) }}</td>

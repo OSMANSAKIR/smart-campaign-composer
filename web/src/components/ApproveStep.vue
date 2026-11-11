@@ -2,7 +2,8 @@
 import { computed, nextTick, ref } from 'vue'
 import { formatInt } from '../lib/format'
 import { parseLocalInput, scheduleBounds, toLocalInputValue } from '../lib/schedule'
-import type { Campaign, Channel, SendVariant } from '../lib/types'
+import { LOCALE_NAME } from '../lib/localization'
+import type { Campaign, Channel, LanguageMode, SendVariant } from '../lib/types'
 import type { Gate } from '../lib/approveGate'
 import { variantProblem, variantsOf } from '../lib/variants'
 
@@ -16,12 +17,18 @@ const props = defineProps<{
   scheduleMode: 'now' | 'later'
   scheduleAt: string
   scheduleProblem: string
+  // B-3: shown only when the audience also reads the other language. `languageProblem` is why "each recipient
+  // in their language" is not available yet ('' when it is).
+  offersLanguage?: boolean
+  languageMode?: LanguageMode
+  languageProblem?: string
 }>()
 const emit = defineEmits<{
   toggle: [Channel, boolean]
   confirm: []
   back: []
   'update:variant': [SendVariant]
+  'update:languageMode': [LanguageMode]
   'update:scheduleMode': ['now' | 'later']
   'update:scheduleAt': [string]
 }>()
@@ -47,6 +54,12 @@ const choiceText = computed(() =>
   props.variant === 'ab'
     ? `A/B test: ${variantName('a')} and ${variantName('b')}, split 50/50 per person`
     : `${props.variant === 'a' ? 'Variant A' : 'Variant B'}: ${variantName(props.variant)}`,
+)
+const campaignLanguage = computed(() => LOCALE_NAME[props.campaign.language])
+const languageText = computed(() =>
+  !props.offersLanguage || props.languageMode !== 'recipient'
+    ? `Everyone in ${campaignLanguage.value}`
+    : 'Each recipient in their own language',
 )
 const whenText = computed(() => {
   if (props.scheduleMode === 'now') return 'Right away'
@@ -126,6 +139,34 @@ defineExpose({ close })
         </p>
       </fieldset>
 
+      <fieldset v-if="offersLanguage" style="border: 0; padding: 0; margin: 0" class="stack" aria-describedby="language-note">
+        <legend style="font-weight: 600; margin-bottom: 8px">Language</legend>
+        <label class="row" style="gap: 10px">
+          <input
+            type="radio"
+            name="language-mode"
+            value="campaign"
+            :checked="languageMode !== 'recipient'"
+            @change="emit('update:languageMode', 'campaign')"
+          />
+          <span>Everyone in {{ campaignLanguage }}</span>
+        </label>
+        <label class="row" style="gap: 10px">
+          <input
+            type="radio"
+            name="language-mode"
+            value="recipient"
+            :checked="languageMode === 'recipient'"
+            :disabled="!!languageProblem"
+            @change="emit('update:languageMode', 'recipient')"
+          />
+          <span>Each recipient in their language</span>
+        </label>
+        <p id="language-note" class="muted" role="status">
+          {{ languageProblem || 'Recipients get the copy in the language they read; each language has its own approved text.' }}
+        </p>
+      </fieldset>
+
       <fieldset style="border: 0; padding: 0; margin: 0" class="stack">
         <legend style="font-weight: 600; margin-bottom: 8px">When</legend>
         <label class="row" style="gap: 10px">
@@ -186,6 +227,7 @@ defineExpose({ close })
           <div v-if="channels.includes('sms')"><span>SMS to</span><b>{{ formatInt(recipients.sms) }} people</b></div>
           <div v-if="channels.includes('email')"><span>Email to</span><b>{{ formatInt(recipients.email) }} people</b></div>
           <div><span>Content</span><b>{{ choiceText }}</b></div>
+          <div v-if="offersLanguage"><span>Language</span><b>{{ languageText }}</b></div>
           <div><span>When</span><b>{{ whenText }}</b></div>
         </div>
         <div class="actions">

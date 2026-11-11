@@ -1,7 +1,8 @@
 // Approve gating (R-FLOW-3): the button is enabled only when the server's report for the *latest saved*
 // content version says every variant that will be sent is valid for every chosen channel, and each chosen
 // channel has recipients.
-import type { Campaign, Channel, SendVariant } from './types'
+import { localizationProblem } from './localization'
+import type { Campaign, Channel, LanguageMode, SendVariant } from './types'
 import { variantProblem } from './variants'
 
 export interface GateInput {
@@ -13,6 +14,8 @@ export interface GateInput {
   busy?: boolean
   // Which variant(s) will be sent (B-2). Defaults to a.
   variant?: SendVariant
+  // 'recipient' (B-3) also needs a current, valid copy for every language among the recipients.
+  languageMode?: LanguageMode
   // A reason the chosen send time is not allowed (F5), or '' / undefined when it is fine.
   scheduleProblem?: string
 }
@@ -53,6 +56,10 @@ export function approveGate(g: GateInput): Gate {
   }
   const problem = variantProblem(c.content, g.variant ?? 'a', g.channels)
   if (problem) return no(problem)
+  if (g.languageMode === 'recipient') {
+    const lp = localizationProblem(c.content, c, g.channels, g.variant ?? 'a')
+    if (lp) return no(lp)
+  }
   if (g.scheduleProblem) return no(g.scheduleProblem)
   return { enabled: true, reason: '' }
 }

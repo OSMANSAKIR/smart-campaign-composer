@@ -87,6 +87,19 @@ describe('DashboardView phase 2', () => {
     w.unmount()
   })
 
+  it('shows sent and failed per language per channel, and no table for a channel without a breakdown (B-3)', async () => {
+    stub(() => campaign('completed', { language_mode: 'recipient' }))
+    const w = mount(DashboardView, { props: { campaignId: 'c1' } })
+    await settle()
+    const l = { total: 5, sent: 4, failed: 1, cancelled: 0, skipped_no_consent: 0 }
+    FakeEventSource.last!.emit('snapshot', progress('completed', { locales: { tr: { ...l, total: 7, sent: 6, failed: 1 }, en: { ...l, total: 3, sent: 2, failed: 1 } } }))
+    await settle()
+    const rows = w.findAll('table[aria-label="SMS delivery by language"] tbody tr').map((r) => [r.attributes('data-locale'), r.get('th').text(), ...r.findAll('td').map((c) => c.text())])
+    expect(rows).toEqual([['tr', 'Turkish', '7', '6', '1', '0'], ['en', 'English', '3', '2', '1', '0']])
+    expect(w.find('table[aria-label="Email delivery by language"]').exists()).toBe(false)
+    w.unmount()
+  })
+
   it('shows the local send time and a live countdown for a scheduled campaign (F5)', async () => {
     const at = new Date(NOW.getTime() + 2 * 3_600_000 + 5 * 60_000 + 9_000).toISOString()
     stub(() => campaign('scheduled', { scheduled_at: at }))

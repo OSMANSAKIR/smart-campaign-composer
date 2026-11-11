@@ -1,7 +1,7 @@
 // Server-sent events, two ways:
 //  - createSseParser + streamGenerate: POST + fetch stream (EventSource is GET-only; need.md N-ORC-002).
 //  - connectProgress: EventSource wrapper for GET .../events, where every `snapshot` is the full state.
-import { generateUrl, refineUrl, eventsUrl, readError, sendRequest } from './api'
+import { generateUrl, localizeUrl, refineUrl, eventsUrl, readError, sendRequest } from './api'
 import { ApiError } from './errors'
 import type { ErrorBody, GenerateEvent, Progress, ProgressEvent } from './types'
 
@@ -93,6 +93,16 @@ export function streamRefine(
   signal?: AbortSignal,
 ): Promise<void> {
   return streamPost(refineUrl(campaignId), body, onEvent, signal)
+}
+
+// Adapt the primary copy to the other locale (api.md §9.9); same stream as generate.
+export function streamLocalize(
+  campaignId: string,
+  body: { target_locale: 'tr' | 'en' },
+  onEvent: (e: GenerateEvent) => void,
+  signal?: AbortSignal,
+): Promise<void> {
+  return streamPost(localizeUrl(campaignId), body, onEvent, signal)
 }
 
 async function streamPost(

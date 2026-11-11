@@ -11,6 +11,7 @@ import type {
   ContentVersion,
   SaveContentBody,
   SegmentPreview,
+  LanguageMode,
   SendVariant,
   VariantKey,
   ErrorBody,
@@ -112,13 +113,15 @@ export const api = {
     channels: Channel[],
     contentVersion: number,
     idempotencyKey: string,
-    opts: { variant?: SendVariant; sendAt?: string | null } = {},
+    opts: { variant?: SendVariant; sendAt?: string | null; languageMode?: LanguageMode } = {},
   ) =>
     request<ApproveResult>('POST', `/api/campaigns/${enc(id)}/approve`, {
       body: {
         channels,
         content_version: contentVersion,
         variant: opts.variant ?? 'a',
+        // 'campaign' is the server default and the body of every approve before B-3.
+        ...(opts.languageMode === 'recipient' ? { language_mode: 'recipient' } : {}),
         ...(opts.sendAt ? { send_at: opts.sendAt } : {}),
       },
       headers: { 'Idempotency-Key': idempotencyKey },
@@ -171,6 +174,10 @@ export function generateUrl(campaignId: string): string {
 
 export function refineUrl(campaignId: string): string {
   return `/api/campaigns/${enc(campaignId)}/content/refine`
+}
+
+export function localizeUrl(campaignId: string): string {
+  return `/api/campaigns/${enc(campaignId)}/content/localize`
 }
 
 export type { VariantKey }

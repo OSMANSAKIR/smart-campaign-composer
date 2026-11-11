@@ -5,18 +5,22 @@ import { approveGate } from './approveGate'
 import { describeError, ApiError, type UserMessage } from './errors'
 import { extractVariants, type StreamedVariant } from './partialJson'
 import { parseLocalInput, scheduleProblem as checkSchedule, toOffsetISO } from './schedule'
-import { errorFromBody, streamGenerate, streamRefine } from './sse'
+import { audienceHasOtherLocale, isStale, localeTotal, localizationProblem, otherLocale } from './localization'
+import { errorFromBody, streamGenerate, streamLocalize, streamRefine } from './sse'
 import type {
   ApproveResult,
   Campaign,
   Channel,
   ContentVersion,
+  Language,
+  LanguageMode,
   LlmMeta,
   SegmentRule,
   SendVariant,
   ValidationReport,
   VariantInput,
   VariantKey,
+  VariantSave,
 } from './types'
 import { toInput, variantsOf } from './variants'
 
@@ -68,6 +72,9 @@ export function useComposer(initialId: string | null) {
 
   // --- send options (approve dialog) -------------------------------------------------------------------
   const variant = ref<SendVariant>('a')
+  // B-3: who gets which language. Defaults to each recipient's own language when that is approvable.
+  const languageMode = ref<LanguageMode>('campaign')
+  let languageModeChosen = false
   const scheduleMode = ref<'now' | 'later'>('now')
   const scheduleAt = ref('') // datetime-local value, browser local time
 
@@ -81,13 +88,22 @@ export function useComposer(initialId: string | null) {
     attempt: 1,
     buffer: '',
     started: false,
-    // 'all' while generating two variants, a/b while refining one.
-    target: 'all' as 'all' | VariantKey,
+    // 'all' while generating two variants, a/b while refining one, 'localize' while adapting both (B-3).
+    target: 'all' as 'all' | VariantKey | 'localize',
   })
   const checks = reactive<Record<VariantKey, VariantCheck>>({
     a: { report: null, key: '', validating: false },
     b: { report: null, key: '', validating: false },
   })
+  // B-3: the editor state of the adaptation to the campaign's other locale, one form per variant.
+  const localForms = reactive<Record<VariantKey, VariantInput>>({ a: emptyForm(''), b: emptyForm('') })
+  const localChecks = reactive<Record<VariantKey, VariantCheck>>({
+    a: { report: null, key: '', validating: false },
+    b: { report: null, key: '', validating: false },
+  })
+  const localTimers: Partial<Record<VariantKey, ReturnType<typeof setTimeout>>> = {}
+  const localSeqs: Record<VariantKey, number> = { a: 0, b: 0 }
+  const localAborts: Partial<Record<VariantKey, AbortController>> = {}
   const timers: Partial<Record<VariantKey, ReturnType<typeof setTimeout>>> = {}
   const seqs: Record<VariantKey, number> = { a: 0, b: 0 }
   const aborts: Partial<Record<VariantKey, AbortController>> = {}
@@ -96,14 +112,28 @@ export function useComposer(initialId: string | null) {
   const saved = computed(() => campaign.value?.content ?? null)
   const savedVariants = computed(() => (saved.value ? variantsOf(saved.value) : null))
   const activeKeys = computed<VariantKey[]>(() => (hasB.value ? KEYS : ['a']))
+  const other = computed<Language>(() => otherLocale(campaign.value?.language ?? 'tr'))
+  const savedLocalized = (k: VariantKey) => savedVariants.value?.[k]?.localized?.[other.value] ?? null
+  const hasText = (f: VariantInput) => f.sms_text !== '' || f.email_subject !== '' || f.email_body !== ''
+  // An adaptation is edited when it differs from the saved one; with none saved, when it has any text.
+  const localDirty = (k: VariantKey) => {
+    const row = savedLocalized(k)
+    return row ? variantKey(localForms[k]) !== variantKey(toInput(row)) : hasText(localForms[k])
+  }
   const hasUnsavedEdits = computed(() => {
     const s = savedVariants.value
     if (!s) return forms.a.sms_text !== '' || forms.a.email_subject !== '' || forms.a.email_body !== ''
     return activeKeys.value.some((k) => {
       const sv = s[k]
-      return !sv || variantKey(forms[k]) !== variantKey(toInput(sv))
+      return !sv || variantKey(forms[k]) !== variantKey(toInput(sv)) || localDirty(k)
     })
   })
+  const localReportIsCurrent = (k: VariantKey) => localChecks[k].report !== null && localChecks[k].key === variantKey(localForms[k])
+  // The adaptation of variant k is out of date: the server says so, or the primary text was edited here.
+  const localStale = (k: VariantKey) => isStale(savedLocalized(k), savedVariants.value?.[k], forms[k])
+  // N people of the other locale are in the audience: the content step offers to write their version.
+  const otherRecipients = computed(() => (campaign.value ? localeTotal(campaign.value.segment?.audience, other.value) : 0))
+  const hasLocalized = computed(() => activeKeys.value.some((k) => !!savedLocalized(k)))
   // A report is current when it was produced for exactly the text in that variant's editor.
   const reportIsCurrent = (k: VariantKey) => checks[k].report !== null && checks[k].key === variantKey(forms[k])
   const validating = computed(() => activeKeys.value.some((k) => checks[k].validating))
@@ -119,8 +149,28 @@ export function useComposer(initialId: string | null) {
       busy: busy.value !== null,
       variant: variant.value,
       scheduleProblem: scheduleProblem.value,
+      languageMode: languageMode.value,
     }),
   )
+  // Why "each recipient in their language" cannot be chosen ('' when it can), for the approve dialog.
+  const recipientModeProblem = computed(() =>
+    campaign.value ? localizationProblem(saved.value, campaign.value, channels.value, variant.value) : '',
+  )
+  const offersRecipientMode = computed(() => !!campaign.value && audienceHasOtherLocale(campaign.value))
+  watch(
+    [offersRecipientMode, recipientModeProblem],
+    () => {
+      const ok = offersRecipientMode.value && !recipientModeProblem.value
+      if (!languageModeChosen) languageMode.value = ok ? 'recipient' : 'campaign'
+      else if (!ok && languageMode.value === 'recipient') languageMode.value = 'campaign'
+    },
+    { immediate: true },
+  )
+  function setLanguageMode(m: LanguageMode) {
+    languageModeChosen = true
+    // "Each recipient in their language" cannot be selected while it cannot be approved.
+    languageMode.value = m === 'recipient' && (recipientModeProblem.value || !offersRecipientMode.value) ? 'campaign' : m
+  }
 
   function fail(e: unknown) {
     error.value = describeError(e)
@@ -148,6 +198,17 @@ export function useComposer(initialId: string | null) {
     }
     hasB.value = !!vs?.b
     if (!hasB.value && variant.value !== 'a') variant.value = 'a'
+    const loc = otherLocale(campaign.value?.language ?? 'tr')
+    for (const k of KEYS) {
+      const row = vs?.[k]?.localized?.[loc]
+      localForms[k].label = row?.label ?? ''
+      localForms[k].sms_text = row?.sms_text ?? ''
+      localForms[k].email_subject = row?.email_subject ?? ''
+      localForms[k].email_body = row?.email_body ?? ''
+      localChecks[k].report = row?.validation ?? null
+      localChecks[k].key = variantKey(localForms[k])
+      localChecks[k].validating = false
+    }
   }
 
   function loadFormFromSaved() {
@@ -236,8 +297,16 @@ export function useComposer(initialId: string | null) {
     forms[k].email_body = x.emailBody
   }
 
+  function applyStreamedLocal(k: VariantKey, x: StreamedVariant | null) {
+    if (!x) return
+    if (x.label) localForms[k].label = x.label
+    localForms[k].sms_text = x.smsText
+    localForms[k].email_subject = x.emailSubject
+    localForms[k].email_body = x.emailBody
+  }
+
   async function runStream(
-    target: 'all' | VariantKey,
+    target: 'all' | VariantKey | 'localize',
     start: (onEvent: Parameters<typeof streamGenerate>[1], signal: AbortSignal) => Promise<void>,
   ) {
     if (!campaign.value || stream.active) return
@@ -251,6 +320,10 @@ export function useComposer(initialId: string | null) {
     stream.target = target
     cancelValidation()
     const clearTarget = () => {
+      if (target === 'localize') {
+        for (const k of KEYS) localForms[k] = emptyForm('')
+        return
+      }
       for (const k of target === 'all' ? KEYS : [target]) {
         forms[k].sms_text = ''
         forms[k].email_subject = ''
@@ -262,6 +335,7 @@ export function useComposer(initialId: string | null) {
       hasB.value = true // both cards show while they fill
       clearTarget()
     }
+    if (target === 'localize') clearTarget() // the adaptation fills; the primary copy stays as it is
     let finished = false
     try {
       await start((ev) => {
@@ -271,7 +345,10 @@ export function useComposer(initialId: string | null) {
             stream.buffer += ev.data.text
             // Display only: the canonical text arrives with `result`.
             const x = extractVariants(stream.buffer)
-            if (target === 'all') {
+            if (target === 'localize') {
+              applyStreamedLocal('a', x.a)
+              applyStreamedLocal('b', x.b)
+            } else if (target === 'all') {
               applyStreamed('a', x.a)
               applyStreamed('b', x.b)
             } else applyStreamed(target, x.a)
@@ -282,7 +359,7 @@ export function useComposer(initialId: string | null) {
             stream.repairing = true
             stream.attempt = ev.data.attempt
             stream.buffer = ''
-            if (target === 'all') clearTarget()
+            if (target === 'all' || target === 'localize') clearTarget()
             break
           case 'result': {
             finished = true
@@ -331,6 +408,15 @@ export function useComposer(initialId: string | null) {
     )
   }
 
+  // B-3: adapt the saved primary copy of both variants to the other locale. A new version is saved with the
+  // adaptation; the primary copy is unchanged. Also used to re-adapt a stale copy.
+  function localizeContent() {
+    const c = campaign.value
+    if (!c || !saved.value) return Promise.resolve()
+    const target = otherLocale(c.language)
+    return runStream('localize', (onEvent, signal) => streamLocalize(c.id, { target_locale: target }, onEvent, signal))
+  }
+
   function stopGenerating() {
     streamAbort?.abort()
   }
@@ -341,6 +427,9 @@ export function useComposer(initialId: string | null) {
       clearTimeout(timers[k])
       aborts[k]?.abort()
       checks[k].validating = false
+      clearTimeout(localTimers[k])
+      localAborts[k]?.abort()
+      localChecks[k].validating = false
     }
   }
 
@@ -366,7 +455,47 @@ export function useComposer(initialId: string | null) {
     }
   }
 
+  // The adaptation is validated with its own locale's constraints (api.md §9.9).
+  async function validateLocalNow(k: VariantKey) {
+    const c = campaign.value
+    const seq = ++localSeqs[k]
+    const key = variantKey(localForms[k])
+    const f = localForms[k]
+    localAborts[k]?.abort()
+    const ctl = new AbortController()
+    localAborts[k] = ctl
+    localChecks[k].validating = true
+    try {
+      const r = await api.validateContent(
+        { sms_text: f.sms_text, email_subject: f.email_subject, email_body: f.email_body, campaign_id: c?.id, language: other.value },
+        ctl.signal,
+      )
+      if (seq !== localSeqs[k]) return
+      localChecks[k].report = r
+      localChecks[k].key = key
+    } catch (e) {
+      if (e instanceof Error && e.name === 'AbortError') return
+      if (seq === localSeqs[k]) fail(e)
+    } finally {
+      if (seq === localSeqs[k]) localChecks[k].validating = false
+    }
+  }
+
   const DEBOUNCE_MS = 400
+  for (const k of KEYS) {
+    watch(
+      () => variantKey(localForms[k]),
+      (key) => {
+        if (stream.active || !campaign.value) return
+        if (k === 'b' && !hasB.value) return
+        if (key === localChecks[k].key) return
+        if (!hasText(localForms[k])) return // nothing written: nothing to check
+        clearTimeout(localTimers[k])
+        localChecks[k].validating = true
+        localTimers[k] = setTimeout(() => void validateLocalNow(k), DEBOUNCE_MS)
+      },
+    )
+  }
   for (const k of KEYS) {
     watch(
       () => variantKey(forms[k]),
@@ -388,9 +517,14 @@ export function useComposer(initialId: string | null) {
     busy.value = 'save'
     error.value = null
     try {
+      // The adaptation travels with its variant (api.md §9.9): sent when one is saved or has been written.
+      const withLocal = (k: VariantKey): VariantSave => {
+        const row = savedLocalized(k)
+        return row || hasText(localForms[k]) ? { ...forms[k], localized: { [other.value]: { ...localForms[k] } } } : { ...forms[k] }
+      }
       const r = await api.saveContent(
         c.id,
-        { variants: { a: { ...forms.a }, b: hasB.value ? { ...forms.b } : null } },
+        { variants: { a: withLocal('a'), b: hasB.value ? withLocal('b') : null } },
         c.content?.version ?? 0,
       )
       campaign.value = { ...c, content: r.content }
@@ -435,6 +569,7 @@ export function useComposer(initialId: string | null) {
       approved.value = await api.approve(c.id, [...channels.value], v, newIdempotencyKey(), {
         variant: variant.value,
         sendAt,
+        languageMode: languageMode.value,
       })
       campaign.value = approved.value.campaign
       return true
@@ -469,7 +604,9 @@ export function useComposer(initialId: string | null) {
     campaign, brief, step, loading, busy, error, segmentLlm, contentLlm, channels, approved,
     forms, hasB, checks, stream, reportIsCurrent, validating, hasUnsavedEdits, gate, recipients,
     variant, scheduleMode, scheduleAt, scheduleProblem,
-    findAudience, generateSegment, saveRule, generateContent, refineVariant, stopGenerating, saveContent,
+    languageMode, setLanguageMode, recipientModeProblem, offersRecipientMode,
+    localForms, localChecks, localReportIsCurrent, localStale, savedLocalized, other, otherRecipients, hasLocalized,
+    localizeContent, findAudience, generateSegment, saveRule, generateContent, refineVariant, stopGenerating, saveContent,
     reloadFromServer, approve, toggleChannel, goTo, load,
   }
 }
