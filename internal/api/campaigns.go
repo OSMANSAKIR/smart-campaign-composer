@@ -6,7 +6,9 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"maps"
 	"net/http"
+	"slices"
 	"strconv"
 	"sync"
 	"time"
@@ -32,7 +34,7 @@ var statusOf = map[string]int{
 	"bad_request": 400, "idempotency_key_required": 400, "not_found": 404,
 	"invalid_state": 409, "stale_content_version": 409, "approve_in_progress": 409, "already_approved": 409,
 	"validation_failed": 422, "llm_invalid_output": 422, "llm_refused": 422, "content_invalid": 422, "empty_audience": 422,
-	"variant_missing": 422, "invalid_send_at": 422,
+	"variant_missing": 422, "invalid_send_at": 422, "missing_localization": 422,
 	"llm_failed": 502, "llm_provider_rejected": 502, "unavailable": 503,
 }
 
@@ -155,6 +157,8 @@ type variantBody struct {
 	SMSText      *string `json:"sms_text"`
 	EmailSubject *string `json:"email_subject"`
 	EmailBody    *string `json:"email_body"`
+	// Localized replaces the adaptation of the named locales (api.md §9.9); locales left out are kept.
+	Localized map[string]*variantBody `json:"localized"`
 }
 
 // edit checks that every field is present and returns it; missing fields are listed under path.
@@ -170,6 +174,17 @@ func (v *variantBody) edit(path string, missing *[]Issue) campaign.VariantEdit {
 	}
 	if len(*missing) == 0 {
 		e = campaign.VariantEdit{Label: *v.Label, SMSText: *v.SMSText, EmailSubject: *v.EmailSubject, EmailBody: *v.EmailBody}
+		for _, loc := range slices.Sorted(maps.Keys(v.Localized)) {
+			if v.Localized[loc] == nil {
+				*missing = append(*missing, Issue{Path: path + ".localized." + loc, Code: "required", Message: "null"})
+				continue
+			}
+			le := v.Localized[loc].edit(path+".localized."+loc, missing)
+			if e.Localized == nil {
+				e.Localized = map[string]*campaign.VariantEdit{}
+			}
+			e.Localized[loc] = &le
+		}
 	}
 	return e
 }
@@ -265,8 +280,9 @@ func (s *Server) approve(w http.ResponseWriter, r *http.Request) {
 	var req struct {
 		Channels       []string `json:"channels"`
 		ContentVersion *int     `json:"content_version"`
-		Variant        string   `json:"variant"` // a (default) | b | ab, docs/contracts/api.md §9.3
-		SendAt         *string  `json:"send_at"` // RFC 3339, any offset, §9.6
+		Variant        string   `json:"variant"`       // a (default) | b | ab, docs/contracts/api.md §9.3
+		SendAt         *string  `json:"send_at"`       // RFC 3339, any offset, §9.6
+		LanguageMode   string   `json:"language_mode"` // campaign (default) | recipient, §9.9
 	}
 	key := r.Header.Get("Idempotency-Key")
 	if key == "" {
@@ -280,7 +296,7 @@ func (s *Server) approve(w http.ResponseWriter, r *http.Request) {
 		writeError(w, 400, "bad_request", "Field `content_version` is required.", []Issue{{Path: "content_version", Code: "required", Message: "missing"}})
 		return
 	}
-	opt := campaign.ApproveOptions{Variant: req.Variant}
+	opt := campaign.ApproveOptions{Variant: req.Variant, LanguageMode: req.LanguageMode}
 	if req.SendAt != nil {
 		at, err := time.Parse(time.RFC3339, *req.SendAt)
 		if err != nil {

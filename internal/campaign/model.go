@@ -14,6 +14,7 @@ type Campaign struct {
 	Brief                  string          `json:"brief"`
 	Status                 string          `json:"status"`
 	Language               string          `json:"language"`
+	LanguageMode           string          `json:"language_mode"` // campaign | recipient (§9.9)
 	Segment                *Segment        `json:"segment"`
 	Content                *ContentVersion `json:"content"`
 	Channels               []string        `json:"channels"`
@@ -109,11 +110,34 @@ type ContentVariant struct {
 	EmailSubject string         `json:"email_subject"`
 	EmailBody    string         `json:"email_body"`
 	Validation   content.Report `json:"validation"`
+	// Locale is the language of this primary copy (the campaign's language when it was saved). Localized holds
+	// the adaptations to the other locale, keyed by locale; always an object (api.md §9.9).
+	Locale    string                    `json:"locale"`
+	Localized map[string]*LocalizedCopy `json:"localized"`
 }
 
 // Content returns the variant's copy.
 func (v ContentVariant) Content() content.Content {
 	return content.Content{SMSText: v.SMSText, EmailSubject: v.EmailSubject, EmailBody: v.EmailBody}
+}
+
+// LocalizedCopy is one campaign_content row of a non-primary locale: the adaptation of a primary copy.
+type LocalizedCopy struct {
+	Label        string         `json:"label"`
+	Source       string         `json:"source"` // llm | edited
+	SMSText      string         `json:"sms_text"`
+	EmailSubject string         `json:"email_subject"`
+	EmailBody    string         `json:"email_body"`
+	Validation   content.Report `json:"validation"`
+	// Stale is true when the primary copy changed after this row was adapted or last edited (D-22).
+	Stale bool `json:"stale"`
+	// adaptedFrom is the content.Hash of the primary copy this row was adapted from.
+	adaptedFrom string
+}
+
+// Content returns the adapted copy.
+func (l LocalizedCopy) Content() content.Content {
+	return content.Content{SMSText: l.SMSText, EmailSubject: l.EmailSubject, EmailBody: l.EmailBody}
 }
 
 // VariantInput is one variant to store: its copy, label, provenance and validation report.
@@ -123,6 +147,17 @@ type VariantInput struct {
 	Instruction *string
 	Content     content.Content
 	Report      content.Report
+	// Localized are the adaptations stored with this variant, keyed by locale.
+	Localized map[string]LocalizedInput
+}
+
+// LocalizedInput is one adapted copy to store: its provenance and the primary hash it answers to.
+type LocalizedInput struct {
+	Label       string
+	Source      string // llm | edited
+	Content     content.Content
+	Report      content.Report
+	AdaptedFrom string
 }
 
 // Message is one row of GET /api/campaigns/{id}/messages.

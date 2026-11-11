@@ -88,14 +88,15 @@ func (s *Service) RunRefine(ctx context.Context, plan RefinePlan, onDelta func(l
 	saveCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
 	defer cancel()
 	instr := plan.Instruction
-	refined := VariantInput{Label: res.Label, Source: "refined", Instruction: &instr, Content: res.Content, Report: res.Report}
+	refined := VariantInput{Label: res.Label, Source: "refined", Instruction: &instr, Content: res.Content, Report: res.Report,
+		Localized: carryLocalized(plan.base.Variants.Get(plan.Variant))} // stale by hash: the primary changed
 	keep := func(key string) *VariantInput {
 		o := plan.base.Variants.Get(key)
 		if o == nil {
 			return nil
 		}
 		return &VariantInput{Label: o.Label, Source: o.Source, Instruction: o.Instruction, Content: o.Content(),
-			Report: content.Validate(o.Content(), plan.constraints)}
+			Report: content.Validate(o.Content(), plan.constraints), Localized: carryLocalized(o)}
 	}
 	var a, b *VariantInput
 	if plan.Variant == "a" {

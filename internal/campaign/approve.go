@@ -40,6 +40,9 @@ var variantsOf = map[string][]string{"a": {"a"}, "b": {"b"}, "ab": {"a", "b"}}
 type ApproveOptions struct {
 	Variant string     // "a" (default), "b" or "ab" (deterministic 50/50 split)
 	SendAt  *time.Time // schedule the send; nil sends now
+	// LanguageMode is "campaign" (default: everyone gets the campaign-language copy) or "recipient" (everyone
+	// gets the copy in their own locale; every locale among the recipients needs a valid, non-stale copy).
+	LanguageMode string
 }
 
 // Approve freezes the latest content version and enqueues one message per consented recipient and selected
@@ -68,6 +71,12 @@ func (s *Service) ApproveWith(ctx context.Context, id, key string, channels []st
 	toSend, ok := variantsOf[opt.Variant]
 	if !ok {
 		return ApproveResult{}, errorf("bad_request", "Unknown variant.", Issue{Path: "variant", Code: "invalid", Message: "Use a, b or ab."})
+	}
+	if opt.LanguageMode == "" {
+		opt.LanguageMode = "campaign"
+	}
+	if opt.LanguageMode != "campaign" && opt.LanguageMode != "recipient" {
+		return ApproveResult{}, errorf("bad_request", "Unknown language_mode.", Issue{Path: "language_mode", Code: "invalid", Message: "Use campaign or recipient."})
 	}
 	var sendAt *time.Time
 	if opt.SendAt != nil {
@@ -169,6 +178,17 @@ func (s *Service) ApproveWith(ctx context.Context, id, key string, channels []st
 			return errorf("content_invalid", "The content is not valid for every selected channel.", invalid...)
 		}
 
+		if opt.LanguageMode == "recipient" {
+			// B-3: nothing is enqueued for a locale that has no usable copy (api.md §9.9).
+			missing, err := s.localizationIssues(ctx, tx, c, v, chans, toSend, wc)
+			if err != nil {
+				return err
+			}
+			if len(missing) > 0 {
+				return errorf("missing_localization", "Each recipient can only get their own language when every language among the recipients has a valid, current copy.", missing...)
+			}
+		}
+
 		where, args, err := segment.Compile(*v, 5) // $1..$4 are campaign, channel, version, variant mode
 		if err != nil {
 			return err
@@ -187,11 +207,12 @@ func (s *Service) ApproveWith(ctx context.Context, id, key string, channels []st
 			// a uniform, stable hash here, not a security primitive.
 			var n int
 			q := fmt.Sprintf(`WITH ins AS (
-					INSERT INTO messages (campaign_id, user_id, channel, content_version, variant)
+					INSERT INTO messages (campaign_id, user_id, channel, content_version, variant, locale)
 					SELECT $1::uuid, u.id, $2, $3,
 					       CASE WHEN $4::text = 'ab'
 					            THEN CASE WHEN get_byte(decode(md5($1::uuid::text || ':' || u.id::text), 'hex'), 0) %% 2 = 0 THEN 'a' ELSE 'b' END
-					            ELSE $4::text END
+					            ELSE $4::text END,
+					       u.locale
 					FROM users u WHERE (%s) AND %s
 					ON CONFLICT (campaign_id, user_id, channel) DO NOTHING
 					RETURNING 1)
@@ -210,8 +231,8 @@ func (s *Service) ApproveWith(ctx context.Context, id, key string, channels []st
 		tag, err := tx.Exec(ctx, `UPDATE campaigns SET
 				status = CASE WHEN $5::timestamptz IS NULL THEN 'sending' ELSE 'scheduled' END,
 				channels = $2, approved_content_version = $3, approve_idempotency_key = $4,
-				scheduled_at = $5, send_variant = $6, approved_at = now(), updated_at = now()
-			WHERE id = $1 AND status = 'content_ready'`, id, chans, contentVersion, key, sendAt, opt.Variant)
+				scheduled_at = $5, send_variant = $6, language_mode = $7, approved_at = now(), updated_at = now()
+			WHERE id = $1 AND status = 'content_ready'`, id, chans, contentVersion, key, sendAt, opt.Variant, opt.LanguageMode)
 		if err != nil {
 			if isPg(err, "23505") {
 				return errorf("bad_request", "This Idempotency-Key was already used for another campaign.")
@@ -239,17 +260,81 @@ func (s *Service) ApproveWith(ctx context.Context, id, key string, channels []st
 		}
 	}
 	if !replayed && s.Log != nil {
-		s.Log.Info("campaign approved", "campaign_id", id, "variant", opt.Variant, "scheduled", sendAt != nil,
+		s.Log.Info("campaign approved", "campaign_id", id, "variant", opt.Variant, "language_mode", opt.LanguageMode, "scheduled", sendAt != nil,
 			"enqueued_sms", out.Enqueued["sms"], "enqueued_email", out.Enqueued["email"])
 	}
 	return out, nil
 }
 
-// variantTexts reads the rows of one content version, keyed by variant. It queries campaign_content itself
-// because a version is one row per variant (migration 20261110230000).
+// localizationIssues lists what keeps language_mode 'recipient' from being approved: for every selected
+// channel, every locale among the consented recipients of that channel other than the campaign's own needs,
+// for every variant that will be sent, a localized copy that exists (missing), is not stale (stale: the
+// primary was edited after the adaptation) and is valid for that channel under the locale's constraints
+// (invalid). The campaign-language copy is validated by the caller like in 'campaign' mode.
+func (s *Service) localizationIssues(ctx context.Context, tx pgx.Tx, c Campaign, v *segment.ValidRule, chans, toSend []string, wc map[string]content.Vars) ([]Issue, error) {
+	where, args, err := segment.Compile(*v, 1)
+	if err != nil {
+		return nil, err
+	}
+	if strings.TrimSpace(where) == "" {
+		where = "TRUE"
+	}
+	var out []Issue
+	seen := map[string]bool{}
+	add := func(is Issue) {
+		if k := is.Path + "|" + is.Code; !seen[k] {
+			seen[k] = true
+			out = append(out, is)
+		}
+	}
+	for _, ch := range chans {
+		rows, err := tx.Query(ctx, `SELECT DISTINCT u.locale FROM users u WHERE (`+where+`) AND `+consentColumn[ch], args...)
+		if err != nil {
+			return nil, err
+		}
+		locales, err := pgx.CollectRows(rows, pgx.RowTo[string])
+		if err != nil {
+			return nil, err
+		}
+		slices.Sort(locales)
+		for _, loc := range locales {
+			if loc == c.Language {
+				continue
+			}
+			for _, vr := range toSend {
+				path := "variants." + vr + ".localized." + loc
+				lc := c.Content.Variants.Get(vr).Localized[loc]
+				switch {
+				case lc == nil:
+					add(Issue{Path: path, Code: "missing", Message: fmt.Sprintf("Recipients read %s on %s, but variant %s has no %s copy.", loc, ch, vr, loc)})
+				case lc.Stale:
+					add(Issue{Path: path, Code: "stale", Message: fmt.Sprintf("The %s copy of variant %s was adapted from an earlier primary copy; re-adapt it.", loc, vr)})
+				default:
+					report := content.Validate(lc.Content(), constraints(loc, wc))
+					if report.ValidFor[ch] {
+						continue
+					}
+					before := len(out)
+					for _, is := range channelIssues(ch, report.Errors) {
+						is.Path = path + "." + is.Path
+						add(is)
+					}
+					if len(out) == before {
+						add(Issue{Path: path + "." + ch, Code: "invalid", Message: "The " + loc + " copy is not valid for this channel."})
+					}
+				}
+			}
+		}
+	}
+	return out, nil
+}
+
+// variantTexts reads the primary rows of one content version, keyed by variant (the localized rows of B-3 are
+// read through Campaign.Content). It queries campaign_content itself because a version is one row per variant
+// and locale (migrations 20261110230000, 20261111120000).
 func variantTexts(ctx context.Context, db DB, id string, version int) (map[string]content.Content, error) {
 	rows, err := db.Query(ctx, `SELECT variant, sms_text, email_subject, email_body FROM campaign_content
-		WHERE campaign_id = $1 AND version = $2`, id, version)
+		WHERE campaign_id = $1 AND version = $2 AND adapted_from IS NULL`, id, version)
 	if err != nil {
 		return nil, err
 	}
