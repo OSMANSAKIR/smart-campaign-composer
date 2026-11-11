@@ -36,8 +36,12 @@ test('localize: write the English version, stale after a primary edit, re-adapt,
   // TR | EN tabs per variant: the English copy is there and editable; the Turkish copy did not change.
   const cardA = page.locator('[data-variant="a"]')
   await expect(cardA.getByRole('tab')).toHaveText([/^TR/, /^EN/])
-  const trSms = cardA.getByRole('textbox', { name: 'SMS text, variant A', exact: true })
+  // The card opens on the English tab while Claude writes it, and stays there.
+  await expect(cardA.getByRole('tab', { name: 'English version of variant A' })).toHaveAttribute('aria-selected', 'true')
+  await cardA.getByRole('tab', { name: 'Turkish version of variant A' }).click()
+  const trSms = cardA.getByRole('textbox', { name: 'SMS text, variant A' })
   const turkish = await trSms.inputValue()
+  expect(turkish).toMatch(/^Merhaba/)
   await cardA.getByRole('tab', { name: 'English version of variant A' }).click()
   const enSms = cardA.getByRole('textbox', { name: 'SMS text, variant A (English)' })
   await expect(enSms).toHaveValue(/^Hi \{\{first_name\}\}/)
