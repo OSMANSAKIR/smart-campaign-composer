@@ -254,9 +254,10 @@ matter most:
 
 ## Not done / next steps
 
-Not built: nothing from the case's P0–P2 list is left out (B-3 is built, see D-22).
+Not built: nothing from the case's P0–P2 list is left out; the bonuses B-1, B-2 and B-3 are built (DECISIONS
+D-16, D-18, D-22). What follows are the known limits of features that are built, and the next steps.
 
-B-3 gaps (2026-11-11):
+B-3 is built; its limits (2026-11-11):
 
 - Only two languages (`tr`, `en`), the two the seed has; a third would need a wider `locale` check, a prompt
   language name and a UI tab, nothing else.
@@ -270,7 +271,7 @@ B-3 gaps (2026-11-11):
   no guarantee). In the owner's live test one idiom came out literal ("Cüzdanın gülsün" → "Make your wallet
   smile"): valid, and the kind of thing only a reader or such a judge would catch (need.md N-LLM-007).
 
-Phase-2 gaps (2026-11-10):
+Phase 2 is built; its limits (2026-11-10):
 
 - A/B: no open/click metrics (the mock provider has none), so no winner analysis; per-variant delivery only.
 - Cancel: up to `MaxInFlight` (32) messages per channel already claimed can still go out after a cancel
