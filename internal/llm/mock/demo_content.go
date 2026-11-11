@@ -142,3 +142,96 @@ func DemoRefine(userMessage, lang string) (content.RefineProposal, bool) {
 	p.SMS.Text, p.Email.Subject, p.Email.Body = sms, subject, body
 	return p, true
 }
+
+var (
+	sourceVariantsRE = regexp.MustCompile(`(?s)<source_variants>(.*?)</source_variants>`)
+	targetLanguageRE = regexp.MustCompile(`(?m)^Target language: (tr|en)$`)
+	variableTokenRE  = regexp.MustCompile(`\{\{\s*([^{}\s]+)\s*\}\}`)
+)
+
+// DemoLocalize adapts the variants of a localize request to the target language. It never repeats the source
+// text (an instruction hidden in the copy cannot be reflected into the adaptation): the adaptation is the
+// demo copy of the target language (DemoContent), with the source's variables put back field by field, so a
+// hand-edited source keeps the variables it had. It returns false when the message has no source variants.
+func DemoLocalize(userMessage string) (content.ProposalV2, bool) {
+	var p content.ProposalV2
+	m := sourceVariantsRE.FindStringSubmatch(userMessage)
+	if m == nil {
+		return p, false
+	}
+	type variant struct {
+		SMSText      string `json:"sms_text"`
+		EmailSubject string `json:"email_subject"`
+		EmailBody    string `json:"email_body"`
+	}
+	var src map[string]variant
+	if err := json.Unmarshal([]byte(html.UnescapeString(m[1])), &src); err != nil || len(src) == 0 {
+		return p, false
+	}
+	// Only the header after the brief counts (the brief is user text); the brief is escaped, so the first
+	// "</brief>" is the real one.
+	target := "en"
+	_, after, _ := strings.Cut(userMessage, "</brief>")
+	if tm := targetLanguageRE.FindStringSubmatch(after); tm != nil {
+		target = tm[1]
+	}
+	brief := ""
+	if bm := briefRE.FindStringSubmatch(userMessage); bm != nil {
+		brief = html.UnescapeString(bm[1])
+	}
+	p = DemoContent(brief, target)
+	for _, key := range content.VariantKeys {
+		s, ok := src[key]
+		if !ok {
+			continue
+		}
+		v := &p.Variants.A
+		if key == "b" {
+			v = &p.Variants.B
+		}
+		v.SMS.Text = withVariables(v.SMS.Text, s.SMSText, target, false)
+		v.Email.Subject = withVariables(v.Email.Subject, s.EmailSubject, target, false)
+		v.Email.Body = withVariables(v.Email.Body, s.EmailBody, target, true)
+	}
+	if target == "en" {
+		p.Notes = "Demo adaptation (mock LLM): the offer and the variables were kept."
+	} else {
+		p.Notes = "Demo uyarlama (mock LLM): teklif ve değişkenler korundu."
+	}
+	return p, true
+}
+
+// withVariables makes the variables of text equal the variables of source: tokens the source does not have
+// are dropped, and a source variable that text lacks is added ({{first_name}} as a greeting, anything else
+// in brackets at the end), so the adaptation keeps exactly the source's variables.
+func withVariables(text, source, lang string, multiline bool) string {
+	want := map[string]bool{}
+	for _, m := range variableTokenRE.FindAllStringSubmatch(source, -1) {
+		want[m[1]] = true
+	}
+	have := map[string]bool{}
+	text = variableTokenRE.ReplaceAllStringFunc(text, func(tok string) string {
+		name := variableTokenRE.FindStringSubmatch(tok)[1]
+		if !want[name] || have[name] {
+			return ""
+		}
+		have[name] = true
+		return tok
+	})
+	text = strings.NewReplacer(" ,", ",", "  ", " ").Replace(text)
+	if want["first_name"] && !have["first_name"] {
+		greeting := "Hi"
+		if lang == "tr" {
+			greeting = "Merhaba"
+		}
+		if multiline {
+			text = greeting + " {{first_name}},\n\n" + text
+		} else {
+			text = "{{first_name}}, " + text
+		}
+	}
+	if want["city"] && !have["city"] {
+		text += " ({{city}})"
+	}
+	return strings.TrimSpace(text)
+}

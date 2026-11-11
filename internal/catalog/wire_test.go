@@ -60,6 +60,7 @@ func TestWireSchemas_UseOnlySupportedKeywords_RAI1(t *testing.T) {
 	checkSchema(t, "segment", SegmentWireSchema())
 	checkSchema(t, "content", ContentWireSchema())
 	checkSchema(t, "refine", RefineWireSchema())
+	checkSchema(t, "localize", LocalizeWireSchema())
 }
 
 func TestWireSchemas_CommittedFilesMatchGenerator(t *testing.T) {

@@ -1,0 +1,115 @@
+{
+  "additionalProperties": false,
+  "properties": {
+    "language": {
+      "enum": [
+        "tr",
+        "en"
+      ],
+      "type": "string"
+    },
+    "notes": {
+      "type": "string"
+    },
+    "variants": {
+      "additionalProperties": false,
+      "properties": {
+        "a": {
+          "additionalProperties": false,
+          "properties": {
+            "email": {
+              "additionalProperties": false,
+              "properties": {
+                "body": {
+                  "type": "string"
+                },
+                "subject": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "body",
+                "subject"
+              ],
+              "type": "object"
+            },
+            "label": {
+              "type": "string"
+            },
+            "sms": {
+              "additionalProperties": false,
+              "properties": {
+                "text": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "text"
+              ],
+              "type": "object"
+            }
+          },
+          "required": [
+            "email",
+            "label",
+            "sms"
+          ],
+          "type": "object"
+        },
+        "b": {
+          "additionalProperties": false,
+          "properties": {
+            "email": {
+              "additionalProperties": false,
+              "properties": {
+                "body": {
+                  "type": "string"
+                },
+                "subject": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "body",
+                "subject"
+              ],
+              "type": "object"
+            },
+            "label": {
+              "type": "string"
+            },
+            "sms": {
+              "additionalProperties": false,
+              "properties": {
+                "text": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "text"
+              ],
+              "type": "object"
+            }
+          },
+          "required": [
+            "email",
+            "label",
+            "sms"
+          ],
+          "type": "object"
+        }
+      },
+      "required": [
+        "a",
+        "b"
+      ],
+      "type": "object"
+    }
+  },
+  "required": [
+    "language",
+    "notes",
+    "variants"
+  ],
+  "type": "object"
+}
