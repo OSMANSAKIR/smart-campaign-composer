@@ -19,14 +19,31 @@ func Count(ctx context.Context, q Querier, v ValidRule) (Audience, error) {
 	if err != nil {
 		return Audience{}, err
 	}
-	sql := `SELECT count(*),
+	sql := `SELECT u.locale, count(*),
 		count(*) FILTER (WHERE u.sms_consent),
 		count(*) FILTER (WHERE u.email_consent),
 		count(*) FILTER (WHERE u.sms_consent AND u.email_consent)
-		FROM users u WHERE ` + where
-	var a Audience
+		FROM users u WHERE ` + where + ` GROUP BY u.locale`
+	a := Audience{ByLocale: map[string]LocaleAudience{"tr": {}, "en": {}}}
 	err = ReadWithTimeout(ctx, q, CountTimeout, func(tx pgx.Tx) error {
-		return tx.QueryRow(ctx, sql, args...).Scan(&a.Total, &a.SMSReachable, &a.EmailReachable, &a.Both)
+		rows, err := tx.Query(ctx, sql, args...)
+		if err != nil {
+			return err
+		}
+		defer rows.Close()
+		for rows.Next() {
+			var loc string
+			var l LocaleAudience
+			if err := rows.Scan(&loc, &l.Total, &l.SMSReachable, &l.EmailReachable, &l.Both); err != nil {
+				return err
+			}
+			a.ByLocale[loc] = l
+			a.Total += l.Total
+			a.SMSReachable += l.SMSReachable
+			a.EmailReachable += l.EmailReachable
+			a.Both += l.Both
+		}
+		return rows.Err()
 	})
 	if err != nil {
 		return Audience{}, fmt.Errorf("segment: count: %w", err)

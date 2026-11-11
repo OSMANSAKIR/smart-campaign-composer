@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"reflect"
 	"testing"
 	"time"
 
@@ -24,6 +25,7 @@ type testUser struct {
 	favoriteCat   *string
 	purchaseCount int
 	birthYearsAgo int
+	locale        string // "" = tr
 }
 
 func ago(d time.Duration) *time.Duration { return &d }
@@ -48,11 +50,15 @@ func insertUsers(t *testing.T, pool *pgxpool.Pool, users []testUser) {
 		if years == 0 {
 			years = 30
 		}
+		locale := u.locale
+		if locale == "" {
+			locale = "tr"
+		}
 		_, err := pool.Exec(ctx, `INSERT INTO users (seed_key, first_name, email, phone, city, locale, birth_date, signup_at,
 			last_purchase_at, purchase_count, last_cart_add_at, favorite_category, loyalty_tier, sms_consent, email_consent)
-			VALUES ($1, 'Test', $2, '+905550000000', $3, 'tr', $4, $5, $6, $7, $8, $9, 'bronze', $10, $11)`,
+			VALUES ($1, 'Test', $2, '+905550000000', $3, $12, $4, $5, $6, $7, $8, $9, 'bronze', $10, $11)`,
 			fmt.Sprintf("t-%d", i), fmt.Sprintf("t%d@example.com", i), city, now.AddDate(-years, 0, -1), now.Add(-400*24*time.Hour),
-			ts(u.lastPurchase), u.purchaseCount, ts(u.lastCartAdd), u.favoriteCat, u.sms, u.email)
+			ts(u.lastPurchase), u.purchaseCount, ts(u.lastCartAdd), u.favoriteCat, u.sms, u.email, locale)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -118,9 +124,39 @@ func TestCount_ExcludesNonConsented_RAUD2(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	a.ByLocale = nil // covered by TestCount_PerLocale_BThree
 	want := Audience{Total: 5, SMSReachable: 2, EmailReachable: 2, Both: 1}
-	if a != want {
+	if !reflect.DeepEqual(a, want) {
 		t.Fatalf("audience = %+v, want %+v", a, want)
+	}
+}
+
+// B-3: the count also reports consented counts per recipient locale; both locales are always present, and
+// the per-locale counts add up to the totals.
+func TestCount_PerLocale_BThree(t *testing.T) {
+	pool := storetest.NewDB(t)
+	insertUsers(t, pool, []testUser{
+		{sms: true, email: true}, {sms: true, email: false}, {sms: false, email: false},
+		{sms: true, email: true, locale: "en"}, {sms: false, email: true, locale: "en"},
+		{city: "Ankara", sms: true, email: true, locale: "en"}, // outside the rule
+	})
+	a, err := Count(context.Background(), pool, mustValid(t, rule(one(c("city", "eq", `"İstanbul"`)))))
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := map[string]LocaleAudience{
+		"tr": {Total: 3, SMSReachable: 2, EmailReachable: 1, Both: 1},
+		"en": {Total: 2, SMSReachable: 1, EmailReachable: 2, Both: 1},
+	}
+	if !reflect.DeepEqual(a.ByLocale, want) {
+		t.Fatalf("by_locale = %+v, want %+v", a.ByLocale, want)
+	}
+	if a.Total != 5 || a.SMSReachable != 3 || a.EmailReachable != 3 || a.Both != 2 {
+		t.Fatalf("totals = %+v do not add up", a)
+	}
+	empty, err := Count(context.Background(), pool, mustValid(t, rule(one(c("city", "eq", `"İzmir"`)))))
+	if err != nil || len(empty.ByLocale) != 2 || empty.Total != 0 {
+		t.Fatalf("empty audience = %+v, %v; want both locales present with zeros", empty, err)
 	}
 }
 
@@ -167,8 +203,13 @@ func TestCount_MatchesDirectSQL_RFLOW1(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			if got != want {
+			byLocale := got.ByLocale
+			got.ByLocale = nil
+			if !reflect.DeepEqual(got, want) {
 				t.Fatalf("Count = %+v, direct SQL = %+v", got, want)
+			}
+			if sum := byLocale["tr"].Total + byLocale["en"].Total; sum != want.Total {
+				t.Fatalf("by_locale totals add up to %d, want %d", sum, want.Total)
 			}
 			if got.Total > 0 {
 				nonZero++
