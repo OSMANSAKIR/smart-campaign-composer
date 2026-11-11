@@ -204,3 +204,14 @@ Append-only (union-merged). Format: KICKOFF.md §13.
   is expected to pass. The assumption-free limiter (DECISIONS D-7) is the real fix if this matters.
 - **Lesson / guard added:** a timing test that fails once is reported with its rerun result and logged, never
   rerun silently until green.
+
+### V-027 · A14's "no Turkish letters" check would fail a correct live adaptation that keeps "İstanbul"
+- **When / agent:** 2026-11-11 · B-3 session (Sonnet), caught by the planning session's review of the branch
+- **AI proposed:** acceptance A14 counts the letters çğıöşü (and capitals) in the English copy and requires
+  zero, as the live-model check that the adaptation is really English.
+- **How it was caught:** code review before the owner's live run. The official brief says "İstanbul'daki";
+  a correct English adaptation may keep the place name as "İstanbul", which the check counts as Turkish. The
+  mock's English never contains a city, so `make acceptance` (mock) could not show it.
+- **Fix:** the seeded city names (`catalog.Cities`) are removed from the text before counting.
+- **Lesson / guard added:** a semantic check written for the live model is reviewed against what a correct
+  live answer can contain, not only against the mock's fixed text.

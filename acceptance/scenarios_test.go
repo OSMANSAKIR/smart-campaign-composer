@@ -366,6 +366,9 @@ func (e *env) a14(t *testing.T, r *result) {
 	r.check(res.Content.Version == cv.Version+1, "localize saved a new version %d", res.Content.Version)
 	r.check(res.LLM.CostRecorded == nil || *res.LLM.CostRecorded, "localize cost recorded")
 	turkishLetters := func(s string) int {
+		for _, city := range catalog.Cities { // a place name may keep its spelling in English ("İstanbul")
+			s = strings.ReplaceAll(s, city, "")
+		}
 		n := 0
 		for _, ch := range s {
 			if strings.ContainsRune("çğıöşüÇĞİÖŞÜ", ch) {
