@@ -216,12 +216,15 @@ matter most:
 ## Limitations
 
 - **The real Claude API path was exercised once, by the owner** (no key during development; L-6): smoke-live
-  and one 17-brief eval on 2026-11-10 (see "Live verification"). Day to day it is covered by contract tests
+  one 17-brief eval and one 13-scenario acceptance run on 2026-11-10/11 (see "Live verification"). Day to day it is covered by contract tests
   with documented request/response fixtures; prompts were developed against a real Sonnet model through the
   dev-only `claudecode` adapter.
 - **Rate bound assumption:** the limiter guarantees ≤ 100 per window if one-way network delay plus provider
   decode stay under 25 ms (sub-millisecond on the compose network). An assumption-free variant is a one-line
-  switch at ~84/s (DECISIONS D-7).
+  switch at ~84/s (DECISIONS D-7). The assumption fails when the host is starved of CPU: a stress run next to
+  other heavy test jobs measured 116/s (V-023), and one full `make test` run measured 101 in the in-process
+  takeover test (V-026). Both passed when rerun on an idle machine and in CI. If `make test` shows this on a busy
+  machine, a rerun is the expected outcome.
 - **~4 s of silence** after a worker starts or takes over a channel, so a new lock holder cannot overlap the
   previous one's last window.
 - **Characters are code points.** A Turkish SMS of 93 characters is valid but costs 2 UCS-2 segments; the UI

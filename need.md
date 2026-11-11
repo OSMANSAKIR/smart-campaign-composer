@@ -30,7 +30,7 @@ _Last updated: 2026-11-11 00:10 with the owner's answers to the phase-2 entries 
 **Needs the owner soon (high impact):** none.
 
 **Phase 2 entries answered (owner, chat, 2026-11-11):** N-ORC-014, N-ORC-015, N-ORC-016, N-LLM-006 and
-N-WEB-005 accepted. No entry is open.
+N-WEB-005 accepted; N-ORC-017 (pre-submission polish) accepted. No entry is open.
 
 **Implemented tonight:** ✅ N-WEB-001 → B (manual rule editor, F2), ✅ N-LLM-005 change (cost_recorded, F6).
 
@@ -698,7 +698,7 @@ encoding and segments shown as information).
 - **Owner response:** ACCEPT (chat, 2026-11-11).
 - **Status:** ACCEPTED
 
-### 🟡 N-ORC-017 · Final polish: cancelled metric, test rename, step bar · impact: low
+### ✅ N-ORC-017 · Final polish: cancelled metric, test rename, step bar · impact: low
 - **Date / agent / session:** 2026-11-11 · polish agent · pre-submission
 - **Requirement(s):** R-OBS-2, F4, B-1, R-AUD-1
 - **Context:** Five small items before submission needed three small choices.
@@ -706,5 +706,5 @@ encoding and segments shown as information).
 - **Decision taken:** (1) The api counts it, in `campaign.Service.Cancel`, after the commit, per channel; the worker's own cancel of a retry result or expired lease is not counted (the series is not pre-created at 0 in the api). `observability.md` lists the process. (2) R-AUD-1: the test's requirement-bearing cases are the strict segment edit over HTTP; renamed `TestErrorModel_RAUD1`. KICKOFF has no error-model requirement. (3) Two rows of two at ≤ 520 px. RT-8b never skipped (control-character briefs were already a structured 4xx); it now fails instead of skipping.
 - **Cost to change later:** minutes each.
 - **Question for owner:** OK?
-- **Owner response:** —
-- **Status:** OPEN
+- **Owner response:** ACCEPT (chat, 2026-11-11), after the three choices were explained.
+- **Status:** ACCEPTED

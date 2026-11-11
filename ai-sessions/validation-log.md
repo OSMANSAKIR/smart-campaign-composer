@@ -190,3 +190,17 @@ Append-only (union-merged). Format: KICKOFF.md §13.
 - **Fix:** the report generator now prints this caveat under the table, and the committed report carries the
   same note. No paid re-run.
 - **Lesson / guard added:** a derived figure is checked against its total before it is quoted.
+
+### V-026 · The takeover rate-bound test saw 101 requests in one second during a full `make test`
+- **When / agent:** 2026-11-11 · polish agent (pre-submission), reviewed by the planning session
+- **AI proposed:** nothing; the polish agent's changes did not touch delivery. It reported the failure instead of
+  retrying it away silently.
+- **How it was caught:** `make test` — `TestTakeover_ProviderNeverSeesMoreThanN_RSND2` failed once with 101 in a
+  1 s window (limit 100); 3/3 passes alone, and the full `make test` passed on the second run.
+- **Cause (not proven):** the same class as V-023. The bound assumes a departure-to-arrival delay below the
+  window guard (100 ms in the in-process tests); under `-race` with every package running in parallel, goroutine
+  scheduling can exceed it.
+- **Fix:** none in code tonight; README "Limitations" says that a busy machine can produce this and that a rerun
+  is expected to pass. The assumption-free limiter (DECISIONS D-7) is the real fix if this matters.
+- **Lesson / guard added:** a timing test that fails once is reported with its rerun result and logged, never
+  rerun silently until green.

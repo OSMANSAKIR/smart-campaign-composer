@@ -11,6 +11,7 @@ Raw exports and harvested transcripts stay in the gitignored `_raw/`; only sanit
 |---|---|---|---|---|---|---|
 | 00-planning | planning | Opus 5.5 | 2026-11-05 – 2026-11-11 (with long breaks; build brief 2026-11-08 ~00:00–02:40) | Turn the case into a build brief with the owner; later the owner's review desk: independent checks of the orchestrator's reports, need.md answers, live-run review, submission | `KICKOFF.md`, `need.md`, project settings and plugins | Claude Code headless probe for the `claudecode` adapter (structured output, 1.7 s) |
 | 01-orchestrator | orchestrator | Opus 5.5 | 2026-11-08 02:40– | Phase 0: contracts, skeleton, compose, task files; W1–W5 orchestration | see commits `docs:`/`feat:`/`build:` of 2026-11-08 | `make test` green in containers; compose healthy; Go and Vitest run the same test vectors; golangci-lint clean |
+| 02-polish | polish agent (fresh session, small context) | Sonnet 5.5 | 2026-11-11 ~00:55–01:30 | Five small pre-submission items from the README's not-done list, prompt written by the planning session | cancelled in `messages_total`, `scheduled_at` in the campaign list, step bar at 390 px, a test renamed to its requirement, RT-8b fails instead of skipping (N-ORC-017) | `make test`, `make lint`, `make e2e`, `make acceptance` green; one load-sensitive failure reported, not hidden (V-026); the planning session re-checked the diff |
 
 ## Agent launch log
 
@@ -41,6 +42,7 @@ and base64 are dropped. `make sanitize-check` fails if a file listed here is mis
 |---|---|
 | `sessions/00-planning.md` | 00-planning (owner's planning and review session; includes the compacted history) |
 | `sessions/01-orchestrator.md` | 01-orchestrator (main session, all stages; includes the compacted history) |
+| `sessions/02-polish.md` | 02-polish (pre-submission polish agent) |
 | `subagents/02-builder-llm.md` | W1 builder-llm |
 | `subagents/03-builder-delivery.md` | W1 builder-delivery |
 | `subagents/04-builder-web.md` | W1 builder-web |
@@ -56,7 +58,7 @@ and base64 are dropped. `make sanitize-check` fails if a file listed here is mis
 
 `00-planning` ran in the home directory, outside this project's transcript folder, so `harvest-sessions` does
 not find it; it was converted from its JSONL with `scripts/transcript2md.py` and sanitized the same way. The
-export ends at the submission commit; the few turns after it (push, CI) are not in it.
+export ends just before the final commit; the last turns (final push, CI, mail) are not in it.
 
 ## How the agents were connected
 
