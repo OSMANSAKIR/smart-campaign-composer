@@ -10,14 +10,15 @@ import (
 
 // Hash identifies one primary copy (the three texts, not the label). A localized row stores the hash of the
 // primary copy it was adapted from; when the primary is edited the hashes differ and the row is stale
-// (docs/contracts/api.md §9.9, DECISIONS D-22). Field boundaries are length-prefixed so two different
+// (docs/contracts/api.md §9.10, DECISIONS D-22). Field boundaries are length-prefixed so two different
 // copies cannot concatenate to the same input.
 func Hash(c Content) string {
-	h := sha256.New()
+	var b strings.Builder
 	for _, s := range []string{c.SMSText, c.EmailSubject, c.EmailBody} {
-		fmt.Fprintf(h, "%d:%s;", len(s), s)
+		fmt.Fprintf(&b, "%d:%s;", len(s), s) // a strings.Builder never fails
 	}
-	return hex.EncodeToString(h.Sum(nil))
+	sum := sha256.Sum256([]byte(b.String()))
+	return hex.EncodeToString(sum[:])
 }
 
 // ParseLocalize strictly decodes a localize_v1 answer. It has the shape of a content_v2 answer (language,

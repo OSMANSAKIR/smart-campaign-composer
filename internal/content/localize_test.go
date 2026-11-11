@@ -4,7 +4,7 @@ import "testing"
 
 func TestHash_StableAndBoundarySafe_B3(t *testing.T) {
 	a := Content{SMSText: "ab", EmailSubject: "c", EmailBody: "d"}
-	if Hash(a) != Hash(a) || len(Hash(a)) != 64 {
+	if h := Hash(a); h != Hash(Content{SMSText: "ab", EmailSubject: "c", EmailBody: "d"}) || len(h) != 64 {
 		t.Fatal("hash must be deterministic sha256 hex")
 	}
 	for name, other := range map[string]Content{
