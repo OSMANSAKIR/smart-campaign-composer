@@ -157,7 +157,7 @@ type variantBody struct {
 	SMSText      *string `json:"sms_text"`
 	EmailSubject *string `json:"email_subject"`
 	EmailBody    *string `json:"email_body"`
-	// Localized replaces the adaptation of the named locales (api.md §9.9); locales left out are kept.
+	// Localized replaces the adaptation of the named locales (api.md §9.10); locales left out are kept.
 	Localized map[string]*variantBody `json:"localized"`
 }
 
@@ -282,7 +282,7 @@ func (s *Server) approve(w http.ResponseWriter, r *http.Request) {
 		ContentVersion *int     `json:"content_version"`
 		Variant        string   `json:"variant"`       // a (default) | b | ab, docs/contracts/api.md §9.3
 		SendAt         *string  `json:"send_at"`       // RFC 3339, any offset, §9.6
-		LanguageMode   string   `json:"language_mode"` // campaign (default) | recipient, §9.9
+		LanguageMode   string   `json:"language_mode"` // campaign (default) | recipient, §9.10
 	}
 	key := r.Header.Get("Idempotency-Key")
 	if key == "" {

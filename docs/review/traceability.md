@@ -4,7 +4,7 @@ Audit: spec-auditor (read-only, transcript `ai-sessions/subagents/07-review-spec
 then the orchestrator closed the P0/P1 findings; this file is the audit's matrix updated with that evidence.
 Status: **green** = implemented + a check test that can fail, seen passing · **owner** = needs the owner.
 Totals: 28 green, 1 owner (R-DEL-1). P2 gaps are listed in README → "Not done / next steps".
-Phase 2 (owner decisions 2026-11-10) added B-1, B-2 and F2–F8 below; all green on mock, live acceptance is the owner's.
+Phase 2 (owner decisions 2026-11-10) added B-1, B-2 and F2–F8 below; all green on mock, live acceptance is the owner's. B-3 (2026-11-11) is the last row of that table.
 
 ## Commands and results
 
@@ -70,4 +70,5 @@ Phase 2 (owner decisions 2026-11-10) added B-1, B-2 and F2–F8 below; all green
 | F4 cancel | green | TestCancel_InFlightBoundIsTight_F4, TestCancel_RaceMidBatch_F4 (15 runs under -race), TestCancel_NeverClaimsCancelledCampaign_F4, TestCancel_ExpiredLeaseAndReleaseBecomeCancelled_F4, TestCancelEndpoint_F4 | acceptance A5, A11 (0 deliveries after the cancel returned; counts add up) |
 | F6 cost_recorded (N-LLM-005) | green | TestCostRecordedFlag_NLLM005, TestCostRecorded_NLLM005, web `panels.test.ts` | — |
 | F7 provider rejection | green | TestProviderRejected_F7 (4xx table vs 408/409/429/5xx), TestProviderRejection_F7 (httptest Anthropic 401/403/400-billing; fake org id never in the response) | — |
-| F8 acceptance suite | green | `make acceptance` A1–A13; CI job `acceptance` | live mode is owner-only (spend flag, cost cap) |
+| F8 acceptance suite | green | `make acceptance` A1–A14; CI job `acceptance` | live mode is owner-only (spend flag, cost cap) |
+| B-3 content in the recipient's language | green | Migration: TestMigration_B3_BackfillsLegacyRows, TestMigration_B3_SchemaConstraints. Audience: TestCount_PerLocale_BThree, TestSegmentAudience_ByLocale_B3. Localize: TestLocalizeContent_MockAdaptation_B3, _RepairsVariableMismatch_B3, _VariableMismatchEnds422_B3, _FidelityRules_B3, _InjectionInCopyIsData_B3, TestLocalizeFidelity_B3, TestLocalizeStream_NewVersionWithAdaptation_B3, _RepairAndInvalid_B3, _ProviderRejected_F7, _CostRecordedFalse_F6, TestLocalize_PreStreamErrors_B3. Per-locale validation and staleness: TestSaveVariants_PerLocaleValidation_B3, TestLocalized_StalenessFollowsPrimary_B3, TestHash_StableAndBoundarySafe_B3. Approve gate and enqueue: TestApprove_RecipientModeGate_B3, TestApprove_RecipientModeEnqueuesLocale_B3, TestApprove_RecipientModeWithOnlyCampaignLanguage_B3, TestLocalizeContract_PutApproveAndProgress_B3. Delivery: TestDispatcher_RecipientModeRendersTheMessagesLocale_B3, _CampaignModeIgnoresLocale_B3, _RecipientModeMissingLocaleFails_B3. Web: `localize.test.ts` (lib and components), `DashboardView.test.ts` | e2e `localize.spec.ts`; acceptance A14 (every request the provider got equals the render of its user's locale and variant; per-language counts add up to the audience) |

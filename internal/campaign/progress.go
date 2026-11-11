@@ -32,7 +32,7 @@ type ChannelProgress struct {
 	Variants map[string]*VariantProgress `json:"variants"`
 	// Locales holds the same terminal counts per recipient locale (the locale frozen on the message at
 	// approve), present for every locale that has messages; per channel they add up to the channel counters
-	// too (docs/contracts/api.md §9.9).
+	// too (docs/contracts/api.md §9.10).
 	Locales map[string]*VariantProgress `json:"locales"`
 }
 

@@ -8,7 +8,7 @@ import (
 	"smartcampaign/internal/llm"
 )
 
-// localizeContent adapts the latest content version to the other locale (docs/contracts/api.md §9.9). The
+// localizeContent adapts the latest content version to the other locale (docs/contracts/api.md §9.10). The
 // checks (404, target_locale, 409 state, variant_missing) run before the stream opens, so they are plain JSON
 // errors; afterwards the stream has the shape of refine: meta, delta, repairing, then result | error.
 func (s *Server) localizeContent(w http.ResponseWriter, r *http.Request) {

@@ -1,7 +1,8 @@
 # Contract: HTTP API and SSE events
 
 Status: v2 · 2026-11-10 · owner: orchestrator · implements: R-FLOW-1..5, R-OBS-1, R-OBS-3, R-SND-1, R-SND-3,
-B-1 (scheduled send), B-2 (A/B variants). v2 adds §9 (phase 2); v1 shapes stay valid unless §9 says otherwise.
+B-1 (scheduled send), B-2 (A/B variants), B-3 (content in the recipient's language, §9.10). v2 adds §9 (phase 2);
+v1 shapes stay valid unless §9 says otherwise.
 
 Base: same origin as the SPA (`http://localhost:8080`), JSON in UTF-8, no CORS. Timestamps are RFC 3339 UTC.
 IDs: campaigns and messages are UUIDs, users are integers.
@@ -31,6 +32,7 @@ Every non-2xx JSON response:
 | 422 | `empty_audience` | Approve when a selected channel has 0 reachable recipients |
 | 422 | `variant_missing` | Approve or refine names variant `b` (or `ab`) on a version that has no variant B |
 | 422 | `invalid_send_at` | `send_at` outside now + 1 min .. now + 7 days (§9.6) |
+| 422 | `missing_localization` | Approve with `language_mode: "recipient"` while a language among the recipients has no valid, current copy; `details` says which (§9.10) |
 | 502 | `llm_failed` | Provider error or timeout after SDK retries |
 | 502 | `llm_provider_rejected` | The LLM provider answered 4xx other than 408/409/429 (key, permissions, credits/billing). Fixed message, never the provider's body (§9.8) |
 | 503 | `unavailable` | Database unavailable |
@@ -142,6 +144,7 @@ campaign is cancelled.
 | `PUT /api/system/provider-config` | any subset of the config fields | 200 merged config | Forwarded to the provider's `/admin/config`; unknown fields or bad values → 400 `validation_failed` (need.md N-WEB-003) |
 | `POST /api/segment/preview` | `{ "rule": {…} }` | 200 preview (§9.2) | v2. Stateless; never saves |
 | `POST /api/campaigns/{id}/content/refine` | `{ "variant": "a"\|"b", "instruction": "…", "base_version": 3 }` | 200 `text/event-stream` (§9.4) | v2. Allowed in `segmented`, `content_ready` |
+| `POST /api/campaigns/{id}/content/localize` | `{ "target_locale": "en" }` | 200 `text/event-stream` (§9.10) | v3. Adapts the latest version's copy to the other language; allowed in `segmented`, `content_ready` |
 | `POST /api/campaigns/{id}/cancel` | `{}` | 200 `{ campaign, cancelled }` (§9.5) | v2. Allowed in `scheduled`, `sending`; idempotent in `cancelled` |
 | `GET /healthz`, `GET /readyz`, `GET /metrics` | — | | See `observability.md` |
 
@@ -377,4 +380,91 @@ The UI shows the message as is instead of "failed or timed out".
 on a throwaway database, mock LLM by default (CI runs it). Live mode for the owner only:
 `make acceptance PROVIDER=anthropic` with the spend flag, guarded like `make eval`; it writes
 `docs/acceptance/REPORT-<provider>-<date>.md` and stops when the cumulative cost passes its cap. Scenarios
-A1–A13 are listed in DECISIONS.md and in the suite.
+A1–A14 are listed in DECISIONS.md and in the suite (A14 is B-3, §9.10).
+
+### 9.10 Content in the recipient's language (B-3, DECISIONS D-22)
+
+A campaign has one language (the brief's). The copy is written in that language first, the **primary** copy
+(`campaigns.language`). Claude then **adapts** it to the other locale (`tr` | `en`) in a separate step; the
+adaptations are the **localized** copies. Everything below is additive: a client that knows nothing of it
+keeps working, and `language_mode: "campaign"` behaves exactly as before.
+
+**Audience.** `segment.audience` (also in `POST /api/segment/preview`) gains
+`by_locale: { "tr": { total, sms_reachable, email_reachable, both }, "en": { … } }`: the same consented counts
+per recipient locale (`users.locale`). Both locales are always present, with zeros. They add up to the
+top-level counts. A campaign counted before B-3 has no `by_locale`.
+
+**Content.** Each variant (`content.variants.a|b`) gains `locale` (the language of the primary copy) and
+`localized`, always an object keyed by locale (`{}` when none):
+
+```json
+"a": { "label": "…", "sms_text": "…", "email_subject": "…", "email_body": "…", "validation": {…}, "source": "llm",
+       "instruction": null, "locale": "tr",
+       "localized": { "en": { "label": "…", "sms_text": "…", "email_subject": "…", "email_body": "…",
+                              "validation": {…}, "source": "llm", "stale": false } } }
+```
+
+- `localized.<l>.validation` is the report for that copy under locale `<l>`'s constraints (`content.Validate`
+  with `Locale: <l>`; the worst case is the audience's, already an upper bound over both locales).
+- `source` is `llm` (adapted by Claude) or `edited` (changed by hand). There is no `refined`.
+- `stale` is `true` when the primary copy of the variant (the three texts, not the label) is not the one the
+  adaptation was made from or last edited against. The server stores the hash of that primary copy with the
+  localized row and compares it on every read. Editing the primary text, or refining the variant, makes its
+  adaptations stale; adapting again or editing the adaptation by hand makes them current.
+- Storage: `campaign_content` is one row per `(campaign_id, version, variant, locale)`; localized rows have
+  `adapted_from` set.
+
+**Localize.** `POST /api/campaigns/{id}/content/localize` `{ "target_locale": "en" }`.
+
+- `target_locale` must be a supported locale other than the campaign's language (422 `validation_failed`, path
+  `target_locale`; missing is 400). The latest version must have both variants (422 `variant_missing`
+  otherwise). Status must allow content edits (409 `invalid_state`). These checks run before the stream opens.
+- Same stream as §5 (`meta`, `delta`, `repairing`, `result` | `error`); prompt `localize_v1`;
+  `llm_calls.purpose` `localize` (its repairs `repair`); `result.llm.cost_recorded` as in §9.7; a provider
+  rejection ends as `llm_provider_rejected` (§9.8).
+- Input to the model: the primary copy of each variant, as escaped JSON in its own `<source_variants>` tag, and
+  the brief; both are data, never instructions. Output (wire schema `localize_v1`, same shape as `content_v2`):
+  `{ "language", "variants": { "a": { "label", "sms": { "text" }, "email": { "subject", "body" } }, "b": … }, "notes" }`.
+- Rules the prompt states and the backend checks, with the same repair loop and budget as generation (2
+  repairs, then 422 `llm_invalid_output`): `language` equals the target; every field passes `content.Validate`
+  under the target locale; each field has **exactly the same `{{variables}}`** as its source field
+  (`variable_mismatch`); no link, email address or phone number that the source field does not have
+  (`new_url`, `new_email`, `new_phone`); the copy is not identical to the source (`not_adapted`). Details have
+  paths like `variants.a.sms_text`.
+- Result: a **new version** with the primary rows copied from the base version (source and instruction kept,
+  report recomputed) plus the localized rows for the target locale; earlier versions stay as history. Other
+  locales' rows, if any, are carried over. A version edited while the model wrote wins: 409
+  `stale_content_version`, nothing saved.
+- Generating new content (§5) starts a fresh version without adaptations; refine (§9.4) carries them over.
+
+**Editing.** `PUT …/content` (v2 body) accepts, per variant, `localized: { "<locale>": { label, sms_text,
+email_subject, email_body } }` (all four fields required inside). Each is validated under its own locale and
+saved even when invalid (the report says why). A locale left out keeps the base version's adaptation (so a
+client that only sends primary copies cannot lose adaptations); an unchanged one keeps its `source` and its
+staleness. Changing one makes it `edited` and current. A locale that is the campaign's own language or not
+`tr`/`en` is 422 `validation_failed` (path `variants.a.localized.<locale>`); a `null` entry or a missing field
+is 400. The v1 body (single variant) drops adaptations, like it drops variant B.
+
+**Approve.** The body gains `language_mode`: `"campaign"` (default) or `"recipient"`; anything else is 400.
+
+- `campaign`: every recipient gets the campaign-language copy and fallback values, as before B-3.
+- `recipient`: for every selected channel, every locale among the consented recipients of that channel other
+  than the campaign's own needs, for every variant that will be sent, a localized copy that exists, is not
+  stale and is valid for that channel (re-validated at approve, like the primary). Otherwise **422
+  `missing_localization`**, nothing is enqueued, and `details` lists the problems as
+  `{ path: "variants.a.localized.en", code: "missing" | "stale" | "invalid", message }` (for `invalid` the path
+  continues with the field, e.g. `….en.sms_text`). A campaign whose recipients all read the campaign language
+  needs no adaptation.
+- Idempotency (§6) is unchanged: a repeated key replays the stored answer whatever `language_mode` the second
+  request says. The campaign object carries `language_mode` (`campaign` until approved).
+- `messages.locale` is set at enqueue from `users.locale` and frozen with the audience (need.md N-ORC-016),
+  in both modes.
+
+**Delivery.** In `recipient` mode the worker renders the copy of `(content_version, variant, message.locale)`:
+the primary copy for a recipient in the campaign's language, the localized copy otherwise, with the fallback
+values of the message's locale. A message whose locale has no copy fails permanently as `content_missing` (it
+never falls back to the other language). In `campaign` mode nothing changes.
+
+**Progress.** Every channel in the progress object (§7, `GET /api/campaigns/{id}`) gains
+`locales: { "tr": { total, sent, failed, cancelled, skipped_no_consent }, "en": { … } }`, present for every
+locale that has messages; per channel the locales add up to the channel counters, like `variants` (§9.3).

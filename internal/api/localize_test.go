@@ -381,7 +381,7 @@ func TestLocalizeContract_PutApproveAndProgress_B3(t *testing.T) {
 	}
 }
 
-// B-3: the audience of a stored segment reports consented counts per locale (api.md §9.9).
+// B-3: the audience of a stored segment reports consented counts per locale (api.md §9.10).
 func TestSegmentAudience_ByLocale_B3(t *testing.T) {
 	srv, id, _, _ := localizeServer(t, nil)
 	code, _, body := do(t, http.MethodGet, srv.URL+"/api/campaigns/"+id, "", nil)

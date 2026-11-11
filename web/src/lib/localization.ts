@@ -1,4 +1,4 @@
-// Content in the recipient's language (B-3, api.md §9.9). Pure helpers: the server stays the authority (a 422
+// Content in the recipient's language (B-3, api.md §9.10). Pure helpers: the server stays the authority (a 422
 // missing_localization says the same), these only tell the UI early and in words.
 import type {
   Audience,
@@ -98,7 +98,7 @@ export interface LocaleDeliveryRow {
   v: VariantProgress
 }
 
-// Per-locale rows for a channel in the dashboard, only for locales that have messages (api.md §9.9).
+// Per-locale rows for a channel in the dashboard, only for locales that have messages (api.md §9.10).
 export function localeRows(c: ChannelProgress): LocaleDeliveryRow[] {
   const out: LocaleDeliveryRow[] = []
   for (const l of LOCALES) {

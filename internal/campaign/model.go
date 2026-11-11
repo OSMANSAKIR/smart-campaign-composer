@@ -14,7 +14,7 @@ type Campaign struct {
 	Brief                  string          `json:"brief"`
 	Status                 string          `json:"status"`
 	Language               string          `json:"language"`
-	LanguageMode           string          `json:"language_mode"` // campaign | recipient (§9.9)
+	LanguageMode           string          `json:"language_mode"` // campaign | recipient (§9.10)
 	Segment                *Segment        `json:"segment"`
 	Content                *ContentVersion `json:"content"`
 	Channels               []string        `json:"channels"`
@@ -111,7 +111,7 @@ type ContentVariant struct {
 	EmailBody    string         `json:"email_body"`
 	Validation   content.Report `json:"validation"`
 	// Locale is the language of this primary copy (the campaign's language when it was saved). Localized holds
-	// the adaptations to the other locale, keyed by locale; always an object (api.md §9.9).
+	// the adaptations to the other locale, keyed by locale; always an object (api.md §9.10).
 	Locale    string                    `json:"locale"`
 	Localized map[string]*LocalizedCopy `json:"localized"`
 }

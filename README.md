@@ -9,6 +9,8 @@ Also built (phase 2, owner decisions 2026-11-10): **A/B variants** with a determ
 B-2), **scheduled send** (bonus B-1), a **manual segment-rule editor**, **refine a variant with an
 instruction**, **stop sending**, a notice when an LLM call's cost could not be recorded, a clear message when
 the AI provider rejects the key or credits, and an end-to-end **acceptance suite** (`make acceptance`).
+Then bonus B-3, **content in the recipient's language**: Claude adapts the copy to the other language as a
+separate step, and each recipient can get the text in their own language.
 
 Go backend · Vue 3 + TypeScript frontend · Postgres (datastore and queue) · synthetic users only · mock
 provider only.
@@ -79,6 +81,20 @@ make smoke-live CONFIRM_SPEND=yes
    recent attempts, a countdown for a scheduled campaign, and **Stop sending**. The **System** page shows the
    health of every component.
 
+**Content in each recipient's language (bonus B-3).** A campaign has one language, the brief's, and the copy is
+written in it first. The **Audience** step shows how many people read each language (with consented counts per
+channel). When some read the other one, the **Content** step offers **Write the English version (N
+recipients)** (or Turkish, for an English brief): Claude *adapts* the saved copy of both variants as a separate
+streamed step (not a literal translation: same offer, facts, tone and `{{variables}}`, no new link or phone
+number, same limits). Each variant card then has **TR | EN** tabs; the other language is editable and is
+validated under its own rules. Editing the primary text marks the adaptation **out of date**; **Re-adapt**
+makes it current again. In **Approve**, *Everyone in <campaign language>* is the old behaviour; *Each
+recipient in their language* (the default once every needed copy is valid) sends the Turkish copy to Turkish
+readers and the English copy to English readers, with the fallback name ("Değerli müşterimiz" / "Valued
+customer") of their language; if a copy is missing, stale or invalid the server answers 422
+`missing_localization` and nothing is queued. The dashboard shows sent and failed per language and channel.
+Details: [`docs/contracts/api.md`](docs/contracts/api.md) §9.10, [`DECISIONS.md`](DECISIONS.md) D-22.
+
 The A/B split is a deterministic hash of (campaign, user), so a user gets the same variant on SMS and email.
 The dashboard reports sent/failed per variant; there are **no open or click metrics** (the mock provider has
 none), so this is the split and per-variant delivery foundation, not experiment analysis.
@@ -140,7 +156,7 @@ none), so this is the split and per-variant delivery foundation, not experiment 
 |---|---|---|
 | `make test` | `go vet`, `go test -race` for every package, Vitest — in containers, on a network **without internet**, no key | Docker |
 | `make e2e` | Playwright: official brief → audience → two streamed variants → invalid edit blocked → edit saved → Send A → dashboard finishes → reload; rule editor: change the city, count changes, save, Edited badge | Docker |
-| `make acceptance` | Scenarios A1–A13 through the HTTP API with the real worker and the mock provider on a throwaway database (both channels, email/SMS only, unsupported criteria, consent bypass, prompt injection, zero audience, A/B split, rule edit, refine, cancel mid-send, scheduled send, double approve) → [`docs/acceptance/`](docs/acceptance/) | Postgres from `make up`, Go |
+| `make acceptance` | Scenarios A1–A14 through the HTTP API with the real worker and the mock provider on a throwaway database (both channels, email/SMS only, unsupported criteria, consent bypass, prompt injection, zero audience, A/B split, rule edit, refine, cancel mid-send, scheduled send, double approve) → [`docs/acceptance/`](docs/acceptance/) | Postgres from `make up`, Go |
 | `make fresh-clone-check` | The reviewer's path: clean clone, no `.env`, `docker compose up`, seed, restart, `down -v`, key-only `.env`, `make test` | Docker |
 | `make stress` | Delivery scenarios with real worker processes → [`docs/stress/REPORT.md`](docs/stress/REPORT.md); API scenarios → [`docs/stress/REPORT-api.md`](docs/stress/REPORT-api.md) | Docker (Postgres from `make up`), Go |
 | `make eval PROVIDER=mock\|claudecode` | 17-brief eval set → `docs/eval/REPORT-*.md` | Go; `claudecode` needs the Claude Code CLI |
@@ -238,10 +254,17 @@ matter most:
 
 ## Not done / next steps
 
-Not built:
+Not built: nothing from the case's P0–P2 list is left out (B-3 is built, see D-22).
 
-- Bonus B-3, content in each recipient's language: a campaign has one language (the brief's), and every
-  recipient gets that copy. The seed already has a `locale` per user and name fallbacks per locale.
+B-3 gaps (2026-11-11):
+
+- Only two languages (`tr`, `en`), the two the seed has; a third would need a wider `locale` check, a prompt
+  language name and a UI tab, nothing else.
+- Adapting works on both variants at once and needs both (a one-variant version from the v1 `PUT` body must
+  get a variant B first); there is no "adapt only variant A".
+- The adaptation is checked for variables, links, phone numbers, length and language, not for meaning: a
+  wrong-but-valid English sentence is the marketer's to catch in the EN tab. The live-model semantic checks
+  are in acceptance A14 (owner-run); the mock's English is a fixed demo text.
 
 Phase-2 gaps (2026-11-10):
 

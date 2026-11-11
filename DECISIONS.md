@@ -341,7 +341,7 @@ simplest to explain.
 
 ## D-21 · Acceptance suite through the HTTP API [F8]
 
-- **Decision.** `make acceptance` runs scenarios A1–A13 (`acceptance/`, build tag `acceptance`) against the
+- **Decision.** `make acceptance` runs scenarios A1–A14 (`acceptance/`, build tag `acceptance`) against the
   real API handler, the real dispatchers, reconciler and scheduler, and the mock provider, in one process on a
   throwaway database seeded with 5000 users. Mock LLM by default, so CI runs it (job with a Postgres service).
   Assertions are semantic (fields used, unsupported list non-empty, consent note), so the same suite runs
@@ -350,3 +350,36 @@ simplest to explain.
   (default $1). Reports go to `docs/acceptance/`.
 - **Why in process.** One command, no compose dependency beyond Postgres, a fresh database per run, and the
   provider's own `/stats` (max per 1 s window, duplicates, delivery times) as the independent witness.
+
+## D-22 · Content in the recipient's language: adapt after the primary, frozen locale, gated approve [B-3]
+
+- **Adapt, after the primary (owner).** The copy is written in the campaign's language first, exactly as
+  before; Claude then *adapts* it to the other locale in a separate streamed call (`localize_v1`, own wire
+  schema, `llm_calls.purpose = localize`, same repair budget, `cost_recorded`, F7 mapping). The primary copy
+  goes into the prompt as escaped JSON in its own tag and is data, never instructions. The prompt says adapt,
+  do not translate literally, keep the offer, facts and tone, keep exactly the same variables, add no link,
+  phone or claim. The backend does not trust the prompt: each adapted copy goes through `content.Validate`
+  under the *target* locale, plus `LocalizeFidelity` (same variables per field, no new URL/email/phone, not
+  identical to the source), then the usual repair loop.
+- **Rows, not columns.** `campaign_content` is one row per `(version, variant, locale)`; a localized row stores
+  the hash of the primary copy it was adapted from (`adapted_from`). A localize call is a new version (history
+  kept) holding the primary rows copied plus the localized rows; a fresh generation starts without
+  adaptations, a refine carries them over.
+- **Staleness is computed, not stored.** `stale = adapted_from ≠ hash(current primary of that variant)`,
+  evaluated on read. So any path that changes the primary (a save, a refine) makes the adaptation stale without
+  that path knowing about locales, and a client that only sends primary copies cannot lose adaptations: a
+  locale left out of a `PUT` is carried over. Only a hand edit of the adaptation, or a new adaptation, makes
+  it current again. The hash covers the three texts, not the label.
+- **Frozen locale.** `messages.locale` is copied from `users.locale` at enqueue, like the audience is frozen
+  (N-ORC-016): a user who changes locale after approve gets the text that was approved for them. Set in both
+  modes, so the per-language progress works for every campaign.
+- **Gated approve.** `language_mode` is `campaign` (default: as before, byte for byte) or `recipient`. In
+  `recipient` mode, for every selected channel, every locale among that channel's consented recipients other
+  than the campaign language needs, for every sent variant, a copy that exists, is not stale and is valid for
+  the channel (re-validated at approve); otherwise 422 `missing_localization` with a path and code per problem
+  and nothing enqueued. The worker never falls back to the other language: a message without its locale's copy
+  fails as `content_missing`. Idempotency is unchanged.
+- **Fallbacks follow the mode.** In `recipient` mode the fallback name is the message locale's; in `campaign`
+  mode it stays the campaign language's, which is what "exactly as today" means.
+- **Why not translate each variant on the fly at send time.** The marketer approves exactly the text that is
+  sent; a per-message model call would also break the rate and cost bounds.

@@ -84,7 +84,7 @@ func RefineWireSchema() map[string]any {
 }
 
 // LocalizeWireSchema returns the localize_v1 schema: the campaign's variants in the target language, under the
-// same fixed keys a and b as content_v2 (docs/contracts/api.md §9.9).
+// same fixed keys a and b as content_v2 (docs/contracts/api.md §9.10).
 func LocalizeWireSchema() map[string]any {
 	return object(map[string]any{
 		"language": enumOf(Locales),

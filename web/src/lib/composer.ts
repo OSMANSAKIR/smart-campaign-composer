@@ -455,7 +455,7 @@ export function useComposer(initialId: string | null) {
     }
   }
 
-  // The adaptation is validated with its own locale's constraints (api.md §9.9).
+  // The adaptation is validated with its own locale's constraints (api.md §9.10).
   async function validateLocalNow(k: VariantKey) {
     const c = campaign.value
     const seq = ++localSeqs[k]
@@ -517,7 +517,7 @@ export function useComposer(initialId: string | null) {
     busy.value = 'save'
     error.value = null
     try {
-      // The adaptation travels with its variant (api.md §9.9): sent when one is saved or has been written.
+      // The adaptation travels with its variant (api.md §9.10): sent when one is saved or has been written.
       const withLocal = (k: VariantKey): VariantSave => {
         const row = savedLocalized(k)
         return row || hasText(localForms[k]) ? { ...forms[k], localized: { [other.value]: { ...localForms[k] } } } : { ...forms[k] }

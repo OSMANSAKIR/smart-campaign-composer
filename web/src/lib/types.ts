@@ -40,7 +40,7 @@ export interface LlmMeta {
   cost_recorded?: boolean
 }
 
-// Consented counts of one recipient locale (B-3, api.md §9.9).
+// Consented counts of one recipient locale (B-3, api.md §9.10).
 export interface LocaleAudience {
   total: number
   sms_reachable: number
@@ -122,7 +122,7 @@ export type VariantKey = 'a' | 'b'
 export type SendVariant = 'a' | 'b' | 'ab'
 export type LanguageMode = 'campaign' | 'recipient'
 
-// The adaptation of a primary copy to the other locale (B-3, api.md §9.9).
+// The adaptation of a primary copy to the other locale (B-3, api.md §9.10).
 export interface LocalizedCopy {
   label: string
   source: 'llm' | 'edited'
@@ -184,7 +184,7 @@ export interface ChannelProgress {
   // v2: cancelled messages (api.md §9.5) and the per-variant split (§9.3).
   cancelled?: number
   variants?: Partial<Record<VariantKey, VariantProgress>>
-  // B-3: terminal counts per recipient locale (api.md §9.9).
+  // B-3: terminal counts per recipient locale (api.md §9.10).
   locales?: Partial<Record<Language, VariantProgress>>
   throughput_per_s: number
   paused_until: string | null

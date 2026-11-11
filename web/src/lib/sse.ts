@@ -95,7 +95,7 @@ export function streamRefine(
   return streamPost(refineUrl(campaignId), body, onEvent, signal)
 }
 
-// Adapt the primary copy to the other locale (api.md §9.9); same stream as generate.
+// Adapt the primary copy to the other locale (api.md §9.10); same stream as generate.
 export function streamLocalize(
   campaignId: string,
   body: { target_locale: 'tr' | 'en' },

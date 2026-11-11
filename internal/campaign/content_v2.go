@@ -106,7 +106,7 @@ type VariantEdit struct {
 	SMSText      string
 	EmailSubject string
 	EmailBody    string
-	// Localized replaces the adaptation of the named locales (api.md §9.9). Locales left out keep the copy of
+	// Localized replaces the adaptation of the named locales (api.md §9.10). Locales left out keep the copy of
 	// the base version, so a client that only knows primary copies cannot lose adaptations by saving.
 	Localized map[string]*VariantEdit
 }

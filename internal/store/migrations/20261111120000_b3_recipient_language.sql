@@ -1,4 +1,4 @@
--- B-3 (bonus, owner decision 2026-11-11): content in the recipient's language. docs/contracts/api.md §9.9.
+-- B-3 (bonus, owner decision 2026-11-11): content in the recipient's language. docs/contracts/api.md §9.10.
 --   The copy is written in the campaign's language first (the 'primary' rows), then adapted to the other
 --   locale in a separate step (the 'localized' rows).
 

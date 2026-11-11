@@ -179,7 +179,7 @@ func (s *Service) ApproveWith(ctx context.Context, id, key string, channels []st
 		}
 
 		if opt.LanguageMode == "recipient" {
-			// B-3: nothing is enqueued for a locale that has no usable copy (api.md §9.9).
+			// B-3: nothing is enqueued for a locale that has no usable copy (api.md §9.10).
 			missing, err := s.localizationIssues(ctx, tx, c, v, chans, toSend, wc)
 			if err != nil {
 				return err

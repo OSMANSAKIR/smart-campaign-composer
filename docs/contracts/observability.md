@@ -32,7 +32,7 @@ Definitions live in `internal/metrics`; services only use them. Names and labels
 | `content_too_long_total` | counter | `channel` | worker |
 | `campaigns_approved_total` | counter | — | api |
 | `messages_enqueued_total` | counter | `channel` | api |
-| `llm_requests_total` | counter | `purpose`, `provider`, `model`, `outcome` (valid, repaired, invalid, refused, error) | api |
+| `llm_requests_total` | counter | `purpose` (segment, content, refine, localize, repair), `provider`, `model`, `outcome` (valid, repaired, invalid, refused, error) | api |
 | `llm_tokens_total` | counter | `type` (input, output, cache_read, cache_write) | api |
 | `llm_cost_usd_total` | counter | — | api |
 | `llm_latency_seconds` | histogram | `purpose` | api |
