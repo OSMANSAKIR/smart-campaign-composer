@@ -39,7 +39,10 @@ type Claimed struct {
 	Unanswered     int  // earlier tries that got no answer (ambiguous, or lease expired mid-send)
 	ConfirmReplays int  // confirmation replays already used (need.md N-DEL-009)
 	Skipped        bool // consent was revoked after enqueue: already moved to skipped_no_consent
-	Recipient      Recipient
+	// CopyLocale names the localized copy this message renders (campaign_content.locale, B-3): empty for the
+	// primary copy, which is what language_mode 'campaign' and a recipient in the campaign's own language get.
+	CopyLocale string
+	Recipient  Recipient
 }
 
 // Claim takes up to n due messages. One statement does it all: FOR UPDATE SKIP LOCKED picks rows no other
@@ -73,7 +76,8 @@ func (q *Queue) ClaimOn(ctx context.Context, db querier, n int) ([]Claimed, erro
 		  AND u.id = m.user_id AND c.id = m.campaign_id
 		RETURNING m.id::text, m.campaign_id::text, m.user_id, m.content_version, m.variant, m.attempts, m.throttled_count,
 		          m.unanswered_tries, m.confirm_replays, m.status = 'skipped_no_consent', u.email, u.phone, u.first_name, u.city,
-		          COALESCE(c.language, u.locale)`, consent),
+		          CASE WHEN c.language_mode = 'recipient' THEN m.locale ELSE COALESCE(c.language, u.locale) END,
+		          CASE WHEN c.language_mode = 'recipient' AND m.locale <> COALESCE(c.language, 'tr') THEN m.locale ELSE '' END`, consent),
 		string(q.Channel), n, q.Lease.Seconds())
 	if err != nil {
 		return nil, err
@@ -83,7 +87,7 @@ func (q *Queue) ClaimOn(ctx context.Context, db querier, n int) ([]Claimed, erro
 	for rows.Next() {
 		var c Claimed
 		if err := rows.Scan(&c.ID, &c.CampaignID, &c.UserID, &c.ContentVersion, &c.Variant, &c.Attempts, &c.Throttled, &c.Unanswered, &c.ConfirmReplays, &c.Skipped,
-			&c.Recipient.Email, &c.Recipient.Phone, &c.Recipient.FirstName, &c.Recipient.City, &c.Recipient.Locale); err != nil {
+			&c.Recipient.Email, &c.Recipient.Phone, &c.Recipient.FirstName, &c.Recipient.City, &c.Recipient.Locale, &c.CopyLocale); err != nil {
 			return nil, err
 		}
 		out = append(out, c)
@@ -196,12 +200,15 @@ func (q *Queue) Release(ctx context.Context, c Claimed, delay time.Duration) err
 	return err
 }
 
-// Template loads one variant of an approved content version.
-func (q *Queue) Template(ctx context.Context, campaignID string, version int, variant string) (Template, error) {
+// Template loads one variant of an approved content version: the primary copy when copyLocale is empty, else
+// the copy adapted to that locale (B-3). A missing row is pgx.ErrNoRows; there is no fallback to another
+// locale, the message fails as content_missing.
+func (q *Queue) Template(ctx context.Context, campaignID string, version int, variant, copyLocale string) (Template, error) {
 	var t Template
 	err := q.Pool.QueryRow(ctx, `SELECT sms_text, email_subject, email_body FROM campaign_content
-		WHERE campaign_id = $1 AND version = $2 AND variant = $3`, campaignID, version, variant).
-		Scan(&t.SMSText, &t.EmailSubject, &t.EmailBody)
+		WHERE campaign_id = $1 AND version = $2 AND variant = $3
+		  AND CASE WHEN $4 = '' THEN adapted_from IS NULL ELSE locale = $4 AND adapted_from IS NOT NULL END`,
+		campaignID, version, variant, copyLocale).Scan(&t.SMSText, &t.EmailSubject, &t.EmailBody)
 	return t, err
 }
 

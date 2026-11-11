@@ -659,11 +659,11 @@ func (d *Dispatcher) release(ctx context.Context, log *slog.Logger, c Claimed, d
 }
 
 func (d *Dispatcher) template(ctx context.Context, c Claimed) (Template, error) {
-	key := c.CampaignID + "/" + strconv.Itoa(c.ContentVersion) + "/" + c.Variant
+	key := c.CampaignID + "/" + strconv.Itoa(c.ContentVersion) + "/" + c.Variant + "/" + c.CopyLocale
 	if v, ok := d.tmpl.Load(key); ok {
 		return v.(Template), nil
 	}
-	t, err := d.queue.Template(ctx, c.CampaignID, c.ContentVersion, c.Variant)
+	t, err := d.queue.Template(ctx, c.CampaignID, c.ContentVersion, c.Variant, c.CopyLocale)
 	if err != nil {
 		return Template{}, err
 	}
