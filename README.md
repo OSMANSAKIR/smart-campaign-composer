@@ -10,7 +10,9 @@ B-2), **scheduled send** (bonus B-1), a **manual segment-rule editor**, **refine
 instruction**, **stop sending**, a notice when an LLM call's cost could not be recorded, a clear message when
 the AI provider rejects the key or credits, and an end-to-end **acceptance suite** (`make acceptance`).
 Then bonus B-3, **content in the recipient's language**: Claude adapts the copy to the other language as a
-separate step, and each recipient can get the text in their own language.
+separate step, and each recipient can get the text in their own language. B-3 and the documents that came with
+it were added after the submission deadline; the submitted version is the tag `submission-2026-11-11`
+(commit `092b6f8`).
 
 Go backend · Vue 3 + TypeScript frontend · Postgres (datastore and queue) · synthetic users only · mock
 provider only.
