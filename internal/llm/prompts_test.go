@@ -25,7 +25,7 @@ func TestPrompts_FewShotsAreValid_RAI1(t *testing.T) {
 			t.Fatalf("%q: %v", ex.Brief, errs)
 		}
 	}
-	b, _ := json.Marshal(goldenContent())
+	b, _ := json.Marshal(GoldenContent())
 	p, issues := content.ParseProposalV2(b)
 	if len(issues) != 0 {
 		t.Fatal(issues)

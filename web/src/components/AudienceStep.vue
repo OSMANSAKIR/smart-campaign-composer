@@ -3,6 +3,7 @@ import { computed, onMounted, ref } from 'vue'
 import { loadCatalog } from '../lib/catalog'
 import { describeError } from '../lib/errors'
 import { formatInt } from '../lib/format'
+import { audienceLocaleLines } from '../lib/localization'
 import { renderRule } from '../lib/ruleEditor'
 import type { Campaign, Catalog, LlmMeta, SegmentRule } from '../lib/types'
 import LlmPanel from './LlmPanel.vue'
@@ -33,6 +34,7 @@ const chips = computed(() => {
   return primary.length ? primary : (s.rendered.en.length ? s.rendered.en : s.rendered.tr)
 })
 const json = computed(() => JSON.stringify(seg.value?.rule ?? null, null, 2))
+const localeLines = computed(() => audienceLocaleLines(seg.value?.audience))
 const nobody = computed(() => (seg.value?.audience.total ?? 0) === 0)
 
 async function ensureCatalog() {
@@ -141,6 +143,29 @@ const originalJson = computed(() => JSON.stringify(original.value, null, 2))
         <div class="v num">{{ formatInt(seg.audience.both) }}</div>
         <div class="l">reachable on both</div>
       </div>
+    </div>
+
+    <div v-if="localeLines.length" class="languages" role="group" aria-label="Audience by language">
+      <table class="list num" aria-label="People who can be reached, by the language they read">
+        <caption class="sr-only">Audience by language</caption>
+        <thead>
+          <tr>
+            <th scope="col">Language</th><th scope="col">People</th><th scope="col">SMS (consented)</th><th scope="col">Email (consented)</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr v-for="l in localeLines" :key="l.locale" :data-locale="l.locale">
+            <th scope="row">{{ l.name }}</th>
+            <td>{{ formatInt(l.total) }}</td>
+            <td>{{ formatInt(l.sms) }}</td>
+            <td>{{ formatInt(l.email) }}</td>
+          </tr>
+        </tbody>
+      </table>
+      <p class="muted">
+        You write the copy in {{ seg.language === 'tr' ? 'Turkish' : 'English' }}. When the audience also reads the other language,
+        the content step can adapt it for them.
+      </p>
     </div>
 
     <div v-if="nobody" class="notice warn" role="status">

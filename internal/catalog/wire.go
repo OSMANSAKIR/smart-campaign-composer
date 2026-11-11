@@ -83,13 +83,24 @@ func RefineWireSchema() map[string]any {
 	})
 }
 
+// LocalizeWireSchema returns the localize_v1 schema: the campaign's variants in the target language, under the
+// same fixed keys a and b as content_v2 (docs/contracts/api.md §9.10).
+func LocalizeWireSchema() map[string]any {
+	return object(map[string]any{
+		"language": enumOf(Locales),
+		"variants": object(map[string]any{"a": variantSchema(), "b": variantSchema()}),
+		"notes":    typ("string"),
+	})
+}
+
 // WireSchemaFiles maps contract file names to their generated content.
 func WireSchemaFiles() (map[string][]byte, error) {
 	out := map[string][]byte{}
 	for name, s := range map[string]map[string]any{
-		"segment.wire.schema.json": SegmentWireSchema(),
-		"content.wire.schema.json": ContentWireSchema(),
-		"refine.wire.schema.json":  RefineWireSchema(),
+		"segment.wire.schema.json":  SegmentWireSchema(),
+		"content.wire.schema.json":  ContentWireSchema(),
+		"refine.wire.schema.json":   RefineWireSchema(),
+		"localize.wire.schema.json": LocalizeWireSchema(),
 	} {
 		b, err := json.MarshalIndent(s, "", "  ")
 		if err != nil {

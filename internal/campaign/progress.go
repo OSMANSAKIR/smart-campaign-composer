@@ -30,6 +30,10 @@ type ChannelProgress struct {
 	// Variants holds the terminal counts per content variant, present for every variant that has messages;
 	// per channel they add up to the channel counters (docs/contracts/api.md §9.3).
 	Variants map[string]*VariantProgress `json:"variants"`
+	// Locales holds the same terminal counts per recipient locale (the locale frozen on the message at
+	// approve), present for every locale that has messages; per channel they add up to the channel counters
+	// too (docs/contracts/api.md §9.10).
+	Locales map[string]*VariantProgress `json:"locales"`
 }
 
 // VariantProgress is one variant's share of a channel.
@@ -102,7 +106,7 @@ func (s *Service) Progress(ctx context.Context, id string) (Progress, error) {
 	p := Progress{CampaignID: id, Channels: map[string]*ChannelProgress{},
 		Errors: map[string]int{"rate_limited": 0, "server_error": 0, "timeout": 0, "permanent": 0, "auth_error": 0}}
 	for _, ch := range catalog.Channels {
-		p.Channels[ch] = &ChannelProgress{Variants: map[string]*VariantProgress{}}
+		p.Channels[ch] = &ChannelProgress{Variants: map[string]*VariantProgress{}, Locales: map[string]*VariantProgress{}}
 	}
 	var now time.Time
 	err := s.Pool.QueryRow(ctx, `SELECT status, approved_at, now() FROM campaigns WHERE id = $1`, id).Scan(&p.Status, &p.StartedAt, &now)
@@ -111,16 +115,16 @@ func (s *Service) Progress(ctx context.Context, id string) (Progress, error) {
 	}
 	p.UpdatedAt = now.UTC()
 
-	rows, err := s.Pool.Query(ctx, `SELECT channel, variant, status, count(*),
+	rows, err := s.Pool.Query(ctx, `SELECT channel, variant, locale, status, count(*),
 			count(*) FILTER (WHERE sent_at > now() - make_interval(secs => $2))
-		FROM messages WHERE campaign_id = $1 GROUP BY channel, variant, status`, id, throughputWindow.Seconds())
+		FROM messages WHERE campaign_id = $1 GROUP BY channel, variant, locale, status`, id, throughputWindow.Seconds())
 	if err != nil {
 		return Progress{}, err
 	}
 	for rows.Next() {
-		var ch, variant, st string
+		var ch, variant, locale, st string
 		var n, recent int
-		if err := rows.Scan(&ch, &variant, &st, &n, &recent); err != nil {
+		if err := rows.Scan(&ch, &variant, &locale, &st, &n, &recent); err != nil {
 			rows.Close()
 			return Progress{}, err
 		}
@@ -133,9 +137,15 @@ func (s *Service) Progress(ctx context.Context, id string) (Progress, error) {
 			vp = &VariantProgress{}
 			cp.Variants[variant] = vp
 		}
+		lp := cp.Locales[locale]
+		if lp == nil {
+			lp = &VariantProgress{}
+			cp.Locales[locale] = lp
+		}
 		cp.Total += n
 		vp.Total += n
-		// Counters accumulate: the query groups by variant too, so one status arrives once per variant.
+		lp.Total += n
+		// Counters accumulate: the query groups by variant and locale too, so one status arrives once per pair.
 		switch st {
 		case "queued":
 			cp.Queued += n
@@ -144,18 +154,22 @@ func (s *Service) Progress(ctx context.Context, id string) (Progress, error) {
 		case "sent":
 			cp.Sent += n
 			vp.Sent += n
+			lp.Sent += n
 			cp.ThroughputPerS += float64(recent) // sent in the window; converted to a rate below
 		case "retry":
 			cp.Retry += n
 		case "failed":
 			cp.Failed += n
 			vp.Failed += n
+			lp.Failed += n
 		case "skipped_no_consent":
 			cp.SkippedNoConsent += n
 			vp.SkippedNoConsent += n
+			lp.SkippedNoConsent += n
 		case "cancelled":
 			cp.Cancelled += n
 			vp.Cancelled += n
+			lp.Cancelled += n
 		}
 	}
 	rows.Close()

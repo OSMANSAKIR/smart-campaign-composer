@@ -19,9 +19,10 @@ import (
 // Prompt versions are recorded in llm_calls.prompt_version and returned in Meta. Bump the file name when the
 // text changes in a way that affects outputs, so eval reports stay comparable.
 const (
-	SegmentPromptVersion = "segment_v1"
-	ContentPromptVersion = "content_v2"
-	RefinePromptVersion  = "refine_v1"
+	SegmentPromptVersion  = "segment_v1"
+	ContentPromptVersion  = "content_v2"
+	RefinePromptVersion   = "refine_v1"
+	LocalizePromptVersion = "localize_v1"
 )
 
 //go:embed prompts/*.tmpl
@@ -96,9 +97,9 @@ func segmentExamples() []fewShot {
 	}
 }
 
-// goldenContent is the content few-shot and the mock demo's Turkish copy: variant a is the friendly, short
+// GoldenContent is the content few-shot and the mock demo's Turkish copy: variant a is the friendly, short
 // angle, variant b the urgency/benefit angle (no invented deadline, the brief gives none).
-func goldenContent() content.ProposalV2 {
+func GoldenContent() content.ProposalV2 {
 	var p content.ProposalV2
 	p.Language = "tr"
 	a, b := &p.Variants.A, &p.Variants.B
@@ -115,11 +116,12 @@ func goldenContent() content.ProposalV2 {
 }
 
 var (
-	promptOnce    sync.Once
-	segmentSystem string
-	contentSystem string
-	refineSystem  string
-	promptErr     error
+	promptOnce     sync.Once
+	segmentSystem  string
+	contentSystem  string
+	refineSystem   string
+	localizeSystem string
+	promptErr      error
 )
 
 func loadPrompts() {
@@ -162,7 +164,7 @@ func loadPrompts() {
 	if promptErr != nil {
 		return
 	}
-	ex, err := marshalPlain(goldenContent())
+	ex, err := marshalPlain(GoldenContent())
 	if err != nil {
 		promptErr = err
 		return
@@ -182,6 +184,10 @@ func loadPrompts() {
 		return
 	}
 	refineSystem, promptErr = render(RefinePromptVersion+".tmpl", data)
+	if promptErr != nil {
+		return
+	}
+	localizeSystem, promptErr = render(LocalizePromptVersion+".tmpl", data)
 }
 
 func systemPrompts() (seg, cnt string, err error) {
@@ -192,6 +198,44 @@ func systemPrompts() (seg, cnt string, err error) {
 func refineSystemPrompt() (string, error) {
 	promptOnce.Do(loadPrompts)
 	return refineSystem, promptErr
+}
+
+func localizeSystemPrompt() (string, error) {
+	promptOnce.Do(loadPrompts)
+	return localizeSystem, promptErr
+}
+
+// localizeUserMessage is the localize request. The primary copy is JSON (json.Marshal escapes <, > and &)
+// inside its own tag, and the brief is escaped like everywhere, so neither can close a tag or open a fake
+// one; both are data (localize_v1.tmpl says so). The header lines come from the server, never from the copy.
+func localizeUserMessage(in LocalizeInput, channels []string, worst map[string]int) string {
+	type variant struct {
+		Label        string `json:"label"`
+		SMSText      string `json:"sms_text"`
+		EmailSubject string `json:"email_subject"`
+		EmailBody    string `json:"email_body"`
+	}
+	src := map[string]variant{}
+	for _, key := range content.VariantKeys {
+		if v, ok := in.Variants[key]; ok {
+			src[key] = variant{v.Label, v.Content.SMSText, v.Content.EmailSubject, v.Content.EmailBody}
+		}
+	}
+	cur, _ := json.Marshal(src) // map keys are sorted: the message is deterministic
+	var b strings.Builder
+	b.WriteString("<request>\n<brief>" + escapeBrief(in.Brief) + "</brief>\n")
+	lang := in.Language
+	if lang != "tr" && lang != "en" {
+		lang = "tr"
+	}
+	fmt.Fprintf(&b, "Source language: %s\nTarget language: %s\nChannels: %s\n", lang, in.TargetLocale, strings.Join(channels, ", "))
+	parts := make([]string, 0, len(catalog.Variables))
+	for _, v := range catalog.Variables {
+		parts = append(parts, fmt.Sprintf("{{%s}} up to %d characters", v, worst[v]))
+	}
+	b.WriteString("Longest values: " + strings.Join(parts, ", ") + ".\n")
+	b.WriteString("<source_variants>" + escapeBrief(string(cur)) + "</source_variants>\n</request>\nReturn the adapted variants.")
+	return b.String()
 }
 
 // marshalPlain marshals without HTML escaping, so examples read naturally ("<" stays "<").

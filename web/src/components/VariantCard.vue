@@ -1,7 +1,8 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
 import { renderPreview } from '../lib/templateVars'
-import type { ContentVariant, ValidationReport, VariantInput, VariantKey } from '../lib/types'
+import { LOCALES, LOCALE_NAME } from '../lib/localization'
+import type { ContentVariant, Language, LocalizedCopy, ValidationReport, VariantInput, VariantKey } from '../lib/types'
 import ContentField from './ContentField.vue'
 
 // One variant of the content (F1, B-2): its own label, SMS, subject and body, with counters and validation.
@@ -19,8 +20,38 @@ const props = defineProps<{
   refining: boolean
   // Why "Rewrite this variant" is unavailable right now ('' when it is available).
   refineBlocked: string
+  // B-3: the language of the primary copy, and the adaptation to the other language. `showTabs` is true when
+  // somebody in the audience reads the other language or an adaptation exists.
+  primaryLocale: Language
+  showTabs: boolean
+  localForm: VariantInput
+  localReport: ValidationReport | null
+  localSaved: LocalizedCopy | null
+  localStale: boolean
+  // True while the adaptation is being written; why "Re-adapt" is unavailable ('' when it is available).
+  localizing: boolean
+  localizeBlocked: string
 }>()
-const emit = defineEmits<{ refine: [string] }>()
+const emit = defineEmits<{ refine: [string]; localize: [] }>()
+
+// B-3: TR | EN tabs. The primary tab is the one the campaign is written in.
+const tab = ref<Language>(props.primaryLocale)
+watch(() => props.primaryLocale, (l) => (tab.value = l))
+watch(() => props.localizing, (on) => {
+  if (on) tab.value = otherOf(props.primaryLocale)
+})
+const otherOf = (l: Language): Language => (l === 'tr' ? 'en' : 'tr')
+const onOther = computed(() => props.showTabs && tab.value !== props.primaryLocale)
+const cur = computed(() => (onOther.value ? props.localForm : props.form))
+const curReport = computed(() => (onOther.value ? props.localReport : props.report))
+const sfx = computed(() => (onOther.value ? `-${tab.value}` : ''))
+const otherName = computed(() => LOCALE_NAME[otherOf(props.primaryLocale)])
+const emptyOther = computed(() => onOther.value && !props.localSaved && !props.localForm.sms_text && !props.localForm.email_subject && !props.localForm.email_body && !props.localizing)
+function onKeydown(e: KeyboardEvent) {
+  if (e.key !== 'ArrowLeft' && e.key !== 'ArrowRight') return
+  tab.value = otherOf(tab.value)
+  ;(e.currentTarget as HTMLElement).parentElement?.querySelector<HTMLElement>(`[data-tab="${tab.value}"]`)?.focus()
+}
 
 const KEY = computed(() => props.k.toUpperCase())
 const instruction = ref('')
@@ -31,15 +62,15 @@ watch(() => props.savedVersion, () => (instruction.value = ''))
 const instructionOk = computed(() => instructionRunes.value >= 1 && instructionRunes.value <= MAX_INSTRUCTION)
 
 const issuesFor = (path: string) => [
-  ...(props.report?.errors ?? []).filter((i) => i.path === path),
-  ...(props.report?.warnings ?? []).filter((i) => i.path === path),
+  ...(curReport.value?.errors ?? []).filter((i) => i.path === path),
+  ...(curReport.value?.warnings ?? []).filter((i) => i.path === path),
 ]
 
-const values = computed(() => props.report?.worst_case ?? { first_name: 'Ayşe', city: 'İstanbul' })
-const smsPreview = computed(() => renderPreview(props.form.sms_text, values.value))
-const subjectPreview = computed(() => renderPreview(props.form.email_subject, values.value))
-const bodyPreview = computed(() => renderPreview(props.form.email_body, values.value))
-const hasText = computed(() => props.form.sms_text || props.form.email_subject || props.form.email_body)
+const values = computed(() => curReport.value?.worst_case ?? { first_name: 'Ayşe', city: 'İstanbul' })
+const smsPreview = computed(() => renderPreview(cur.value.sms_text, values.value))
+const subjectPreview = computed(() => renderPreview(cur.value.email_subject, values.value))
+const bodyPreview = computed(() => renderPreview(cur.value.email_body, values.value))
+const hasText = computed(() => cur.value.sms_text || cur.value.email_subject || cur.value.email_body)
 
 const history = computed(() => {
   const r = props.savedRow
@@ -63,11 +94,48 @@ function submit() {
       <span v-if="history" class="muted num">{{ history }}</span>
     </header>
 
+    <div v-if="showTabs" class="tabs" role="tablist" :aria-label="`Language of variant ${KEY}`">
+      <button
+        v-for="l in LOCALES"
+        :id="`tab-${k}-${l}`"
+        :key="l"
+        type="button"
+        role="tab"
+        class="tab"
+        :class="{ on: tab === l }"
+        :data-tab="l"
+        :aria-selected="tab === l"
+        :aria-controls="`panel-${k}`"
+        :tabindex="tab === l ? 0 : -1"
+        :aria-label="`${LOCALE_NAME[l]} version of variant ${KEY}`"
+        @click="tab = l"
+        @keydown="onKeydown"
+      >
+        {{ l.toUpperCase() }}
+        <span v-if="l !== primaryLocale && localStale" class="pill warn">out of date</span>
+      </button>
+    </div>
+
+    <div :id="`panel-${k}`" class="stack" :role="showTabs ? 'tabpanel' : undefined" :aria-labelledby="showTabs ? `tab-${k}-${tab}` : undefined">
+      <div v-if="onOther && localStale" class="notice warn" role="status">
+        <strong>The {{ LOCALE_NAME[primaryLocale] }} text changed after this version was written.</strong>
+        <p>Re-adapt it, or edit it here yourself. Approving for each recipient's language needs a current version.</p>
+      </div>
+      <div v-if="emptyOther" class="empty" role="status">
+        <p>There is no {{ otherName }} version of variant {{ KEY }} yet.</p>
+      </div>
+      <div v-if="onOther" class="row">
+        <button class="btn" type="button" :disabled="!!localizeBlocked || localizing || streaming" @click="emit('localize')">
+          <span v-if="localizing" class="spinner" aria-hidden="true" />
+          {{ localizing ? 'Adapting…' : localSaved ? `Re-adapt to ${otherName}` : `Write the ${otherName} version` }}
+        </button>
+        <span class="muted small" role="status">{{ localizeBlocked || 'Claude adapts both variants from the saved text.' }}</span>
+      </div>
     <label class="field">
-      <span>Name of variant {{ KEY }}</span>
+      <span>Name of variant {{ KEY }}<template v-if="onOther"> ({{ LOCALE_NAME[tab] }})</template></span>
       <input
-        :id="`label-${k}`"
-        v-model="form.label"
+        :id="`label-${k}${sfx}`"
+        v-model="cur.label"
         type="text"
         maxlength="40"
         :readonly="streaming"
@@ -76,41 +144,41 @@ function submit() {
     </label>
 
     <ContentField
-      :id="`sms-text-${k}`"
-      v-model="form.sms_text"
-      :label="`SMS text, variant ${KEY}`"
+      :id="`sms-text-${k}${sfx}`"
+      v-model="cur.sms_text"
+      :label="`SMS text, variant ${KEY}${onOther ? ` (${LOCALE_NAME[tab]})` : ''}`"
       :multiline="true"
       :rows="3"
       :limit="160"
-      :report="report?.fields.sms_text ?? null"
+      :report="curReport?.fields.sms_text ?? null"
       :issues="issuesFor('sms_text')"
       :streaming="streaming"
       sms
     />
     <ContentField
-      :id="`email-subject-${k}`"
-      v-model="form.email_subject"
-      :label="`Email subject, variant ${KEY}`"
+      :id="`email-subject-${k}${sfx}`"
+      v-model="cur.email_subject"
+      :label="`Email subject, variant ${KEY}${onOther ? ` (${LOCALE_NAME[tab]})` : ''}`"
       :multiline="false"
       :limit="80"
-      :report="report?.fields.email_subject ?? null"
+      :report="curReport?.fields.email_subject ?? null"
       :issues="issuesFor('email_subject')"
       :streaming="streaming"
     />
     <ContentField
-      :id="`email-body-${k}`"
-      v-model="form.email_body"
-      :label="`Email body, variant ${KEY}`"
+      :id="`email-body-${k}${sfx}`"
+      v-model="cur.email_body"
+      :label="`Email body, variant ${KEY}${onOther ? ` (${LOCALE_NAME[tab]})` : ''}`"
       :multiline="true"
       :rows="8"
       :limit="0"
-      :report="report?.fields.email_body ?? null"
+      :report="curReport?.fields.email_body ?? null"
       :issues="issuesFor('email_body')"
       :streaming="streaming"
     />
 
     <details v-if="hasText" class="preview">
-      <summary>Preview of variant {{ KEY }}</summary>
+      <summary>Preview of variant {{ KEY }}<template v-if="onOther"> ({{ LOCALE_NAME[tab] }})</template></summary>
       <div class="stack" style="gap: 8px; margin-top: 8px">
         <div class="bubble">{{ smsPreview || 'Nothing to show yet' }}</div>
         <div class="mail">
@@ -120,8 +188,9 @@ function submit() {
         <p class="muted small">Using the longest values in this audience: {{ values.first_name }}, {{ values.city }}</p>
       </div>
     </details>
+    </div>
 
-    <form class="stack refine" style="gap: 6px" @submit.prevent="submit">
+    <form v-if="!onOther" class="stack refine" style="gap: 6px" @submit.prevent="submit">
       <label :for="`refine-${k}`" style="font-weight: 600">Ask Claude to rewrite variant {{ KEY }}</label>
       <input
         :id="`refine-${k}`"
@@ -150,5 +219,8 @@ function submit() {
 <style scoped>
 .small { font-size: 0.85em; }
 .preview summary { cursor: pointer; font-weight: 600; color: var(--accent); }
+.tabs { display: flex; gap: 4px; border-bottom: 1px solid var(--line-soft); }
+.tab { font: inherit; background: none; border: 0; border-bottom: 3px solid transparent; padding: 6px 14px; cursor: pointer; font-weight: 600; color: var(--muted, #555); display: inline-flex; gap: 8px; align-items: center; }
+.tab.on { color: var(--accent); border-bottom-color: var(--accent); }
 .refine { border-top: 1px solid var(--line-soft); padding-top: 12px; }
 </style>

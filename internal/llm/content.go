@@ -172,3 +172,61 @@ func (s *Service) RefineContent(ctx context.Context, in RefineInput, onDelta fun
 	res.Meta = meta
 	return res, nil
 }
+
+// LocalizeContent adapts the primary copy of every variant of in.Variants into in.TargetLocale (prompt
+// localize_v1). Each adapted copy goes through content.Validate with the target locale's constraints and
+// through content.LocalizeFidelity (same variables, nothing new to click or call); the first call is recorded
+// as `localize`, its repairs as `repair`, with the same budget as a generation.
+func (s *Service) LocalizeContent(ctx context.Context, in LocalizeInput, onDelta func(Delta), onRepair func(RepairNotice)) (LocalizeResult, error) {
+	if err := checkBrief(in.Brief); err != nil {
+		return LocalizeResult{}, err
+	}
+	if !slices.Contains(catalog.Locales, in.TargetLocale) || in.TargetLocale == in.Language {
+		return LocalizeResult{}, &Error{Code: "validation_failed", Message: "The target locale is invalid.",
+			Details: []segment.Issue{{Path: "target_locale", Code: "invalid", Message: "Use the locale that is not the campaign's language."}}}
+	}
+	sys, err := localizeSystemPrompt()
+	if err != nil {
+		return LocalizeResult{}, fmt.Errorf("llm: prompts: %w", err)
+	}
+	target := in.ContentInput
+	target.Language = in.TargetLocale // the adapted copy is checked as copy in the target language
+	chk := newContentChecker(target)
+	var res LocalizeResult
+	validate := func(raw []byte) []segment.Issue {
+		p, issues := content.ParseLocalize(raw)
+		if len(issues) > 0 {
+			return toSegmentIssues(issues)
+		}
+		blocking := chk.language(p.Language)
+		next := LocalizeResult{Variants: map[string]VariantResult{}, Notes: p.Notes}
+		for _, key := range content.VariantKeys {
+			src, ok := in.Variants[key]
+			if !ok {
+				continue // a variant that was not sent is ignored
+			}
+			vp := p.Variant(key)
+			c := vp.Content()
+			report, bl := chk.variant("variants."+key+".", vp.Label, c)
+			blocking = append(blocking, bl...)
+			for _, f := range content.LocalizeFidelity(src.Content, c) {
+				f.Path = "variants." + key + "." + f.Path
+				blocking = append(blocking, segment.Issue(f))
+			}
+			next.Variants[key] = VariantResult{Label: vp.Label, Content: c, Report: report}
+		}
+		res = next
+		return blocking
+	}
+	meta, err := s.run(ctx, job{
+		task: PurposeLocalize, campaignID: in.CampaignID, promptVersion: LocalizePromptVersion,
+		system: []SystemBlock{{Text: sys, Cache: true}}, user: localizeUserMessage(in, chk.channels, worstLengths(in.ContentInput)),
+		schema: catalog.LocalizeWireSchema(), maxTokens: DefaultContentMaxTokens, timeout: s.contentTimeout,
+		stream: true, onDelta: onDelta, onRepair: onRepair, validate: validate,
+	})
+	if err != nil {
+		return LocalizeResult{}, err
+	}
+	res.Meta = meta
+	return res, nil
+}

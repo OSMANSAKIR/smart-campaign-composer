@@ -101,6 +101,7 @@ func (s *Server) Handler() http.Handler {
 	// Phase 2 (docs/contracts/api.md §9).
 	mux.HandleFunc("POST /api/segment/preview", s.previewSegment)
 	mux.HandleFunc("POST /api/campaigns/{id}/content/refine", s.refineContent)
+	mux.HandleFunc("POST /api/campaigns/{id}/content/localize", s.localizeContent)
 	mux.HandleFunc("POST /api/campaigns/{id}/cancel", s.cancelCampaign)
 	mux.HandleFunc("/api/", func(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusNotFound, "not_found", "Unknown API route.", nil)

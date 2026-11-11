@@ -25,12 +25,15 @@ The next agent that owns the area implements the answer and updates the status.
 
 ## Digest (maintained by the orchestrator only)
 
-_Last updated: 2026-11-11 00:10 with the owner's answers to the phase-2 entries (planning session, on the owner's instruction)._
+_Last updated: 2026-11-11 with the owner's answers to the B-3 entries (planning session, on the owner's instruction)._
 
 **Needs the owner soon (high impact):** none.
 
 **Phase 2 entries answered (owner, chat, 2026-11-11):** N-ORC-014, N-ORC-015, N-ORC-016, N-LLM-006 and
-N-WEB-005 accepted; N-ORC-017 (pre-submission polish) accepted. No entry is open.
+N-WEB-005 accepted; N-ORC-017 (pre-submission polish) accepted.
+
+**B-3 entries answered (owner, chat, 2026-11-11, after the owner's live test):** N-ORC-018, N-LLM-007,
+N-ORC-019 and N-WEB-006 accepted. No entry is open.
 
 **Implemented tonight:** ✅ N-WEB-001 → B (manual rule editor, F2), ✅ N-LLM-005 change (cost_recorded, F6).
 
@@ -707,4 +710,48 @@ encoding and segments shown as information).
 - **Cost to change later:** minutes each.
 - **Question for owner:** OK?
 - **Owner response:** ACCEPT (chat, 2026-11-11), after the three choices were explained.
+- **Status:** ACCEPTED
+
+### ✅ N-ORC-018 · B-3 data model: one row per locale, computed staleness, language changes · impact: medium
+- **Date / agent / session:** 2026-11-11 · B-3 session (branch feat/b3-recipient-language) · bonus B-3
+- **Requirement(s):** B-3, R-FLOW-3
+- **Context:** The spec fixes the columns (`campaign_content.locale`, PK with locale, a hash of the primary copy on localized rows, `messages.locale`, `campaigns.language_mode`) but leaves open how "primary" is told from "localized", where staleness lives, and what happens when the campaign language changes after content exists.
+- **Options:** (1) a primary row is the one with `locale = campaigns.language`; (2) a primary row is the one with `adapted_from IS NULL`. Staleness stored (a flag set by every writer) or computed on read.
+- **Decision taken:** (2). The primary row's `locale` records the language at save time and is informational; `adapted_from IS NULL` is what makes it primary, so regenerating the segment in another language (which changes `campaigns.language` but leaves content alone, as before B-3) cannot orphan the primary copy. A localized row whose locale equals the campaign's current language is ignored on read. Staleness is computed on read as `adapted_from ≠ sha256 of the variant's current primary texts` (length-prefixed fields; the label is not part of it), so no writer has to know about it. Migration defaults: existing content rows get the campaign's language, else `tr`; `messages.locale` is back-filled from `users.locale` (the spec said "set at enqueue", an old message has no better source); the column defaults stay (`'tr'`, `'campaign'`) so a plain INSERT keeps working. A fresh generation (§5) starts a version without adaptations (new copy, nothing to adapt from); refine and PUT carry adaptations over (stale by hash where the primary changed); the v1 single-variant PUT body drops them, as it drops variant B. API section is §9.10 (§9.9 was already the acceptance suite).
+- **Cost to change later:** low (a flag column would be a small migration; the hash stays the source of truth).
+- **Question for owner:** OK?
+- **Owner response:** ACCEPT (chat, 2026-11-11), after the owner's live test of B-3.
+- **Status:** ACCEPTED
+
+### ✅ N-LLM-007 · B-3 localize: both variants, fidelity checks beyond the spec, mock adaptation · impact: medium
+- **Date / agent / session:** 2026-11-11 · B-3 session · bonus B-3
+- **Requirement(s):** B-3, R-AI-1
+- **Context:** The spec says "same repair loop and budget as content", variables exactly the same, no new URLs, phone numbers or claims, and that the mock returns a deterministic adaptation. It does not say what a one-variant version does, how "no new claims" is checked, or what the mock adapts.
+- **Options:** nullable variant b in the schema, or require both; check claims with the model or not at all.
+- **Decision taken:** Localize needs a version with both variants (422 `variant_missing` otherwise; the wire schema keeps the fixed keys a and b like content_v2, so "exactly two" stays a schema property). It is not checkable by code that "no new claim" holds; the backend checks what is checkable: variables per field as sets (`variable_mismatch`), no link/email/phone the source field lacks (`new_url`, `new_email`, `new_phone`), copy not identical to the source (`not_adapted`, the model answered in the wrong language), plus the usual language and length checks under the target locale. Meaning is the marketer's to review in the EN tab and, live, acceptance A14's semantic checks (English letters only, differs from TR, valid) cover it. The primary copy reaches the model as `json.Marshal`-escaped JSON in `<source_variants>`, the brief as before; the system prompt says both are data and that an order inside the copy is part of the copy. The mock adaptation is the demo copy of the target language with the source's variables put back field by field, and never repeats source text, so a hostile source cannot be reflected. The request has no `base_version`: the base is the latest version at plan time and a save against a newer one is 409 `stale_content_version` (an edit made while the model wrote wins, like refine). `GoldenContent` was exported for the external test package. DECISIONS D-22.
+- **Cost to change later:** low.
+- **Question for owner:** OK?
+- **Owner response:** ACCEPT (chat, 2026-11-11), with a README next-steps line for an LLM judge call that checks meaning.
+- **Status:** ACCEPTED
+
+### ✅ N-ORC-019 · B-3 approve gate and delivery: which locales, fallbacks, no silent fallback · impact: high
+- **Date / agent / session:** 2026-11-11 · B-3 session · bonus B-3
+- **Requirement(s):** B-3, R-FLOW-3, R-DEL-4
+- **Context:** "'recipient' requires, for every sending variant and channel, a valid and non-stale copy for every locale present among the recipients" can be read per channel or over all recipients. The spec also says "fallback values per message.locale (already the case)", but the worker used the campaign language (`COALESCE(c.language, u.locale)`) for them, so the user's locale was never used.
+- **Options:** locales over all recipients vs per channel's consented recipients; fallback by campaign language vs message locale; a message without its copy falls back to the primary or fails.
+- **Decision taken:** Per channel: the locales among the *consented recipients of that channel* are the ones that need a copy valid *for that channel* (an English reader with no SMS consent does not block an SMS-valid adaptation). Details are one `{path, code, message}` per problem (`missing` | `stale` | `invalid`), deduplicated across channels. A campaign whose recipients all read the campaign language needs no adaptation. In `recipient` mode the worker renders the copy and the fallback of `message.locale`; in `campaign` mode nothing changes (campaign language for both), because "campaign behaves exactly as today" outranks the "already the case" remark. A message whose locale has no copy fails permanently as `content_missing`; it never falls back to the other language (the approve gate makes this unreachable, the failure is the safety net). Content is not re-validated by the worker. `messages.locale` is set in both modes. The same key replays the stored answer whatever `language_mode` the replay says (idempotency unchanged). `language_mode` is validated before the transaction (400); `missing_localization` is checked after `content_invalid`.
+- **Cost to change later:** medium (the gate is one function; the worker query is one CASE).
+- **Question for owner:** OK? (especially the per-channel reading)
+- **Owner response:** ACCEPT (chat, 2026-11-11), after the four rules were explained with examples.
+- **Status:** ACCEPTED
+
+### ✅ N-WEB-006 · B-3 UI details · impact: low
+- **Date / agent / session:** 2026-11-11 · B-3 session · bonus B-3
+- **Requirement(s):** B-3, R-FLOW-1
+- **Context:** The spec gives the shape of the UI; these were left open.
+- **Options:** —
+- **Decision taken:** "N recipients" is the number of people of that language in the audience (`by_locale.<l>.total`, before consent), the same figure the audience step shows; consent counts per channel are in its table. The tabs are always in the order TR | EN, the campaign's language tab is the one open at first. An unsaved edit of the primary texts marks the adaptation out of date at once (the server confirms after the save). "Re-adapt" and "Write the … version" are blocked while there are unsaved edits (the model adapts the saved version, like refine) and for a one-variant version. The language choice appears in the approve step only when somebody in the audience reads the other language; "each recipient in their language" is the default when it is approvable, a marketer's explicit choice sticks, and the option is disabled with the server-equivalent reason while it cannot be approved. The approve request sends `language_mode` only for `recipient` (`campaign` is the server default), so every earlier request body is unchanged. The dashboard table per language shows for every campaign that has messages (`messages.locale` is set in both modes).
+- **Cost to change later:** minutes.
+- **Question for owner:** —
+- **Owner response:** ACCEPT (chat, 2026-11-11).
 - **Status:** ACCEPTED

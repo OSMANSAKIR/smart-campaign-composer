@@ -28,6 +28,8 @@ const (
 	PurposeContent Purpose = "content"
 	PurposeRepair  Purpose = "repair"
 	PurposeRefine  Purpose = "refine"
+	// PurposeLocalize is the adaptation of the copy to another locale (B-3); its repairs stay `repair`.
+	PurposeLocalize Purpose = "localize"
 )
 
 // StopReason is the normalized reason the model stopped.
@@ -54,7 +56,7 @@ type Message struct {
 // Request is everything an adapter needs for one call.
 type Request struct {
 	Purpose   Purpose
-	Task      Purpose // segment, content or refine, also for repair calls (adapters pick per-task settings)
+	Task      Purpose // segment, content, refine or localize, also for repair calls (adapters pick per-task settings)
 	System    []SystemBlock
 	Messages  []Message
 	Schema    map[string]any // wire schema from internal/catalog
@@ -170,6 +172,28 @@ type RefineResult struct {
 	Report  content.Report
 	Notes   string
 	Meta    Meta
+}
+
+// LocalizeInput is what the localize prompt needs: the campaign context and the primary copy of each variant,
+// which reaches the model as escaped data. ContentInput.Language is the language the copy is written in.
+type LocalizeInput struct {
+	ContentInput
+	TargetLocale string
+	Variants     map[string]LocalizeVariant // "a" and "b"
+}
+
+// LocalizeVariant is one primary variant to adapt.
+type LocalizeVariant struct {
+	Label   string
+	Content content.Content
+}
+
+// LocalizeResult is the validated adaptation: one VariantResult per variant key, validated against the target
+// locale's constraints.
+type LocalizeResult struct {
+	Variants map[string]VariantResult
+	Notes    string
+	Meta     Meta
 }
 
 // StatusError is a provider answer with an HTTP status (the adapters' typed error). Its text never carries

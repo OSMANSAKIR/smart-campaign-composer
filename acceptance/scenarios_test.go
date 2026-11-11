@@ -14,6 +14,7 @@ import (
 	"unicode/utf8"
 
 	"smartcampaign/internal/catalog"
+	"smartcampaign/internal/content"
 	"smartcampaign/internal/delivery"
 )
 
@@ -295,8 +296,181 @@ func TestAcceptance(t *testing.T) {
 		e.deliveryInvariants(r, e.waitDone(c.ID, 3*time.Minute))
 	})
 
+	e.scenario("A14", "official TR brief, localize en, each recipient in their language", func(t *testing.T, r *result) { e.a14(t, r) })
+
 	a12.Wait()
 	_ = ctx
+}
+
+// a14 is bonus B-3: the official Turkish brief, adapted to English, approved with language_mode "recipient".
+// Every message an English-reading user got must be exactly the English copy of the variant that message
+// renders (with the English fallbacks), every Turkish-reading user's the Turkish copy, and the per-language
+// counts must add up. The semantic checks on the adaptation itself (English, valid, different from the Turkish
+// copy) hold for a live model too; the exact-render checks do not depend on what the model wrote.
+func (e *env) a14(t *testing.T, r *result) {
+	ctx := context.Background()
+	c, _ := e.segment(e.create(briefOfficial))
+	cv := e.content(c.ID)
+
+	var aud struct {
+		Segment struct {
+			Audience struct {
+				ByLocale map[string]struct {
+					Total          int `json:"total"`
+					SMSReachable   int `json:"sms_reachable"`
+					EmailReachable int `json:"email_reachable"`
+				} `json:"by_locale"`
+			} `json:"audience"`
+		} `json:"segment"`
+	}
+	e.must("GET", "/api/campaigns/"+c.ID, nil, 200, &aud)
+	by := aud.Segment.Audience.ByLocale
+	r.check(by["en"].Total > 0 && by["tr"].Total > 0, "the audience reads both languages (tr %d, en %d)", by["tr"].Total, by["en"].Total)
+
+	// Recipient mode is refused until the English copy exists.
+	req := approveReq{Channels: []string{"sms", "email"}, ContentVersion: cv.Version, Variant: "ab", LanguageMode: "recipient"}
+	code, body := e.approve(c.ID, "a14-early", req)
+	r.check(code == 422 && strings.Contains(string(body), "missing_localization"), "recipient mode without an English copy: 422 missing_localization (%d %s)", code, trim(body))
+
+	ev, data := e.stream("/api/campaigns/"+c.ID+"/content/localize", map[string]any{"target_locale": "en"})
+	if ev != "result" {
+		r.check(false, "localize answered %s: %s", ev, trim(data))
+		return
+	}
+	type lvariant struct {
+		SMSText      string `json:"sms_text"`
+		EmailSubject string `json:"email_subject"`
+		EmailBody    string `json:"email_body"`
+		Localized    map[string]struct {
+			Label        string `json:"label"`
+			SMSText      string `json:"sms_text"`
+			EmailSubject string `json:"email_subject"`
+			EmailBody    string `json:"email_body"`
+			Stale        bool   `json:"stale"`
+			Validation   struct {
+				ValidFor map[string]bool `json:"valid_for"`
+			} `json:"validation"`
+		} `json:"localized"`
+	}
+	var res struct {
+		Content struct {
+			Version  int                  `json:"version"`
+			Variants map[string]*lvariant `json:"variants"`
+		} `json:"content"`
+		LLM llmMeta `json:"llm"`
+	}
+	if err := json.Unmarshal(data, &res); err != nil {
+		t.Fatal(err)
+	}
+	e.addCost(res.LLM.CostUSD)
+	r.check(res.Content.Version == cv.Version+1, "localize saved a new version %d", res.Content.Version)
+	r.check(res.LLM.CostRecorded == nil || *res.LLM.CostRecorded, "localize cost recorded")
+	turkishLetters := func(s string) int {
+		for _, city := range catalog.Cities { // a place name may keep its spelling in English ("İstanbul")
+			s = strings.ReplaceAll(s, city, "")
+		}
+		n := 0
+		for _, ch := range s {
+			if strings.ContainsRune("çğıöşüÇĞİÖŞÜ", ch) {
+				n++
+			}
+		}
+		return n
+	}
+	for _, k := range []string{"a", "b"} {
+		v := res.Content.Variants[k]
+		en := v.Localized["en"]
+		if v == nil || en.SMSText == "" {
+			r.check(false, "variant %s has an English copy", k)
+			return
+		}
+		r.check(en.Validation.ValidFor["sms"] && en.Validation.ValidFor["email"] && !en.Stale, "variant %s: English copy valid for sms and email, current", k)
+		r.check(en.SMSText != v.SMSText && en.EmailBody != v.EmailBody && en.EmailSubject != v.EmailSubject, "variant %s: the English copy differs from the Turkish one", k)
+		r.check(turkishLetters(en.SMSText+en.EmailSubject+en.EmailBody) == 0, "variant %s: the English copy has no Turkish letters", k)
+		r.check(strings.Contains(en.SMSText, "{{first_name}}") == strings.Contains(v.SMSText, "{{first_name}}"), "variant %s: the SMS keeps the same {{first_name}}", k)
+	}
+	var calls int
+	_ = e.pool.QueryRow(ctx, `SELECT count(*) FROM llm_calls WHERE campaign_id = $1 AND purpose = 'localize'`, c.ID).Scan(&calls)
+	r.check(calls == 1, "llm_calls has a localize row (%d)", calls)
+
+	code, body = e.approve(c.ID, "a14", approveReq{Channels: []string{"sms", "email"}, ContentVersion: res.Content.Version, Variant: "ab", LanguageMode: "recipient"})
+	r.check(code == 202 && strings.Contains(string(body), `"language_mode":"recipient"`), "approve in recipient mode 202 (%d %s)", code, trim(body))
+	done := e.waitDone(c.ID, 3*time.Minute)
+
+	// Every request the provider got renders exactly the copy of the user's locale and the message's variant.
+	type msg struct{ variant, locale, first, city string }
+	msgs := map[string]msg{} // channel/user
+	rows, err := e.pool.Query(ctx, `SELECT m.channel, m.user_id, m.variant, m.locale, u.first_name, u.city, u.locale
+		FROM messages m JOIN users u ON u.id = m.user_id WHERE m.campaign_id = $1`, c.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	mismatchLocale := 0
+	for rows.Next() {
+		var ch, v, ml, fn, city, ul string
+		var uid int64
+		if err := rows.Scan(&ch, &uid, &v, &ml, &fn, &city, &ul); err != nil {
+			t.Fatal(err)
+		}
+		msgs[fmt.Sprintf("%s/%d", ch, uid)] = msg{v, ml, fn, city}
+		if ml != ul {
+			mismatchLocale++
+		}
+	}
+	rows.Close()
+	r.check(mismatchLocale == 0, "every message carries its user's locale (%d differ)", mismatchLocale)
+	checked, wrong, enChecked, trChecked := 0, 0, 0, 0
+	for _, s := range e.sentFor(c.ID) {
+		m, ok := msgs[fmt.Sprintf("%s/%d", s.Channel, s.UserID)]
+		if !ok {
+			wrong++
+			continue
+		}
+		v := res.Content.Variants[m.variant]
+		sms, subj, body := v.SMSText, v.EmailSubject, v.EmailBody
+		if m.locale == "en" {
+			en := v.Localized["en"]
+			sms, subj, body = en.SMSText, en.EmailSubject, en.EmailBody
+			enChecked++
+		} else {
+			trChecked++
+		}
+		vars := content.Vars{"first_name": m.first, "city": m.city}
+		var ok2 bool
+		if s.Channel == "sms" {
+			ok2 = s.Text == content.Render(sms, m.locale, vars)
+		} else {
+			ok2 = s.Subject == content.Render(subj, m.locale, vars) && s.Text == content.Render(body, m.locale, vars)
+		}
+		checked++
+		if !ok2 {
+			wrong++
+		}
+	}
+	r.check(checked > 0 && enChecked > 0 && trChecked > 0 && wrong == 0,
+		"%d requests rendered exactly the copy of the recipient's language (%d en, %d tr; %d wrong)", checked, enChecked, trChecked, wrong)
+
+	// Per-language counts add up, and match the audience counted before approve.
+	var prog struct {
+		Progress struct {
+			Channels map[string]struct {
+				Total   int               `json:"total"`
+				Locales map[string]counts `json:"locales"`
+			} `json:"channels"`
+		} `json:"progress"`
+	}
+	e.must("GET", "/api/campaigns/"+c.ID, nil, 200, &prog)
+	for ch, want := range map[string]map[string]int{"sms": {"tr": by["tr"].SMSReachable, "en": by["en"].SMSReachable}, "email": {"tr": by["tr"].EmailReachable, "en": by["en"].EmailReachable}} {
+		p := prog.Progress.Channels[ch]
+		sum := 0
+		for _, l := range p.Locales {
+			sum += l.Total
+			r.check(l.Sent+l.Failed+l.Cancelled+l.SkippedNoConsent == l.Total, "%s: a language's sent+failed+cancelled+skipped = its total", ch)
+		}
+		r.check(sum == p.Total, "%s: per-language totals add up (%d of %d)", ch, sum, p.Total)
+		r.check(p.Locales["tr"].Total == want["tr"] && p.Locales["en"].Total == want["en"], "%s: per-language totals match the audience (tr %d, en %d)", ch, p.Locales["tr"].Total, p.Locales["en"].Total)
+	}
+	e.deliveryInvariants(r, done)
 }
 
 func (e *env) a12(t *testing.T, r *result) {

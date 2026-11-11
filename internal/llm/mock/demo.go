@@ -57,7 +57,14 @@ func (d *Demo) Generate(ctx context.Context, req llm.Request, onDelta func(llm.D
 		brief = html.UnescapeString(m[1])
 	}
 	var out any
-	if req.Task == llm.PurposeContent || req.Task == llm.PurposeRefine {
+	switch req.Task {
+	case llm.PurposeLocalize:
+		lp, ok := DemoLocalize(first)
+		if !ok {
+			return llm.Response{}, fmt.Errorf("mock demo: localize request without source variants")
+		}
+		out = lp
+	case llm.PurposeContent, llm.PurposeRefine:
 		lang := "tr"
 		// Only the header after the brief counts: the brief is user text and may contain a "Language: en"
 		// line of its own (RT-6). The brief is escaped, so the first "</brief>" is the real one.
@@ -77,7 +84,7 @@ func (d *Demo) Generate(ctx context.Context, req llm.Request, onDelta func(llm.D
 		} else {
 			out = DemoContent(brief, lang)
 		}
-	} else {
+	default:
 		out = DemoSegment(brief)
 	}
 	b, err := json.Marshal(out)

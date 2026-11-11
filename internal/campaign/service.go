@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"maps"
 	"regexp"
 	"slices"
 	"strings"
@@ -295,8 +296,8 @@ func (s *Service) SaveContent(ctx context.Context, id string, c content.Content,
 func (s *Service) saveVersion(ctx context.Context, id string, a VariantInput, b *VariantInput, baseVersion int) (ContentVersion, error) {
 	var cv ContentVersion
 	err := pgx.BeginFunc(ctx, s.Pool, func(tx pgx.Tx) error {
-		var status string
-		if err := tx.QueryRow(ctx, `SELECT status FROM campaigns WHERE id = $1 FOR UPDATE`, id).Scan(&status); err != nil {
+		var status, language string
+		if err := tx.QueryRow(ctx, `SELECT status, coalesce(language, 'tr') FROM campaigns WHERE id = $1 FOR UPDATE`, id).Scan(&status, &language); err != nil {
 			return notFound(err)
 		}
 		if !slices.Contains(contentEditable, status) {
@@ -324,13 +325,27 @@ func (s *Service) saveVersion(ctx context.Context, id string, a VariantInput, b 
 		for _, r := range rows {
 			cvr := ContentVariant{Label: r.in.Label, Source: r.in.Source, Instruction: r.in.Instruction,
 				SMSText: r.in.Content.SMSText, EmailSubject: r.in.Content.EmailSubject, EmailBody: r.in.Content.EmailBody,
-				Validation: normalizeReport(r.in.Report)}
-			if err := tx.QueryRow(ctx, `INSERT INTO campaign_content (campaign_id, version, variant, label, sms_text, email_subject,
-					email_body, source, instruction, validation)
-				VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10) RETURNING created_at`,
-				id, cv.Version, r.key, cvr.Label, cvr.SMSText, cvr.EmailSubject, cvr.EmailBody, cvr.Source, cvr.Instruction,
+				Validation: normalizeReport(r.in.Report), Locale: language, Localized: map[string]*LocalizedCopy{}}
+			if err := tx.QueryRow(ctx, `INSERT INTO campaign_content (campaign_id, version, variant, locale, label, sms_text,
+					email_subject, email_body, source, instruction, validation)
+				VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11) RETURNING created_at`,
+				id, cv.Version, r.key, language, cvr.Label, cvr.SMSText, cvr.EmailSubject, cvr.EmailBody, cvr.Source, cvr.Instruction,
 				mustJSON(cvr.Validation)).Scan(&cv.CreatedAt); err != nil {
 				return err
+			}
+			for _, loc := range slices.Sorted(maps.Keys(r.in.Localized)) {
+				li := r.in.Localized[loc]
+				lc := LocalizedCopy{Label: li.Label, Source: li.Source, SMSText: li.Content.SMSText,
+					EmailSubject: li.Content.EmailSubject, EmailBody: li.Content.EmailBody, Validation: normalizeReport(li.Report),
+					Stale: li.AdaptedFrom != content.Hash(r.in.Content), adaptedFrom: li.AdaptedFrom}
+				if _, err := tx.Exec(ctx, `INSERT INTO campaign_content (campaign_id, version, variant, locale, adapted_from, label,
+						sms_text, email_subject, email_body, source, validation)
+					VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)`,
+					id, cv.Version, r.key, loc, lc.adaptedFrom, lc.Label, lc.SMSText, lc.EmailSubject, lc.EmailBody, lc.Source,
+					mustJSON(lc.Validation)); err != nil {
+					return err
+				}
+				cvr.Localized[loc] = &lc
 			}
 			if r.key == "a" {
 				cv.Variants.A = cvr
@@ -432,10 +447,10 @@ func (s *Service) load(ctx context.Context, db DB, id string, needRule bool) (Ca
 		ruleRaw, metaRaw, audR []byte
 		segVersion             int
 	)
-	err := db.QueryRow(ctx, `SELECT id::text, brief, status, coalesce(language, 'tr'), segment_rule, segment_version,
+	err := db.QueryRow(ctx, `SELECT id::text, brief, status, coalesce(language, 'tr'), language_mode, segment_rule, segment_version,
 			segment_meta, audience, channels, approved_content_version, send_variant, scheduled_at, cancelled_at,
 			created_at, approved_at, completed_at
-		FROM campaigns WHERE id = $1`, id).Scan(&c.ID, &c.Brief, &c.Status, &c.Language, &ruleRaw, &segVersion,
+		FROM campaigns WHERE id = $1`, id).Scan(&c.ID, &c.Brief, &c.Status, &c.Language, &c.LanguageMode, &ruleRaw, &segVersion,
 		&metaRaw, &audR, &c.Channels, &c.ApprovedContentVersion, &c.SendVariant, &c.ScheduledAt, &c.CancelledAt,
 		&c.CreatedAt, &c.ApprovedAt, &c.CompletedAt)
 	if err != nil {
@@ -478,7 +493,7 @@ func (s *Service) load(ctx context.Context, db DB, id string, needRule bool) (Ca
 	} else if needRule && slices.Contains(contentEditable, c.Status) {
 		return Campaign{}, nil, fmt.Errorf("campaign %s is %s without a segment", id, c.Status)
 	}
-	cv, err := loadLatestContent(ctx, db, id)
+	cv, err := loadLatestContent(ctx, db, id, c.Language)
 	if err != nil {
 		return Campaign{}, nil, err
 	}

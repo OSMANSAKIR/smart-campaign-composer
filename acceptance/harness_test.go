@@ -55,6 +55,53 @@ type env struct {
 	mu      sync.Mutex
 	cost    float64
 	results []result
+
+	// What the mock provider received, per accepted-or-not request (A14 checks the rendered text).
+	sentMu sync.Mutex
+	sent   []sentRequest
+}
+
+// sentRequest is one request body the worker sent to the mock provider.
+type sentRequest struct {
+	Channel       string
+	CampaignID    string
+	UserID        int64
+	Text, Subject string
+}
+
+// recording wraps the provider handler and keeps the rendered text of every send request.
+func (e *env) recording(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodPost && (r.URL.Path == "/v1/sms" || r.URL.Path == "/v1/email") {
+			body, _ := io.ReadAll(r.Body)
+			r.Body = io.NopCloser(bytes.NewReader(body))
+			var b struct {
+				Text       string `json:"text"`
+				Subject    string `json:"subject"`
+				CampaignID string `json:"campaign_id"`
+				UserID     int64  `json:"user_id"`
+			}
+			if json.Unmarshal(body, &b) == nil {
+				e.sentMu.Lock()
+				e.sent = append(e.sent, sentRequest{strings.TrimPrefix(r.URL.Path, "/v1/"), b.CampaignID, b.UserID, b.Text, b.Subject})
+				e.sentMu.Unlock()
+			}
+		}
+		next.ServeHTTP(w, r)
+	})
+}
+
+// sentFor returns the requests the provider received for one campaign.
+func (e *env) sentFor(campaignID string) []sentRequest {
+	e.sentMu.Lock()
+	defer e.sentMu.Unlock()
+	var out []sentRequest
+	for _, s := range e.sent {
+		if s.CampaignID == campaignID {
+			out = append(out, s)
+		}
+	}
+	return out
 }
 
 type result struct {
@@ -87,7 +134,8 @@ func newEnv(t *testing.T) *env {
 	faults := cfg.Provider
 	faults.Seed = 20261110
 	prov := mockprovider.New(faults, metrics.New())
-	provSrv := httptest.NewServer(prov.Handler())
+	e := &env{t: t}
+	provSrv := httptest.NewServer(e.recording(prov.Handler()))
 	t.Cleanup(func() { provSrv.Close(); prov.Close() })
 
 	provider, err := factory.New(cfg)
@@ -125,7 +173,7 @@ func newEnv(t *testing.T) *env {
 	if v, err := strconv.ParseFloat(os.Getenv("ACCEPTANCE_MAX_USD"), 64); err == nil && v > 0 {
 		maxCost = v
 	}
-	e := &env{t: t, api: apiSrv, prov: provSrv, pool: pool, llmName: provider.Name(), llmModel: provider.Model(), maxCost: maxCost}
+	e.api, e.prov, e.pool, e.llmName, e.llmModel, e.maxCost = apiSrv, provSrv, pool, provider.Name(), provider.Model(), maxCost
 	t.Cleanup(e.writeReport)
 	return e
 }
@@ -360,6 +408,7 @@ type approveReq struct {
 	ContentVersion int      `json:"content_version"`
 	Variant        string   `json:"variant,omitempty"`
 	SendAt         string   `json:"send_at,omitempty"`
+	LanguageMode   string   `json:"language_mode,omitempty"`
 }
 
 func (e *env) approve(id, key string, req approveReq) (int, []byte) {

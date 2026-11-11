@@ -24,7 +24,7 @@ type Template struct {
 type Recipient struct {
 	Email, Phone    string
 	FirstName, City string
-	Locale          string // the campaign language, else the user's locale; picks the fallback text
+	Locale          string // picks the fallback text: the campaign language, or the message's locale in language_mode 'recipient'
 }
 
 func (r Recipient) vars() content.Vars {

@@ -76,7 +76,7 @@ smoke-live: ## One real Claude API call per task (needs CONFIRM_SPEND=yes and AN
 	@# without the flag and skips cleanly without a key.
 	CONFIRM_SPEND=$(CONFIRM_SPEND) go test -tags smokelive -count=1 -v -run TestSmokeLive ./internal/llm/anthropic/
 
-acceptance: ## Acceptance A1-A13 through the HTTP API (mock LLM; PROVIDER=anthropic also needs CONFIRM_SPEND=yes; needs `make up`)
+acceptance: ## Acceptance A1-A14 through the HTTP API (mock LLM; PROVIDER=anthropic also needs CONFIRM_SPEND=yes; needs `make up`)
 	@if [ -n "$(PROVIDER)" ] && [ "$(PROVIDER)" != "mock" ] && [ "$(PROVIDER)" != "anthropic" ]; then \
 	  echo "acceptance: PROVIDER=mock (default) or anthropic"; exit 2; fi
 	@if [ "$(PROVIDER)" = "anthropic" ] && [ "$(CONFIRM_SPEND)" != "yes" ]; then \

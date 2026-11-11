@@ -97,6 +97,17 @@ type Audience struct {
 	SMSReachable   int `json:"sms_reachable"`
 	EmailReachable int `json:"email_reachable"`
 	Both           int `json:"both"`
+	// ByLocale is the same count per recipient locale (tr, en), consented counts per channel (B-3). Both
+	// locales are always present, with zeros; campaigns counted before B-3 have no such field.
+	ByLocale map[string]LocaleAudience `json:"by_locale,omitempty"`
+}
+
+// LocaleAudience is one locale's share of an Audience.
+type LocaleAudience struct {
+	Total          int `json:"total"`
+	SMSReachable   int `json:"sms_reachable"`
+	EmailReachable int `json:"email_reachable"`
+	Both           int `json:"both"`
 }
 
 // Querier is satisfied by *pgxpool.Pool and pgx.Tx. Begin is needed so Count can scope
