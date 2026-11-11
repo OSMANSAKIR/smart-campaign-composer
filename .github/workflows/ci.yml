@@ -45,7 +45,7 @@ jobs:
         working-directory: web
 
   acceptance:
-    name: make acceptance (A1-A13 through the HTTP API, mock LLM)
+    name: make acceptance (A1-A14 through the HTTP API, mock LLM)
     runs-on: ubuntu-latest
     timeout-minutes: 30
     services:

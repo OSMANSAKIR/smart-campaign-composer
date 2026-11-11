@@ -265,6 +265,10 @@ B-3 gaps (2026-11-11):
 - The adaptation is checked for variables, links, phone numbers, length and language, not for meaning: a
   wrong-but-valid English sentence is the marketer's to catch in the EN tab. The live-model semantic checks
   are in acceptance A14 (owner-run); the mock's English is a fixed demo text.
+- Next step for meaning: a second, cheap LLM call that compares the adaptation with the source and flags a
+  changed offer or an added claim, shown to the marketer as a warning, not as a gate (an LLM judging an LLM is
+  no guarantee). In the owner's live test one idiom came out literal ("Cüzdanın gülsün" → "Make your wallet
+  smile"): valid, and the kind of thing only a reader or such a judge would catch (need.md N-LLM-007).
 
 Phase-2 gaps (2026-11-10):
 
