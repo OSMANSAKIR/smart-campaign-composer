@@ -9,8 +9,9 @@ Raw exports and harvested transcripts stay in the gitignored `_raw/`; only sanit
 
 | Session | Role | Model / effort | Date, duration | Purpose | Key outcomes | What was validated, and how |
 |---|---|---|---|---|---|---|
-| 00-planning | planning | Opus 5.5 | 2026-11-05 – 2026-11-11 (with long breaks; build brief 2026-11-08 ~00:00–02:40) | Turn the case into a build brief with the owner; later the owner's review desk: independent checks of the orchestrator's reports, need.md answers, live-run review, submission | `KICKOFF.md`, `need.md`, project settings and plugins | Claude Code headless probe for the `claudecode` adapter (structured output, 1.7 s) |
+| 00-planning | planning | Opus 5.5 | 2026-11-05 – 2026-11-11 (with long breaks; build brief 2026-11-08 ~00:00–02:40) | Turn the case into a build brief with the owner; later the owner's review desk: independent checks of the orchestrator's reports, need.md answers, live-run review, submission; after submission the B-3 prompt, its review, the owner's live B-3 test and the interview notes and slides (kept outside the repo) | `KICKOFF.md`, `need.md`, project settings and plugins | Claude Code headless probe for the `claudecode` adapter (structured output, 1.7 s); B-3: re-ran lint, test, e2e, acceptance and sanitize-check, read the diff, checked the live run in the database (V-027) |
 | 01-orchestrator | orchestrator | Opus 5.5 | 2026-11-08 02:40– | Phase 0: contracts, skeleton, compose, task files; W1–W5 orchestration | see commits `docs:`/`feat:`/`build:` of 2026-11-08 | `make test` green in containers; compose healthy; Go and Vitest run the same test vectors; golangci-lint clean |
+| 03-b3 | B-3 builder (fresh session, small context) | Sonnet 5.5 | 2026-11-11 ~09:55–10:38 | Bonus B-3 on the branch `feat/b3-recipient-language`, after submission; prompt written by the planning session | `localize_v1`, one content row per locale with computed staleness, recipient-mode approve gate, delivery in the message's locale, per-locale progress, A14, e2e spec; need.md N-ORC-018/019, N-LLM-007, N-WEB-006 (accepted) | `make test`, `make lint`, `make e2e`, `make acceptance`, `make sanitize-check` green; it caught a wrong claim in its own prompt (V-028); the planning session re-ran everything and fixed A14 (V-027) |
 | 02-polish | polish agent (fresh session, small context) | Sonnet 5.5 | 2026-11-11 ~00:55–01:30 | Five small pre-submission items from the README's not-done list, prompt written by the planning session | cancelled in `messages_total`, `scheduled_at` in the campaign list, step bar at 390 px, a test renamed to its requirement, RT-8b fails instead of skipping (N-ORC-017) | `make test`, `make lint`, `make e2e`, `make acceptance` green; one load-sensitive failure reported, not hidden (V-026); the planning session re-checked the diff |
 
 ## Agent launch log
@@ -43,6 +44,7 @@ and base64 are dropped. `make sanitize-check` fails if a file listed here is mis
 | `sessions/00-planning.md` | 00-planning (owner's planning and review session; includes the compacted history) |
 | `sessions/01-orchestrator.md` | 01-orchestrator (main session, all stages; includes the compacted history) |
 | `sessions/02-polish.md` | 02-polish (pre-submission polish agent) |
+| `sessions/03-b3.md` | 03-b3 (B-3 builder, branch only) |
 | `subagents/02-builder-llm.md` | W1 builder-llm |
 | `subagents/03-builder-delivery.md` | W1 builder-delivery |
 | `subagents/04-builder-web.md` | W1 builder-web |
@@ -57,8 +59,9 @@ and base64 are dropped. `make sanitize-check` fails if a file listed here is mis
 | `subagents/08-builder-web-phase2.md` | Phase 2 builder-web |
 
 `00-planning` ran in the home directory, outside this project's transcript folder, so `harvest-sessions` does
-not find it; it was converted from its JSONL with `scripts/transcript2md.py` and sanitized the same way. The
-export ends just before the final commit; the last turns (final push, CI, mail) are not in it.
+not find it; it was converted from its JSONL with `scripts/transcript2md.py` and sanitized the same way. It was
+re-exported on the B-3 branch on 2026-11-11 ~14:00 and ends just before that commit. The interview notes and slides
+the planning session made live in the owner's claude.ai account, not in this repo.
 
 ## How the agents were connected
 
@@ -97,3 +100,6 @@ migrations, metric and config registries written in Phase 0.
 **API-equivalent estimates**, not invoices. App-side LLM usage is recorded per call in the `llm_calls` table.
 Snapshot 2026-11-10 ~23:55 (`usage/ccusage-*-2026-11-10.json`): this project's orchestrator session including
 all its subagents, $106.38 API-equivalent; by day across the machine, 11-08 $55.76, 11-09 $37.92, 11-10 $30.63.
+Snapshot 2026-11-11 ~14:00 (`usage/ccusage-*-2026-11-11.json`), API-equivalent: orchestrator $109.15, planning
+$45.15, B-3 builder $7.60, polish $1.16; by day across the machine 11-05 $2.88, 11-08 $55.76, 11-09 $37.92,
+11-10 $31.93, 11-11 $34.70 (still growing when taken), $163.19 in total.
