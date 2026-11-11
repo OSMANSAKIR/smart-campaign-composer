@@ -72,7 +72,7 @@ type sentRequest struct {
 // recording wraps the provider handler and keeps the rendered text of every send request.
 func (e *env) recording(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.Method == http.MethodPost && (r.URL.Path == "/sms" || r.URL.Path == "/email") {
+		if r.Method == http.MethodPost && (r.URL.Path == "/v1/sms" || r.URL.Path == "/v1/email") {
 			body, _ := io.ReadAll(r.Body)
 			r.Body = io.NopCloser(bytes.NewReader(body))
 			var b struct {
@@ -83,7 +83,7 @@ func (e *env) recording(next http.Handler) http.Handler {
 			}
 			if json.Unmarshal(body, &b) == nil {
 				e.sentMu.Lock()
-				e.sent = append(e.sent, sentRequest{strings.TrimPrefix(r.URL.Path, "/"), b.CampaignID, b.UserID, b.Text, b.Subject})
+				e.sent = append(e.sent, sentRequest{strings.TrimPrefix(r.URL.Path, "/v1/"), b.CampaignID, b.UserID, b.Text, b.Subject})
 				e.sentMu.Unlock()
 			}
 		}
